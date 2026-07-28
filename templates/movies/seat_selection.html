@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Select Seats — {{ theaters.movie.name }}{% endblock %}
+
+{% block content %}
+<section class="page-section seat-page">
+  <div class="container-bms">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb breadcrumb-bms">
+        <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'movie_list' %}">Movies</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'theater_list' theaters.movie.id %}">{{ theaters.movie.name }}</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Seat Selection</li>
+      </ol>
+    </nav>
+
+    <!-- Header info card -->
+    <div class="card mb-4 border-0 shadow-sm p-4" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+          <span class="badge bg-danger mb-2">Selected Theater</span>
+          <h1 class="h3 fw-bold mb-1" style="color: var(--text-primary);">{{ theaters.movie.name }}</h1>
+          <p class="text-muted mb-0">
+            <i class="bi bi-building me-1 text-danger"></i>{{ theaters.name }} &nbsp;|&nbsp; 
+            <i class="bi bi-clock me-1 text-danger"></i>{{ theaters.time|date:"g:i A, D M d" }}
+          </p>
+        </div>
+        <div class="d-flex gap-2">
+          <span class="badge bg-secondary bg-opacity-10 text-secondary border px-3 py-2 rounded-pill"><i class="bi bi-display me-1"></i>2D / 4K</span>
+          <span class="badge bg-secondary bg-opacity-10 text-secondary border px-3 py-2 rounded-pill"><i class="bi bi-volume-up me-1"></i>Dolby Atmos</span>
+        </div>
+      </div>
+    </div>
+
+    <form method="POST" id="seatBookingForm">
+      {% csrf_token %}
+      <div class="row g-4">
+        <!-- Seat Map Column -->
+        <div class="col-lg-8">
+          <div class="seat-layout">
+            <div class="cinema-screen"></div>
+
+            <div class="seat-legend">
+              <div class="legend-item">
+                <div class="seat" style="background: var(--seat-available); border-color: var(--border-color);"></div>
+                <span>Available</span>
+              </div>
+              <div class="legend-item">
+                <div class="seat seat--selected"></div>
+                <span>Selected</span>
+              </div>
+              <div class="legend-item">
+                <div class="seat seat--booked"></div>
+                <span>Booked</span>
+              </div>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-bms alert-danger mb-4" role="alert">
+              <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ error }}
+            </div>
+            {% endif %}
+
+            <!-- Seats grid -->
+            <div class="d-flex flex-wrap justify-content-center gap-2 p-3 my-3" style="background: var(--bg-tertiary); border-radius: var(--radius-lg);">
+              {% for seat in seats %}
+                <div class="seat-wrapper">
+                  {% if not seat.is_booked %}
+                    <input type="checkbox" name="seats" value="{{ seat.id }}" id="seat-{{ seat.id }}" class="seat-checkbox d-none" data-seat-name="{{ seat.seat_number }}">
+                    <label for="seat-{{ seat.id }}" class="seat" title="Seat {{ seat.seat_number }}">
+                      {{ seat.seat_number }}
+                    </label>
+                  {% else %}
+                    <div class="seat seat--booked" title="Booked">
+                      <i class="bi bi-x-lg" style="font-size: 0.6rem;"></i>
+                    </div>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Order Summary Column -->
+        <div class="col-lg-4">
+          <div class="booking-summary">
+            <h2 class="booking-summary__title"><i class="bi bi-ticket-detailed me-2 text-danger"></i>Booking Summary</h2>
+            
+            <div class="summary-row">
+              <span>Movie</span>
+              <strong style="color: var(--text-primary);">{{ theaters.movie.name }}</strong>
+            </div>
+            <div class="summary-row">
+              <span>Cinema</span>
+              <span>{{ theaters.name }}</span>
+            </div>
+            <div class="summary-row">
+              <span>Showtime</span>
+              <span>{{ theaters.time|date:"g:i A" }}</span>
+            </div>
+            
+            <hr style="border-color: var(--border-color);">
+            
+            <div class="summary-row">
+              <span>Selected Seats</span>
+              <strong id="selectedSeatNumbers" class="text-danger">None</strong>
+            </div>
+            <div class="summary-row summary-row--total">
+              <span>Total Seats</span>
+              <span id="selectedSeatCount">0</span>
+            </div>
+
+            <button type="submit" class="btn btn-bms-primary w-100 justify-content-center py-3 mt-4 fw-semibold" id="submitBookingBtn" disabled>
+              <i class="bi bi-check-lg me-1"></i> Confirm &amp; Book Seats
+            </button>
+            <p class="text-muted small text-center mt-3 mb-0">
+              <i class="bi bi-shield-lock me-1"></i>Secure instant booking confirmation
+            </p>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.seat-checkbox');
+    const selectedSeatNumbers = document.getElementById('selectedSeatNumbers');
+    const selectedSeatCount = document.getElementById('selectedSeatCount');
+    const submitBtn = document.getElementById('submitBookingBtn');
+
+    function updateSummary() {
+      const selected = Array.from(checkboxes).filter(cb => cb.checked);
+      const names = selected.map(cb => cb.getAttribute('data-seat-name') || cb.value);
+      
+      if (selected.length > 0) {
+        selectedSeatNumbers.textContent = names.join(', ');
+        selectedSeatCount.textContent = selected.length;
+        submitBtn.disabled = false;
+      } else {
+        selectedSeatNumbers.textContent = 'None';
+        selectedSeatCount.textContent = '0';
+        submitBtn.disabled = true;
+      }
+    }
+
+    checkboxes.forEach(cb => {
+      const label = document.querySelector(`label[for="${cb.id}"]`);
+      cb.addEventListener('change', function() {
+        if (label) {
+          if (this.checked) {
+            label.classList.add('seat--selected');
+          } else {
+            label.classList.remove('seat--selected');
+          }
+        }
+        updateSummary();
+      });
+    });
+
+    updateSummary();
+  });
+</script>
+{% endblock %}

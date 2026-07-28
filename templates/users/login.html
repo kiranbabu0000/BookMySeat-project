@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sign In — BookMySeat{% endblock %}
+
+{% block content %}
+<div class="auth-page py-4 py-lg-5">
+  <div class="auth-container">
+    <div class="row g-4 align-items-center justify-content-center">
+      
+      <!-- Left Column: Cinema Hero Showcase (Desktop & Laptop) -->
+      <div class="col-lg-6 d-none d-lg-block">
+        <div class="auth-hero-card">
+          <div>
+            <div class="d-inline-flex align-items-center gap-2 px-3 py-1.5 rounded-pill mb-4" style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);">
+              <i class="bi bi-film text-warning"></i>
+              <span class="small fw-semibold text-uppercase tracking-wider">Premium Cinema Experience</span>
+            </div>
+            <h1 class="display-6 fw-bold text-white mb-3" style="line-height: 1.2;">
+              Your Seat is Waiting. <br><span class="text-warning">Book in Seconds.</span>
+            </h1>
+            <p class="text-white-50 mb-4" style="font-size: 1.05rem; max-width: 440px;">
+              Access exclusive weekend blockbuster deals, select IMAX Dolby Atmos seats, and manage your tickets anytime.
+            </p>
+          </div>
+
+          <!-- Feature Bullets -->
+          <div class="d-flex flex-column gap-3 mb-4">
+            <div class="d-flex align-items-center gap-3">
+              <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; background: rgba(255,255,255,0.2); flex-shrink: 0;">
+                <i class="bi bi-lightning-charge-fill text-warning"></i>
+              </div>
+              <div>
+                <strong class="d-block text-white" style="font-size: 0.95rem;">Instant M-Tickets</strong>
+                <span class="small text-white-50">Zero waiting lines at the counter. Scan &amp; enter.</span>
+              </div>
+            </div>
+
+            <div class="d-flex align-items-center gap-3">
+              <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; background: rgba(255,255,255,0.2); flex-shrink: 0;">
+                <i class="bi bi-shield-check text-warning"></i>
+              </div>
+              <div>
+                <strong class="d-block text-white" style="font-size: 0.95rem;">100% Encrypted &amp; Secure</strong>
+                <span class="small text-white-50">Safe payment processing and instant confirmations.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Customer Testimonial Pill -->
+          <div class="pt-3 border-top border-white border-opacity-25 d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-2">
+              <div class="text-warning">
+                <i class="bi bi-star-fill"></i>
+                <i class="bi bi-star-fill"></i>
+                <i class="bi bi-star-fill"></i>
+                <i class="bi bi-star-fill"></i>
+                <i class="bi bi-star-fill"></i>
+              </div>
+              <span class="small text-white-50 fw-semibold">4.9/5 from 50k+ movie lovers</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Optimized Login Form -->
+      <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
+        <div class="auth-card">
+          <div class="auth-card__header">
+            <div class="brand-icon mx-auto mb-3" style="width: 52px; height: 52px; font-size: 1.6rem; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px);">
+              <i class="bi bi-ticket-perforated-fill"></i>
+            </div>
+            <h2 class="h4 fw-bold mb-1" style="color: #ffffff;">Welcome Back</h2>
+            <p class="small mb-0" style="color: rgba(255,255,255,0.8);">Sign in to access your bookings &amp; tickets</p>
+          </div>
+
+          <div class="auth-card__body">
+            {% if form.non_field_errors %}
+            <div class="alert alert-bms alert-danger mb-4" role="alert">
+              {% for error in form.non_field_errors %}
+                <div><i class="bi bi-exclamation-triangle-fill me-2"></i>{{ error }}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="POST" action="{% url 'login' %}" class="form-bms" id="loginForm" novalidate>
+              {% csrf_token %}
+
+              <!-- Username Input -->
+              <div class="mb-3">
+                <label for="{{ form.username.id_for_label }}" class="form-label">Username</label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="bi bi-person"></i></span>
+                  {{ form.username }}
+                </div>
+                {% if form.username.errors %}
+                  <div class="text-danger small mt-1"><i class="bi bi-exclamation-circle me-1"></i>{{ form.username.errors.0 }}</div>
+                {% endif %}
+              </div>
+
+              <!-- Password Input -->
+              <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <label for="{{ form.password.id_for_label }}" class="form-label mb-0">Password</label>
+                  <a href="{% url 'password_reset' %}" class="small text-decoration-none text-muted">Forgot Password?</a>
+                </div>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                  {{ form.password }}
+                  <button class="btn" type="button" id="togglePassword" aria-label="Toggle password visibility">
+                    <i class="bi bi-eye" id="toggleIcon"></i>
+                  </button>
+                </div>
+                {% if form.password.errors %}
+                  <div class="text-danger small mt-1"><i class="bi bi-exclamation-circle me-1"></i>{{ form.password.errors.0 }}</div>
+                {% endif %}
+              </div>
+
+              <!-- Submit Button -->
+              <button type="submit" class="btn btn-bms-primary w-100 justify-content-center py-2.5 fw-semibold" style="font-size: 1rem;">
+                <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+              </button>
+            </form>
+          </div>
+
+          <div class="auth-card__footer">
+            <p class="mb-0 small">
+              Don't have an account? 
+              <a href="{% url 'register' %}" class="fw-semibold text-decoration-none" style="color: var(--accent-primary);">Create Account</a>
+            </p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('loginForm');
+    if (!form) return;
+
+    // Enhance Django form inputs dynamically with form-control and placeholders
+    const usernameInput = form.querySelector('[name="username"]');
+    const passwordInput = form.querySelector('[name="password"]');
+
+    if (usernameInput) {
+      usernameInput.classList.add('form-control');
+      usernameInput.setAttribute('placeholder', 'Enter your username');
+      usernameInput.setAttribute('autocomplete', 'username');
+    }
+
+    if (passwordInput) {
+      passwordInput.classList.add('form-control');
+      passwordInput.setAttribute('placeholder', 'Enter your password');
+      passwordInput.setAttribute('autocomplete', 'current-password');
+    }
+
+    // Password visibility toggle
+    const togglePassword = document.getElementById('togglePassword');
+    const toggleIcon = document.getElementById('toggleIcon');
+
+    if (togglePassword && passwordInput && toggleIcon) {
+      togglePassword.addEventListener('click', function() {
+        const isPassword = passwordInput.getAttribute('type') === 'password';
+        passwordInput.setAttribute('type', isPassword ? 'text' : 'password');
+        toggleIcon.classList.toggle('bi-eye', !isPassword);
+        toggleIcon.classList.toggle('bi-eye-slash', isPassword);
+      });
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Movies{% endblock %}
+
+{% block content %}
+<section class="page-section">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <h1 class="section-title">Movies</h1>
+        <p class="section-subtitle text-muted mb-0">Discover and book the latest releases</p>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="row justify-content-center mb-5">
+      <div class="col-lg-8">
+        <form method="GET" action="{% url 'movie_list' %}" role="search">
+          <div class="input-group input-group-lg">
+            <span class="input-group-text bg-transparent border-end-0" style="border-color: var(--border-color);">
+              <i class="bi bi-search text-muted"></i>
+            </span>
+            <input type="search" name="search" class="form-control form-bms border-start-0"
+                   placeholder="Search movies by title..."
+                   value="{{ request.GET.search|default:'' }}"
+                   aria-label="Search movies"
+                   id="movieSearchInput">
+            <button class="btn btn-bms-primary px-4" type="submit">Search</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="row" id="movieList">
+      {% for movie in movies %}
+        {% include 'partials/_movie_card.html' with movie=movie %}
+      {% empty %}
+      <div class="col-12">
+        <div class="empty-state">
+          <div class="empty-state__icon"><i class="bi bi-search"></i></div>
+          <h2 class="empty-state__title">No movies found</h2>
+          <p class="empty-state__text">
+            {% if request.GET.search %}
+            No results for "{{ request.GET.search }}". Try a different search term.
+            {% else %}
+            No movies are available at the moment.
+            {% endif %}
+          </p>
+          <a href="{% url 'movie_list' %}" class="btn btn-bms-primary">View All Movies</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var input = document.getElementById('movieSearchInput');
+    if (!input) return;
+    input.addEventListener('input', function () {
+      var term = this.value.toLowerCase();
+      document.querySelectorAll('#movieList .movie-card').forEach(function (card) {
+        var title = card.querySelector('.movie-card__title');
+        var col = card.closest('[class*="col-"]');
+        if (!title || !col) return;
+        col.style.display = title.textContent.toLowerCase().includes(term) ? '' : 'none';
+      });
+    });
+  });
+</script>
+{% endblock %}

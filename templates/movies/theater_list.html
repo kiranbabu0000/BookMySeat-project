@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}{{ movie.name }} — Theaters{% endblock %}
+
+{% block content %}
+<section class="page-section">
+  <div class="container-bms">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb breadcrumb-bms">
+        <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'movie_list' %}">Movies</a></li>
+        <li class="breadcrumb-item active" aria-current="page">{{ movie.name }}</li>
+      </ol>
+    </nav>
+
+    <!-- Movie header -->
+    <div class="d-flex align-items-start gap-4 mb-5 flex-wrap">
+      {% if movie.image %}
+      <img src="{{ movie.image.url }}" alt="{{ movie.name }}" class="rounded-3 shadow"
+           style="width:120px; height:180px; object-fit:cover;" loading="lazy">
+      {% endif %}
+      <div>
+        <h1 class="mb-2">{{ movie.name }}</h1>
+        <div class="d-flex flex-wrap gap-3 mb-3">
+          <span class="badge rounded-pill" style="background:var(--accent-gold); color:#000;">
+            <i class="bi bi-star-fill me-1"></i>{{ movie.rating }}
+          </span>
+          <span class="text-muted"><i class="bi bi-people me-1"></i>{{ movie.cast|truncatewords:8 }}</span>
+        </div>
+        {% if movie.description %}
+        <p class="text-muted mb-0" style="max-width:600px;">{{ movie.description }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Select Theater &amp; Showtime</h2>
+        <p class="section-subtitle text-muted mb-0">Choose your preferred venue and time</p>
+      </div>
+    </div>
+
+    {% if theaters %}
+      {% for theater in theaters %}
+      <article class="theater-card animate-fade-up">
+        <h3 class="theater-card__name">{{ theater.name }}</h3>
+        <div class="theater-amenities" aria-label="Theater amenities">
+          <span class="amenity-badge"><i class="bi bi-phone"></i> M-Ticket</span>
+          <span class="amenity-badge"><i class="bi bi-cup-straw"></i> F&amp;B</span>
+          <span class="amenity-badge"><i class="bi bi-p-square"></i> Parking</span>
+          <span class="amenity-badge"><i class="bi bi-universal-access"></i> Accessible</span>
+          <span class="amenity-badge"><i class="bi bi-badge-3d"></i> 3D</span>
+        </div>
+        <div class="showtime-grid">
+          <a href="{% url 'book_seats' theater.id %}" class="showtime-btn">
+            {{ theater.time|date:"g:i A" }}
+            <small>{{ theater.time|date:"D, M d" }}</small>
+          </a>
+        </div>
+      </article>
+      {% endfor %}
+
+      <p class="text-muted small mt-4">
+        <i class="bi bi-info-circle me-1"></i>
+        <span class="text-warning">●</span> Non-cancellable tickets
+      </p>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state__icon"><i class="bi bi-building"></i></div>
+      <h2 class="empty-state__title">No theaters available</h2>
+      <p class="empty-state__text">Sorry, no showtimes are available for this movie right now.</p>
+      <a href="{% url 'movie_list' %}" class="btn btn-bms-primary">Browse Other Movies</a>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

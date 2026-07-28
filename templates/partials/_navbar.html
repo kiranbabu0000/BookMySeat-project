@@ -1,0 +1,80 @@
+<nav class="navbar navbar-expand-lg navbar-bms" aria-label="Main navigation">
+  <div class="container-bms w-100 d-flex align-items-center">
+    <!-- Mobile: hamburger left -->
+    <button class="navbar-toggler border-0 d-lg-none me-2" type="button" data-bs-toggle="offcanvas"
+            data-bs-target="#offcanvasNav" aria-controls="offcanvasNav"
+            aria-expanded="false" aria-label="Toggle navigation">
+      <i class="bi bi-list fs-4" style="color: var(--text-primary);"></i>
+    </button>
+
+    <!-- Logo (kept left on desktop; next to hamburger on mobile) -->
+    <a class="navbar-brand me-auto me-lg-0" href="{% url 'home' %}" aria-label="BookMySeat Home">
+      <span class="brand-icon" aria-hidden="true"><i class="bi bi-film"></i></span>
+      BookMySeat
+    </a>
+
+    <!-- Mobile right: login/register on the right only on mobile -->
+    <div class="d-flex align-items-center d-lg-none ms-auto">
+      {% if user.is_authenticated %}
+      <a class="nav-link" href="{% url 'profile' %}">Profile</a>
+      {% else %}
+      <a class="nav-link me-2" href="{% url 'login' %}">Login</a>
+      <a class="nav-link btn-nav-cta" href="{% url 'register' %}">Sign Up</a>
+      {% endif %}
+    </div>
+
+    <div class="collapse navbar-collapse" id="navbarMain">
+      <form class="search-form d-none d-lg-flex" action="{% url 'movie_list' %}" method="GET" role="search">
+        <div class="search-wrap w-100">
+          <i class="bi bi-search" aria-hidden="true"></i>
+          <input class="search-input" type="search" name="search"
+                 placeholder="Search movies, events..."
+                 value="{{ request.GET.search|default:'' }}"
+                 aria-label="Search movies">
+        </div>
+      </form>
+
+      <!-- Desktop navigation: visible on lg and up only -->
+      <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-1 d-none d-lg-flex">
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'home' %}">Home</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'movie_list' %}">Movies</a>
+        </li>
+
+        {% if user.is_authenticated %}
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'profile' %}">
+            <i class="bi bi-person-circle me-1" aria-hidden="true"></i>Profile
+          </a>
+        </li>
+        <li class="nav-item">
+          <form method="post" action="{% url 'logout' %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="nav-link border-0 bg-transparent">Logout</button>
+          </form>
+        </li>
+        {% else %}
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'login' %}">Login</a>
+        </li>
+        <li class="nav-item ms-lg-2">
+          <a class="nav-link btn-nav-cta" href="{% url 'register' %}">Sign Up</a>
+        </li>
+        {% endif %}
+
+        <li class="nav-item ms-lg-2">
+          <button type="button" class="theme-toggle" data-theme-toggle
+                  aria-label="Toggle dark mode">
+            <i class="bi bi-moon-fill" aria-hidden="true"></i>
+          </button>
+        </li>
+      </ul>
+
+      <!-- Mobile search intentionally hidden from navbar (search goes inside drawer) -->
+    </div>
+  </div>
+
+</deleted>
+</nav>

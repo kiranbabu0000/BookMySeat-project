@@ -1,0 +1,91 @@
+/* BookMySeat Design Tokens — Light & Dark cinematic themes */
+
+:root {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Poppins', var(--font-sans);
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-full: 9999px;
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  --navbar-height: 72px;
+  --container-max: 1400px;
+  --content-max: 1200px;
+}
+
+[data-theme="light"],
+:root:not([data-theme="dark"]) {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fb;
+  --bg-tertiary: #eef1f6;
+  --bg-card: #ffffff;
+  --bg-glass: rgba(255, 255, 255, 0.85);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --text-inverse: #ffffff;
+  --accent-primary: #dc2626;
+  --accent-primary-hover: #b91c1c;
+  --accent-secondary: #2563eb;
+  --accent-secondary-hover: #1d4ed8;
+  --accent-gold: #d97706;
+  --accent-success: #16a34a;
+  --border-color: #e2e8f0;
+  --border-subtle: #f1f5f9;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 12px 40px rgba(15, 23, 42, 0.12);
+  --shadow-glow: 0 0 40px rgba(220, 38, 38, 0.15);
+  --navbar-bg: rgba(255, 255, 255, 0.92);
+  --footer-bg: #0f172a;
+  --footer-text: #cbd5e1;
+  --seat-available: #ffffff;
+  --seat-selected: #dc2626;
+  --seat-booked: #cbd5e1;
+  --seat-vip: #d97706;
+  --seat-wheelchair: #2563eb;
+  --screen-bg: linear-gradient(180deg, #e2e8f0 0%, #cbd5e1 100%);
+}
+
+[data-theme="dark"] {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #141414;
+  --bg-tertiary: #1a1a1a;
+  --bg-card: #1e1e1e;
+  --bg-glass: rgba(20, 20, 20, 0.88);
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+  --text-inverse: #0f172a;
+  --accent-primary: #e50914;
+  --accent-primary-hover: #f40612;
+  --accent-secondary: #3b82f6;
+  --accent-secondary-hover: #60a5fa;
+  --accent-gold: #d4af37;
+  --accent-success: #22c55e;
+  --border-color: #2a2a2a;
+  --border-subtle: #1f1f1f;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 60px rgba(229, 9, 20, 0.25);
+  --navbar-bg: rgba(10, 10, 10, 0.92);
+  --footer-bg: #050505;
+  --footer-text: #94a3b8;
+  --seat-available: #2a2a2a;
+  --seat-selected: #e50914;
+  --seat-booked: #404040;
+  --seat-vip: #d4af37;
+  --seat-wheelchair: #3b82f6;
+  --screen-bg: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%);
+}

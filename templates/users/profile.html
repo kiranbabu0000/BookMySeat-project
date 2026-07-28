@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ user.username }} — Profile{% endblock %}
+
+{% block content %}
+<section class="page-section">
+  <div class="container-bms">
+    <!-- Profile Banner -->
+    <div class="card mb-5 border-0 shadow-lg overflow-hidden" style="background: linear-gradient(135deg, var(--accent-primary) 0%, #7f1d1d 100%); border-radius: var(--radius-xl);">
+      <div class="card-body p-4 p-md-5 text-white">
+        <div class="d-flex align-items-center gap-4 flex-wrap">
+          <div class="profile-avatar m-0 shadow">
+            <i class="bi bi-person-fill"></i>
+          </div>
+          <div>
+            <span class="badge bg-white text-dark mb-2 px-3 py-1 rounded-pill fw-semibold">Member</span>
+            <h1 class="h2 fw-bold mb-1 text-white">{{ user.username }}</h1>
+            <p class="text-white-50 mb-3"><i class="bi bi-envelope me-1"></i>{{ user.email }}</p>
+            <div class="d-flex gap-2 flex-wrap">
+              <a href="{% url 'password_reset' %}" class="btn btn-sm btn-light fw-semibold rounded-pill">
+                <i class="bi bi-key me-1"></i> Reset Password
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <!-- Profile Update Form -->
+      <div class="col-lg-5">
+        <div class="card h-100 border-0 shadow-sm" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
+          <div class="card-header bg-transparent border-bottom p-4" style="border-color: var(--border-color) !important;">
+            <h2 class="h5 fw-bold mb-0"><i class="bi bi-person-gear me-2 text-danger"></i>Update Profile</h2>
+          </div>
+          <div class="card-body p-4">
+            <form method="POST" class="form-bms">
+              {% csrf_token %}
+              {% for field in u_form %}
+                <div class="mb-3">
+                  <label for="{{ field.id_for_label }}" class="form-label">
+                    <i class="bi bi-{% if field.name == 'username' %}person{% elif field.name == 'email' %}envelope{% else %}info-circle{% endif %} me-1 text-muted"></i>
+                    {{ field.label }}
+                  </label>
+                  {{ field }}
+                  {% if field.help_text %}
+                    <small class="form-text text-muted d-block mt-1">{{ field.help_text }}</small>
+                  {% endif %}
+                  {% for error in field.errors %}
+                    <div class="text-danger small mt-1">{{ error }}</div>
+                  {% endfor %}
+                </div>
+              {% endfor %}
+              <button class="btn btn-bms-primary w-100 justify-content-center mt-3" type="submit">
+                <i class="bi bi-check-circle me-1"></i> Save Changes
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bookings Section -->
+      <div class="col-lg-7">
+        <div class="card h-100 border-0 shadow-sm" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
+          <div class="card-header bg-transparent border-bottom p-4 d-flex align-items-center justify-content-between" style="border-color: var(--border-color) !important;">
+            <h2 class="h5 fw-bold mb-0"><i class="bi bi-ticket-perforated me-2 text-danger"></i>Your Bookings</h2>
+            <span class="badge bg-secondary rounded-pill">{{ bookings|length }} Tickets</span>
+          </div>
+          <div class="card-body p-4">
+            {% if bookings %}
+              <div class="d-flex flex-column gap-3">
+                {% for booking in bookings %}
+                  <article class="booking-ticket">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2 flex-wrap">
+                      <h3 class="h5 fw-bold mb-0" style="color: var(--text-primary);">{{ booking.movie.name }}</h3>
+                      <span class="badge" style="background: rgba(220,38,38,0.15); color: var(--accent-primary); font-size: 0.85rem; padding: 0.35rem 0.75rem; border-radius: var(--radius-full);">
+                        Seat {{ booking.seat.seat_number }}
+                      </span>
+                    </div>
+                    <div class="d-flex flex-wrap gap-3 text-muted small mb-2">
+                      <span><i class="bi bi-building me-1"></i>{{ booking.theater.name }}</span>
+                      <span><i class="bi bi-calendar-event me-1"></i>{{ booking.booked_at|date:"F d, Y - H:i" }}</span>
+                    </div>
+                    <div class="pt-2 border-top d-flex justify-content-between align-items-center" style="border-color: var(--border-color) !important;">
+                      <span class="small text-muted"><i class="bi bi-qr-code-scan me-1"></i>M-Ticket Valid</span>
+                      <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">Confirmed</span>
+                    </div>
+                  </article>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="empty-state py-5">
+                <div class="empty-state__icon"><i class="bi bi-ticket-perforated"></i></div>
+                <h3 class="empty-state__title">No bookings yet</h3>
+                <p class="empty-state__text">Ready for movie night? Explore available showtimes and book your tickets.</p>
+                <a href="{% url 'movie_list' %}" class="btn btn-bms-primary">Browse Movies</a>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

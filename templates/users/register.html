@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Create Account — BookMySeat{% endblock %}
+
+{% block content %}
+<div class="auth-page py-4 py-lg-5">
+  <div class="auth-container">
+    <div class="row g-4 align-items-center justify-content-center">
+      
+      <!-- Left Column: Cinema Hero Showcase (Desktop & Laptop) -->
+      <div class="col-lg-6 d-none d-lg-block">
+        <div class="auth-hero-card" style="background-image: linear-gradient(135deg, rgba(220, 38, 38, 0.92), rgba(15, 23, 42, 0.94)), url('https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1200&q=80');">
+          <div>
+            <div class="d-inline-flex align-items-center gap-2 px-3 py-1.5 rounded-pill mb-4" style="background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2);">
+              <i class="bi bi-gift-fill text-warning"></i>
+              <span class="small fw-semibold text-uppercase tracking-wider">New Member Perk</span>
+            </div>
+            <h1 class="display-6 fw-bold text-white mb-3" style="line-height: 1.2;">
+              Get Flat 20% Off <br><span class="text-warning">On Your First Booking.</span>
+            </h1>
+            <p class="text-white-50 mb-4" style="font-size: 1.05rem; max-width: 440px;">
+              Create your free account today and unlock instant discount coupon <strong>FIRSTSHOW</strong> at checkout.
+            </p>
+          </div>
+
+          <!-- Feature Bullets -->
+          <div class="d-flex flex-column gap-3 mb-4">
+            <div class="d-flex align-items-center gap-3">
+              <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; background: rgba(255,255,255,0.2); flex-shrink: 0;">
+                <i class="bi bi-ticket-perforated text-warning"></i>
+              </div>
+              <div>
+                <strong class="d-block text-white" style="font-size: 0.95rem;">Seamless Seat Reservation</strong>
+                <span class="small text-white-50">Pick your favorite seat in IMAX, Dolby Atmos &amp; 3D.</span>
+              </div>
+            </div>
+
+            <div class="d-flex align-items-center gap-3">
+              <div class="rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; background: rgba(255,255,255,0.2); flex-shrink: 0;">
+                <i class="bi bi-bell-fill text-warning"></i>
+              </div>
+              <div>
+                <strong class="d-block text-white" style="font-size: 0.95rem;">Showtime Reminders</strong>
+                <span class="small text-white-50">Get instant updates and digital QR tickets on your phone.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer Trust Pill -->
+          <div class="pt-3 border-top border-white border-opacity-25 d-flex align-items-center justify-content-between">
+            <span class="small text-white-50 fw-semibold"><i class="bi bi-check-circle-fill text-warning me-1"></i>Free account forever • No credit card required</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Optimized Registration Form -->
+      <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
+        <div class="auth-card">
+          <div class="auth-card__header">
+            <div class="brand-icon mx-auto mb-3" style="width: 52px; height: 52px; font-size: 1.6rem; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.15); backdrop-filter: blur(10px);">
+              <i class="bi bi-person-plus-fill"></i>
+            </div>
+            <h2 class="h4 fw-bold mb-1" style="color: #ffffff;">Create Your Account</h2>
+            <p class="small mb-0" style="color: rgba(255,255,255,0.8);">Join BookMySeat for fast bookings and exclusive deals</p>
+          </div>
+
+          <div class="auth-card__body">
+            {% if form.non_field_errors %}
+            <div class="alert alert-bms alert-danger mb-4" role="alert">
+              {% for error in form.non_field_errors %}
+                <div><i class="bi bi-exclamation-triangle-fill me-2"></i>{{ error }}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            <form method="POST" action="{% url 'register' %}" class="form-bms" id="registerForm" novalidate>
+              {% csrf_token %}
+
+              {% for field in form %}
+              <div class="mb-3">
+                <label for="{{ field.id_for_label }}" class="form-label">
+                  {{ field.label }}
+                  {% if field.field.required %}<span class="text-danger">*</span>{% endif %}
+                </label>
+                <div class="input-group">
+                  <span class="input-group-text">
+                    <i class="bi bi-{% if 'user' in field.name %}person{% elif 'email' in field.name %}envelope{% elif 'pass' in field.name %}lock{% else %}pencil{% endif %}"></i>
+                  </span>
+                  {{ field }}
+                  {% if 'pass' in field.name %}
+                  <button class="btn toggle-pwd-btn" type="button" aria-label="Toggle password visibility">
+                    <i class="bi bi-eye"></i>
+                  </button>
+                  {% endif %}
+                </div>
+                {% if field.help_text %}
+                  <small class="form-text text-muted d-block mt-1" style="font-size: 0.78rem;">{{ field.help_text|safe }}</small>
+                {% endif %}
+                {% for error in field.errors %}
+                  <div class="text-danger small mt-1"><i class="bi bi-exclamation-circle me-1"></i>{{ error }}</div>
+                {% endfor %}
+              </div>
+              {% endfor %}
+
+              <button type="submit" class="btn btn-bms-primary w-100 justify-content-center py-2.5 fw-semibold mt-3" style="font-size: 1rem;">
+                <i class="bi bi-person-check-fill me-1"></i> Create Account
+              </button>
+            </form>
+          </div>
+
+          <div class="auth-card__footer">
+            <p class="mb-0 small">
+              Already have an account? 
+              <a href="{% url 'login' %}" class="fw-semibold text-decoration-none" style="color: var(--accent-primary);">Sign In</a>
+            </p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('registerForm');
+    if (!form) return;
+
+    // Enhance all input fields with form-control and descriptive placeholders
+    const inputs = form.querySelectorAll('input');
+    inputs.forEach(input => {
+      input.classList.add('form-control');
+      const name = input.getAttribute('name') || '';
+
+      if (name.includes('username')) {
+        input.setAttribute('placeholder', 'Choose a username');
+        input.setAttribute('autocomplete', 'username');
+      } else if (name.includes('email')) {
+        input.setAttribute('placeholder', 'name@example.com');
+        input.setAttribute('autocomplete', 'email');
+      } else if (name.includes('password1') || name === 'password') {
+        input.setAttribute('placeholder', 'Create a strong password');
+        input.setAttribute('autocomplete', 'new-password');
+      } else if (name.includes('password2')) {
+        input.setAttribute('placeholder', 'Confirm your password');
+        input.setAttribute('autocomplete', 'new-password');
+      }
+    });
+
+    // Password visibility toggle buttons
+    form.querySelectorAll('.toggle-pwd-btn').forEach(button => {
+      button.addEventListener('click', function() {
+        const input = this.closest('.input-group').querySelector('input');
+        const icon = this.querySelector('i');
+        if (input && icon) {
+          const isPassword = input.getAttribute('type') === 'password';
+          input.setAttribute('type', isPassword ? 'text' : 'password');
+          icon.classList.toggle('bi-eye', !isPassword);
+          icon.classList.toggle('bi-eye-slash', isPassword);
+        }
+      });
+    });
+  });
+</script>
+{% endblock %}

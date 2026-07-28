@@ -1,0 +1,59 @@
+<footer class="footer-bms" aria-label="Site footer">
+  <div class="container-bms">
+    <div class="row g-4">
+      <div class="col-lg-4 col-md-6">
+        <div class="footer-brand">
+          <span class="brand-icon" aria-hidden="true"><i class="bi bi-film"></i></span>
+          BookMySeat
+        </div>
+        <p class="mb-4" style="font-size: 0.9375rem; line-height: 1.7;">
+          Your premium destination for movie tickets. Experience cinema like never before
+          with seamless booking, best seats, and exclusive offers.
+        </p>
+        <div class="d-flex gap-2">
+          <a href="#" class="social-link" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
+          <a href="#" class="social-link" aria-label="Twitter"><i class="bi bi-twitter-x"></i></a>
+          <a href="#" class="social-link" aria-label="Instagram"><i class="bi bi-instagram"></i></a>
+          <a href="#" class="social-link" aria-label="YouTube"><i class="bi bi-youtube"></i></a>
+        </div>
+      </div>
+
+      <div class="col-lg-2 col-md-6">
+        <h5>Quick Links</h5>
+        <ul class="list-unstyled d-flex flex-column gap-2">
+          <li><a href="{% url 'home' %}">Home</a></li>
+          <li><a href="{% url 'movie_list' %}">Movies</a></li>
+          <li><a href="{% url 'movie_list' %}">Book Tickets</a></li>
+          <li><a href="{% url 'profile' %}">My Profile</a></li>
+        </ul>
+      </div>
+
+      <div class="col-lg-2 col-md-6">
+        <h5>Support</h5>
+        <ul class="list-unstyled d-flex flex-column gap-2">
+          <li><a href="#">Help Center</a></li>
+          <li><a href="#">Contact Us</a></li>
+          <li><a href="#">Refund Policy</a></li>
+          <li><a href="#">Terms of Service</a></li>
+        </ul>
+      </div>
+
+      <div class="col-lg-4 col-md-6">
+        <h5>Download Our App</h5>
+        <p style="font-size: 0.875rem; margin-bottom: 1rem;">Get exclusive mobile-only deals and faster checkout.</p>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="#" class="btn btn-bms-outline btn-sm" style="color: #fff; border-color: rgba(255,255,255,0.3);">
+            <i class="bi bi-apple me-1"></i> App Store
+          </a>
+          <a href="#" class="btn btn-bms-outline btn-sm" style="color: #fff; border-color: rgba(255,255,255,0.3);">
+            <i class="bi bi-google-play me-1"></i> Google Play
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p class="mb-0">&copy; {% now "Y" %} BookMySeat. All rights reserved. Crafted for cinema lovers.</p>
+    </div>
+  </div>
+</footer>

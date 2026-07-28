@@ -1,0 +1,26 @@
+<div class="col-6 col-sm-4 col-md-3 col-lg-2 mb-4">
+  <article class="movie-card h-100">
+    <a href="{% url 'theater_list' movie.id %}" class="text-decoration-none d-flex flex-column h-100" aria-label="Book {{ movie.name }}">
+      <div class="movie-card__poster-wrap">
+        <img src="{{ movie.image.url }}" class="movie-card__poster" alt="{{ movie.name }} poster" loading="lazy">
+        <span class="movie-card__rating" aria-label="Rating {{ movie.rating }}">
+          <i class="bi bi-star-fill" aria-hidden="true"></i> {{ movie.rating }}
+        </span>
+      </div>
+      <div class="movie-card__body">
+        <h3 class="movie-card__title">{{ movie.name }}</h3>
+        <p class="movie-card__meta">
+          <i class="bi bi-people me-1" aria-hidden="true"></i>{{ movie.cast|truncatewords:4 }}
+        </p>
+        {% if movie.description %}
+        <p class="movie-card__desc">{{ movie.description|truncatewords:12 }}</p>
+        {% endif %}
+        <div class="movie-card__footer">
+          <span class="btn btn-bms-primary btn-sm movie-card__btn">
+            Book Now <i class="bi bi-arrow-right" aria-hidden="true"></i>
+          </span>
+        </div>
+      </div>
+    </a>
+  </article>
+</div>
