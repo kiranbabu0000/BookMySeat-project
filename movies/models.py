@@ -1,13 +1,30 @@
 from django.db import models
-from django.contrib.auth.models import User 
+from django.contrib.auth.models import User
 
 
 class Movie(models.Model):
-    name= models.CharField(max_length=255)
-    image= models.ImageField(upload_to="movies/")
-    rating = models.DecimalField(max_digits=3,decimal_places=1)
-    cast= models.TextField()
-    description= models.TextField(blank=True,null=True) # optional
+    STATUS_CHOICES = [
+        ('coming_soon', 'Coming Soon'),
+        ('now_showing', 'Now Showing'),
+        ('ended', 'Ended'),
+    ]
+    name = models.CharField(max_length=255)
+    image = models.ImageField(upload_to="movies/")
+    thumbnail = models.ImageField(upload_to="movies/thumbnails/", blank=True, null=True)
+    rating = models.DecimalField(max_digits=3, decimal_places=1)
+    cast = models.TextField()
+    description = models.TextField(blank=True, null=True)
+    duration = models.PositiveIntegerField(blank=True, null=True, help_text="Duration in minutes")
+    release_date = models.DateField(blank=True, null=True)
+    certificate = models.CharField(max_length=20, blank=True, null=True, help_text="e.g., U, UA, A")
+    banner = models.ImageField(upload_to="movies/banners/", blank=True, null=True)
+    director = models.CharField(max_length=255, blank=True, null=True)
+    producer = models.CharField(max_length=255, blank=True, null=True)
+    trailer_url = models.URLField(max_length=500, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='now_showing')
+    imdb_rating = models.DecimalField(max_digits=3, decimal_places=1, blank=True, null=True)
+    genres = models.ManyToManyField('admin_panel.Genre', blank=True, related_name='movies')
+    languages = models.ManyToManyField('admin_panel.Language', blank=True, related_name='movies')
 
     def __str__(self):
         return self.name

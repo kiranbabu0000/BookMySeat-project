@@ -1,0 +1,53 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Settings{% endblock %}
+{% block page_title %}System Settings{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>System Information</h5></div>
+      <div class="card-bms-body">
+        <div class="mb-3">
+          <label class="text-muted small">Django Version</label>
+          <h5 class="mb-0">{{ django_version }}</h5>
+        </div>
+        <div class="mb-3">
+          <label class="text-muted small">Python Version</label>
+          <h5 class="mb-0">{{ python_version }}</h5>
+        </div>
+        <div class="mb-3">
+          <label class="text-muted small">Database Type</label>
+          <h5 class="mb-0">{{ database_type }}</h5>
+        </div>
+        <div>
+          <label class="text-muted small">Server Time</label>
+          <h5 class="mb-0">{{ server_time|date:"d M Y, g:i A" }}</h5>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-sliders me-2"></i>Configuration</h5></div>
+      <div class="card-bms-body">
+        <div class="mb-3">
+          <label class="text-muted small">Session Timeout</label>
+          <h5 class="mb-0">{{ session_timeout }} minutes</h5>
+        </div>
+        <div class="mb-3">
+          <label class="text-muted small">Admin Users</label>
+          <h5 class="mb-0">{{ admin_count }}</h5>
+        </div>
+        <div class="mb-3">
+          <label class="text-muted small">Staff Users</label>
+          <h5 class="mb-0">{{ staff_count }}</h5>
+        </div>
+        <div>
+          <label class="text-muted small">Debug Mode</label>
+          <h5 class="mb-0">{% if debug %}<span class="badge-bms-warning">Enabled</span>{% else %}<span class="badge-bms-success">Disabled</span>{% endif %}</h5>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

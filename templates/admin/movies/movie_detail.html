@@ -1,0 +1,164 @@
+{% extends 'admin/base_admin.html' %}
+{% load static %}
+{% block title %}{{ movie.name }}{% endblock %}
+{% block page_title %}{{ movie.name }}{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-md-4">
+    <div class="card-bms">
+      {% if movie.image %}
+      <img src="{{ movie.image.url }}" alt="{{ movie.name }}" class="card-img-top" style="aspect-ratio: 2/3; object-fit: cover; border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
+      {% endif %}
+      <div class="card-bms-body text-center">
+        <h5 class="mb-1">{{ movie.name }}</h5>
+        <div class="d-flex justify-content-center gap-2 mt-2">
+          <span class="badge-bms-warning"><i class="bi bi-star-fill"></i> {{ movie.rating }}</span>
+          {% if movie.status == 'now_showing' %}
+          <span class="badge-bms-success">Now Showing</span>
+          {% elif movie.status == 'coming_soon' %}
+          <span class="badge-bms-warning">Coming Soon</span>
+          {% else %}
+          <span class="badge-bms-secondary">Ended</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-8">
+    <div class="card-bms mb-4">
+      <div class="card-bms-header"><h5 class="mb-0">Movie Details</h5></div>
+      <div class="card-bms-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="detail-item"><span class="text-muted small">Director</span><br><strong>{{ movie.director|default:'N/A' }}</strong></div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item"><span class="text-muted small">Producer</span><br><strong>{{ movie.producer|default:'N/A' }}</strong></div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item"><span class="text-muted small">Duration</span><br><strong>{{ movie.duration }} minutes</strong></div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item"><span class="text-muted small">Certificate</span><br><strong>{{ movie.certificate|default:'N/A' }}</strong></div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item"><span class="text-muted small">Release Date</span><br><strong>{{ movie.release_date|date:"d M Y" }}</strong></div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item"><span class="text-muted small">Genres</span><br><strong>{% for g in movie.genres.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% empty %}N/A{% endfor %}</strong></div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item"><span class="text-muted small">Languages</span><br><strong>{% for l in movie.languages.all %}{{ l.name }}{% if not forloop.last %}, {% endif %}{% empty %}N/A{% endfor %}</strong></div>
+          </div>
+          <div class="col-12">
+            <div class="detail-item"><span class="text-muted small">Description</span><br>{{ movie.description|default:'No description available.' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-bms mb-4">
+      <div class="card-bms-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Cast Members</h5>
+        <a href="{% url 'admin_cast_add' %}?movie={{ movie.id }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i> Add</a>
+      </div>
+      <div class="card-bms-body p-0">
+        <table class="table table-bms mb-0">
+          <thead><tr><th>Actor</th><th>Character</th><th>Role</th></tr></thead>
+          <tbody>
+            {% for c in cast_members %}
+            <tr><td>{{ c.name }}</td><td>{{ c.character_name|default:'-' }}</td><td><span class="badge-bms-info">{{ c.get_role_display }}</span></td></tr>
+            {% empty %}
+            <tr><td colspan="3" class="text-muted text-center py-3">No cast members.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card-bms mb-4">
+      <div class="card-bms-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Trailers</h5>
+        <a href="{% url 'admin_trailer_add' %}?movie={{ movie.id }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i> Add</a>
+      </div>
+      <div class="card-bms-body">
+        <div class="row g-3">
+          {% for t in trailers %}
+          <div class="col-md-6">
+            <div class="p-3 rounded" style="background: var(--surface-soft); border: 1px solid var(--border-color);">
+              <strong>{{ t.title|default:'Trailer' }}</strong>
+              <div class="mt-2">
+                <a href="{{ t.url }}" target="_blank" class="btn btn-sm btn-danger"><i class="bi bi-play-circle"></i> Watch</a>
+              </div>
+            </div>
+          </div>
+          {% empty %}
+          <p class="text-muted mb-0">No trailers added yet.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card-bms mb-4">
+      <div class="card-bms-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Gallery</h5>
+        <a href="{% url 'admin_image_add' %}?movie={{ movie.id }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i> Add</a>
+      </div>
+      <div class="card-bms-body">
+        <div class="row g-2">
+          {% for img in gallery %}
+          <div class="col-4 col-md-3">
+            <img src="{{ img.image.url }}" alt="{{ img.caption }}" class="img-fluid rounded" style="aspect-ratio: 16/9; object-fit: cover; border-radius: var(--radius-md);">
+          </div>
+          {% empty %}
+          <p class="text-muted mb-0">No gallery images.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card-bms mb-4">
+      <div class="card-bms-header"><h5 class="mb-0">Shows</h5></div>
+      <div class="card-bms-body p-0">
+        <table class="table table-bms mb-0">
+          <thead><tr><th>Theatre</th><th>Screen</th><th>Date</th><th>Time</th><th>Price</th></tr></thead>
+          <tbody>
+            {% for show in shows %}
+            <tr>
+              <td>{{ show.theatre.name }}</td>
+              <td>{{ show.screen.name }}</td>
+              <td>{{ show.date|date:"d M Y" }}</td>
+              <td>{{ show.time|time:"g:i A" }}</td>
+              <td><i class="bi bi-currency-rupee"></i>{{ show.ticket_price }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-muted text-center py-3">No shows scheduled.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0">Bookings</h5></div>
+      <div class="card-bms-body p-0">
+        <table class="table table-bms mb-0">
+          <thead><tr><th>User</th><th>Seat</th><th>Date</th><th>Amount</th></tr></thead>
+          <tbody>
+            {% for booking in bookings %}
+            <tr>
+              <td>{{ booking.user.username }}</td>
+              <td>{{ booking.seat.seat_number }}</td>
+              <td>{{ booking.booked_at|date:"d M Y, g:i A" }}</td>
+              <td><i class="bi bi-currency-rupee"></i>—</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-muted text-center py-3">No bookings yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

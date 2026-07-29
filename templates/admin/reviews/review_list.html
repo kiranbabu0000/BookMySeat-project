@@ -1,0 +1,80 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Reviews{% endblock %}
+{% block page_title %}Review Management{% endblock %}
+{% block content %}
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <form method="get" class="d-flex flex-wrap gap-2">
+      <select name="movie" class="form-select form-select-sm" style="width: auto;">
+        <option value="">All Movies</option>
+        {% for m in movies %}
+        <option value="{{ m.id }}" {% if request.GET.movie == m.id|stringformat:'s' %}selected{% endif %}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="status" class="form-select form-select-sm" style="width: auto;">
+        <option value="">All Status</option>
+        <option value="approved" {% if request.GET.status == 'approved' %}selected{% endif %}>Approved</option>
+        <option value="pending" {% if request.GET.status == 'pending' %}selected{% endif %}>Pending</option>
+      </select>
+      <select name="reported" class="form-select form-select-sm" style="width: auto;">
+        <option value="">All Reports</option>
+        <option value="1" {% if request.GET.reported == '1' %}selected{% endif %}>Reported</option>
+      </select>
+      <select name="hidden" class="form-select form-select-sm" style="width: auto;">
+        <option value="">Visibility</option>
+        <option value="1" {% if request.GET.hidden == '1' %}selected{% endif %}>Hidden</option>
+      </select>
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> Filter</button>
+      <a href="{% url 'admin_review_list' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear</a>
+    </form>
+  </div>
+  <div class="card-bms-body p-0">
+    <table class="table table-bms mb-0">
+      <thead><tr><th>ID</th><th>Movie</th><th>User</th><th>Rating</th><th>Comment</th><th>Date</th><th>Reported</th><th>Hidden</th><th>Approved</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for r in reviews %}
+        <tr class="{% if r.is_reported %}table-warning{% endif %}">
+          <td>{{ r.id }}</td>
+          <td>{{ r.movie.name|truncatechars:25 }}</td>
+          <td>{{ r.user.username }}</td>
+          <td>
+            {% with ''|center:5 as range %}
+            {% for _ in range %}
+            <i class="bi bi-star{% if forloop.counter <= r.rating %}-fill text-warning{% else %} text-muted{% endif %}"></i>
+            {% endfor %}
+            {% endwith %}
+          </td>
+          <td class="small text-muted">{{ r.comment|truncatechars:60 }}</td>
+          <td class="small">{{ r.created_at|date:"d M Y" }}</td>
+          <td>{% if r.is_reported %}<span class="badge-bms-danger">Reported</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+          <td>{% if r.is_hidden %}<span class="badge-bms-secondary">Hidden</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+          <td>{% if r.is_approved %}<span class="badge-bms-success">Yes</span>{% else %}<span class="badge-bms-warning">No</span>{% endif %}</td>
+          <td>
+            <div class="d-flex gap-1 flex-nowrap">
+              <a href="{% url 'admin_review_approve' r.id %}" class="btn btn-sm btn-outline-{% if r.is_approved %}warning{% else %}success{% endif %}" title="{% if r.is_approved %}Unapprove{% else %}Approve{% endif %}">
+                <i class="bi bi-{% if r.is_approved %}x-circle{% else %}check-circle{% endif %}"></i>
+              </a>
+              {% if r.is_hidden %}
+              <a href="{% url 'admin_review_restore' r.id %}" class="btn btn-sm btn-outline-info" title="Restore to public view">
+                <i class="bi bi-eye"></i>
+              </a>
+              {% else %}
+              <a href="{% url 'admin_review_hide' r.id %}" class="btn btn-sm btn-outline-secondary" title="Hide from public">
+                <i class="bi bi-eye-slash"></i>
+              </a>
+              {% endif %}
+              <a href="{% url 'admin_review_delete' r.id %}" class="btn btn-sm btn-outline-danger" title="Delete permanently" onclick="return confirm('Delete this review permanently?')">
+                <i class="bi bi-trash"></i>
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="10" class="text-center text-muted py-4">No reviews found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
+</div>
+{% endblock %}

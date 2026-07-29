@@ -1,0 +1,117 @@
+{% extends 'admin/base_admin.html' %}
+{% load static %}
+{% block title %}{% if object %}Edit{% else %}Add{% endif %} Movie{% endblock %}
+{% block page_title %}{% if object %}Edit Movie: {{ object.name }}{% else %}Add New Movie{% endif %}{% endblock %}
+{% block content %}
+<div class="card-bms">
+  <div class="card-bms-body">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="row g-4">
+        <div class="col-md-8">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Movie Name</label>
+              {{ form.name }}
+              {% if form.name.errors %}<div class="invalid-feedback d-block">{{ form.name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold small">Duration (min)</label>
+              {{ form.duration }}
+              {% if form.duration.errors %}<div class="invalid-feedback d-block">{{ form.duration.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold small">Release Date</label>
+              {{ form.release_date }}
+              {% if form.release_date.errors %}<div class="invalid-feedback d-block">{{ form.release_date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-12">
+              <label class="form-label fw-semibold small">Description</label>
+              {{ form.description }}
+              {% if form.description.errors %}<div class="invalid-feedback d-block">{{ form.description.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small">Certificate</label>
+              {{ form.certificate }}
+              {% if form.certificate.errors %}<div class="invalid-feedback d-block">{{ form.certificate.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small">Rating</label>
+              {{ form.rating }}
+              {% if form.rating.errors %}<div class="invalid-feedback d-block">{{ form.rating.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold small">IMDB Rating</label>
+              {{ form.imdb_rating }}
+              {% if form.imdb_rating.errors %}<div class="invalid-feedback d-block">{{ form.imdb_rating.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Status</label>
+              {{ form.status }}
+              {% if form.status.errors %}<div class="invalid-feedback d-block">{{ form.status.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Language</label>
+              {{ form.language }}
+              {% if form.language.errors %}<div class="invalid-feedback d-block">{{ form.language.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Genre</label>
+              {{ form.genre }}
+              {% if form.genre.errors %}<div class="invalid-feedback d-block">{{ form.genre.errors.0 }}</div>{% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Poster Image</label>
+            {{ form.image }}
+            {% if form.image.errors %}<div class="invalid-feedback d-block">{{ form.image.errors.0 }}</div>{% endif %}
+            {% if object and object.image %}
+            <div class="mt-2">
+              <img src="{{ object.image.url }}" alt="{{ object.name }}" style="width: 100%; max-height: 200px; object-fit: contain; border-radius: 8px; background: var(--bg-tertiary);">
+            </div>
+            {% endif %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Banner Image</label>
+            {{ form.banner }}
+            {% if form.banner.errors %}<div class="invalid-feedback d-block">{{ form.banner.errors.0 }}</div>{% endif %}
+            {% if object and object.banner %}
+            <div class="mt-2">
+              <img src="{{ object.banner.url }}" alt="{{ object.name }}" style="width: 100%; max-height: 100px; object-fit: cover; border-radius: 8px; background: var(--bg-tertiary);">
+            </div>
+            {% endif %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Director</label>
+            {{ form.director }}
+            {% if form.director.errors %}<div class="invalid-feedback d-block">{{ form.director.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Producer</label>
+            {{ form.producer }}
+            {% if form.producer.errors %}<div class="invalid-feedback d-block">{{ form.producer.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Trailer URL</label>
+            {{ form.trailer_url }}
+            {% if form.trailer_url.errors %}<div class="invalid-feedback d-block">{{ form.trailer_url.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Cast</label>
+            {{ form.cast }}
+            {% if form.cast.errors %}<div class="invalid-feedback d-block">{{ form.cast.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="mt-4">
+        <button type="submit" class="btn btn-bms-primary">
+          <i class="bi bi-check-lg"></i> {% if object %}Update{% else %}Create{% endif %} Movie
+        </button>
+        <a href="{% url 'admin_movie_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

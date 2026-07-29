@@ -1,0 +1,49 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Reserve Ticket{% endblock %}
+{% block page_title %}Reserve Offline Ticket{% endblock %}
+{% block content %}
+<div class="card-bms" style="max-width: 700px;">
+  <div class="card-bms-body">
+    <form method="post">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">User</label>
+          <select name="user" class="form-select" required>
+            <option value="">Select User</option>
+            {% for u in users %}
+            <option value="{{ u.id }}">{{ u.username }} ({{ u.email }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">Movie</label>
+          <select name="movie" class="form-select" required>
+            <option value="">Select Movie</option>
+            {% for m in movies %}
+            <option value="{{ m.id }}">{{ m.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">Show</label>
+          <select name="show" class="form-select" required>
+            <option value="">Select Show</option>
+            {% for s in shows %}
+            <option value="{{ s.id }}">{{ s.movie.name }} - {{ s.theatre.name }} ({{ s.date|date:"d M Y" }} {{ s.time|time:"g:i A" }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">Seat Count</label>
+          <input type="number" name="seat_count" class="form-control" value="1" min="1" max="10" required>
+        </div>
+      </div>
+      <div class="mt-4">
+        <button type="submit" class="btn btn-bms-primary"><i class="bi bi-ticket"></i> Reserve Ticket</button>
+        <a href="{% url 'admin_booking_list' %}" class="btn btn-outline-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

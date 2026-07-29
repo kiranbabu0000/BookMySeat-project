@@ -12,11 +12,11 @@
       </div>
     </div>
 
-    <!-- Search -->
-    <div class="row justify-content-center mb-5">
+    <!-- Search & Filters -->
+    <div class="row justify-content-center mb-4">
       <div class="col-lg-8">
         <form method="GET" action="{% url 'movie_list' %}" role="search">
-          <div class="input-group input-group-lg">
+          <div class="input-group input-group-lg mb-3">
             <span class="input-group-text bg-transparent border-end-0" style="border-color: var(--border-color);">
               <i class="bi bi-search text-muted"></i>
             </span>
@@ -26,6 +26,20 @@
                    aria-label="Search movies"
                    id="movieSearchInput">
             <button class="btn btn-bms-primary px-4" type="submit">Search</button>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            <select name="genre" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+              <option value="">All Genres</option>
+              {% for g in genres %}
+              <option value="{{ g.slug }}" {% if request.GET.genre == g.slug %}selected{% endif %}>{{ g.name }}</option>
+              {% endfor %}
+            </select>
+            <select name="language" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+              <option value="">All Languages</option>
+              {% for l in languages %}
+              <option value="{{ l.code }}" {% if request.GET.language == l.code %}selected{% endif %}>{{ l.name }}</option>
+              {% endfor %}
+            </select>
           </div>
         </form>
       </div>

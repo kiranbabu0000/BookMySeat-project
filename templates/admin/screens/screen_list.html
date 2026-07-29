@@ -1,0 +1,40 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Screens{% endblock %}
+{% block page_title %}Screen Management{% endblock %}
+{% block content %}
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <form method="get" class="d-flex gap-2">
+      <select name="theatre" class="form-select form-select-sm" style="width: auto;">
+        <option value="">All Theatres</option>
+        {% for tn in theatre_names %}
+        <option value="{{ tn }}" {% if request.GET.theatre == tn %}selected{% endif %}>{{ tn }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> Filter</button>
+    </form>
+    <a href="{% url 'admin_screen_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Add Screen</a>
+  </div>
+  <div class="card-bms-body p-0">
+    <table class="table table-bms mb-0">
+      <thead><tr><th>ID</th><th>Theatre</th><th>Movie</th><th>Show Time</th><th>Total Seats</th><th>Available</th><th>Booked</th></tr></thead>
+      <tbody>
+        {% for s in screens %}
+        <tr>
+          <td>{{ s.id }}</td>
+          <td><strong>{{ s.name }}</strong></td>
+          <td>{{ s.movie.name|truncatechars:30 }}</td>
+          <td>{{ s.time|date:"d M Y, g:i A" }}</td>
+          <td><span class="badge-bms-info">{{ s.total_seats }}</span></td>
+          <td><span class="badge-bms-success">{{ s.available_seats }}</span></td>
+          <td><span class="badge-bms-danger">{{ s.booked_seats }}</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-4">No screenings found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
+</div>
+{% endblock %}

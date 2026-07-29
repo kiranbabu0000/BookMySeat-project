@@ -1,0 +1,77 @@
+{% extends 'admin/base_admin.html' %}
+{% load static %}
+{% block title %}Movies{% endblock %}
+{% block page_title %}Movie Management{% endblock %}
+{% block content %}
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <form method="get" class="d-flex gap-2 align-items-center">
+      <input type="search" name="search" class="form-control form-control-sm" placeholder="Search movies..." value="{{ request.GET.search|default:'' }}" style="width: 250px;">
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
+    </form>
+    <a href="{% url 'admin_movie_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Add Movie</a>
+  </div>
+  <div class="card-bms-body p-0">
+    <div class="table-responsive">
+      <table class="table table-bms mb-0">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Poster</th>
+            <th>Name</th>
+            <th>Rating</th>
+            <th>Duration</th>
+            <th>Status</th>
+            <th>Bookings</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for movie in movies %}
+          <tr>
+            <td>{{ movie.id }}</td>
+            <td>
+              {% if movie.image %}
+              <img src="{{ movie.image.url }}" alt="{{ movie.name }}" style="width: 40px; height: 56px; object-fit: cover; border-radius: 4px;">
+              {% else %}
+              <div style="width: 40px; height: 56px; background: var(--bg-tertiary); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--text-muted);"><i class="bi bi-image"></i></div>
+              {% endif %}
+            </td>
+            <td><strong>{{ movie.name }}</strong></td>
+            <td><span class="badge-bms-warning"><i class="bi bi-star-fill me-1"></i>{{ movie.rating }}</span></td>
+            <td>{{ movie.duration }} min</td>
+            <td>
+              {% if movie.status == 'now_showing' %}
+              <span class="badge-bms-success">Now Showing</span>
+              {% elif movie.status == 'coming_soon' %}
+              <span class="badge-bms-warning">Coming Soon</span>
+              {% else %}
+              <span class="badge-bms-secondary">Ended</span>
+              {% endif %}
+            </td>
+            <td><span class="badge-bms-info">{{ movie.booking_set.count }}</span></td>
+            <td>
+              <div class="d-flex gap-1">
+                <a href="{% url 'admin_movie_detail' movie.id %}" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
+                <a href="{% url 'admin_movie_edit' movie.id %}" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
+                <a href="{% url 'admin_movie_delete' movie.id %}" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></a>
+                <a href="{% url 'admin_movie_toggle_status' movie.id %}" class="btn btn-sm btn-outline-secondary" title="Toggle Status">
+                  <i class="bi bi-arrow-left-right"></i>
+                </a>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="text-center py-4 text-muted">No movies found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="card-bms-footer">
+    {% include 'admin/partials/_pagination.html' %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

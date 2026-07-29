@@ -1,0 +1,30 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}{% if object %}Edit{% else %}Add{% endif %} Cast{% endblock %}
+{% block page_title %}{% if object %}Edit Cast Member{% else %}Add New Cast Member{% endif %}{% endblock %}
+{% block content %}
+<div class="card-bms" style="max-width: 600px;">
+  <div class="card-bms-body">
+    <form method="post" enctype="multipart/form-data">{% csrf_token %}
+      <div class="row g-3">
+        {% for field in form %}
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors.0 }}</div>{% endif %}
+        </div>
+        {% endfor %}
+        {% if object and object.image %}
+        <div class="col-12">
+          <label class="form-label fw-semibold small">Current Image</label>
+          <div><img src="{{ object.image.url }}" alt="{{ object.name }}" style="max-height: 100px; border-radius: 8px;"></div>
+        </div>
+        {% endif %}
+      </div>
+      <div class="mt-4">
+        <button type="submit" class="btn btn-bms-primary"><i class="bi bi-check-lg"></i> {% if object %}Update{% else %}Add{% endif %} Cast</button>
+        <a href="{% url 'admin_cast_list' %}" class="btn btn-outline-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

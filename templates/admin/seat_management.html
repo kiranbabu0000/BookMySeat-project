@@ -1,0 +1,89 @@
+{% extends 'admin/base_admin.html' %}
+{% load static %}
+{% block title %}Seat Management{% endblock %}
+{% block page_title %}Seat Management{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-md-5">
+    <div class="card-bms mb-4">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-grid-3x3-gap-fill me-2"></i>Generate Seats</h5></div>
+      <div class="card-bms-body">
+        <form method="post" class="row g-3">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="generate_seats">
+          <div class="col-md-6">
+            <label class="form-label small">Theatre / Show</label>
+            <select name="theater_id" class="form-select" required>
+              <option value="">Select Show</option>
+              {% for t in theatres_list %}
+              <option value="{{ t.id }}">{{ t.name }} - {{ t.movie.name }} ({{ t.time|date:"d M Y, g:i A" }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Rows</label>
+            <input type="number" name="rows" class="form-control" value="10" min="1" max="26">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Per Row</label>
+            <input type="number" name="seats_per_row" class="form-control" value="20" min="1" max="50">
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-bms-primary"><i class="bi bi-grid-3x3-gap"></i> Generate</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Legend</h5></div>
+      <div class="card-bms-body">
+        <div class="seat-legend">
+          <div class="seat-legend-item"><span class="seat-legend-swatch" style="background: var(--accent-success);"></span> Available</div>
+          <div class="seat-legend-item"><span class="seat-legend-swatch" style="background: var(--accent-primary);"></span> Booked / Blocked</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-7">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-layout-three-columns me-2"></i>Seat Status</h5></div>
+      <div class="card-bms-body">
+        <form method="get" class="mb-3">
+          <div class="d-flex gap-2">
+            <select name="theater" class="form-select form-select-sm" style="width: auto;">
+              <option value="">Select Show</option>
+              {% for t in theatres_list %}
+              <option value="{{ t.id }}" {% if request.GET.theater == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }} - {{ t.movie.name }} ({{ t.time|date:"d M Y, g:i A" }})</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i> View</button>
+          </div>
+        </form>
+        {% if selected_theater %}
+        <div class="d-flex flex-wrap gap-2 justify-content-center">
+          {% for seat in seats %}
+          <form method="post" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="seat_id" value="{{ seat.id }}">
+            {% if seat.is_booked %}
+            <button type="submit" name="action" value="unblock_seat" class="btn btn-sm seat-btn" style="background: var(--accent-primary); color: #fff; width: 45px; height: 45px; font-size: 0.7rem; padding: 0;" title="Booked - Click to unblock">
+              {{ seat.seat_number }}
+            </button>
+            {% else %}
+            <button type="submit" name="action" value="block_seat" class="btn btn-sm seat-btn" style="background: var(--accent-success); color: #fff; width: 45px; height: 45px; font-size: 0.7rem; padding: 0;" title="Available - Click to block">
+              {{ seat.seat_number }}
+            </button>
+            {% endif %}
+          </form>
+          {% empty %}
+          <p class="text-muted">No seats found for this show. Generate seats first.</p>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted text-center py-4">Select a show to view seats.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

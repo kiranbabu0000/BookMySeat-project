@@ -1,0 +1,44 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Trailers{% endblock %}
+{% block page_title %}Trailer Management{% endblock %}
+{% block content %}
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <form method="get" class="d-flex gap-2">
+      <select name="movie" class="form-select form-select-sm" style="width: auto;">
+        <option value="">All Movies</option>
+        {% for m in movies %}
+        <option value="{{ m.id }}" {% if request.GET.movie == m.id|stringformat:'s' %}selected{% endif %}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> Filter</button>
+    </form>
+    <a href="{% url 'admin_trailer_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Add Trailer</a>
+  </div>
+  <div class="card-bms-body p-0">
+    <table class="table table-bms mb-0">
+      <thead><tr><th>ID</th><th>Movie</th><th>Title</th><th>URL</th><th>Featured</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for t in trailers %}
+        <tr>
+          <td>{{ t.id }}</td>
+          <td>{{ t.movie.name|truncatechars:30 }}</td>
+          <td>{{ t.title|default:'-' }}</td>
+          <td>
+            <a href="{{ t.url }}" target="_blank" class="btn btn-sm btn-outline-danger"><i class="bi bi-play-circle"></i> Watch</a>
+          </td>
+          <td>{% if t.is_featured %}<span class="badge-bms-warning"><i class="bi bi-star-fill"></i> Featured</span>{% else %}<span class="badge-bms-secondary">No</span>{% endif %}</td>
+          <td>
+            <a href="{% url 'admin_trailer_edit' t.id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+            <a href="{% url 'admin_trailer_delete' t.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-4">No trailers found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
+</div>
+{% endblock %}

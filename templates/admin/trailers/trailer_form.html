@@ -1,0 +1,29 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}{% if object %}Edit{% else %}Add{% endif %} Trailer{% endblock %}
+{% block page_title %}{% if object %}Edit Trailer{% else %}Add New Trailer{% endif %}{% endblock %}
+{% block content %}
+<div class="card-bms" style="max-width: 600px;">
+  <div class="card-bms-body">
+    <form method="post">{% csrf_token %}
+      {% for field in form %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">{{ field.label }}</label>
+        {{ field }}
+        {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors.0 }}</div>{% endif %}
+        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+      </div>
+      {% endfor %}
+      {% if object and object.url %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Preview</label>
+        <div class="ratio ratio-16x9">
+          <iframe src="{{ object.url }}" allowfullscreen></iframe>
+        </div>
+      </div>
+      {% endif %}
+      <button type="submit" class="btn btn-bms-primary"><i class="bi bi-check-lg"></i> {% if object %}Update{% else %}Add{% endif %} Trailer</button>
+      <a href="{% url 'admin_trailer_list' %}" class="btn btn-outline-secondary">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

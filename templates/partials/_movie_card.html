@@ -1,6 +1,6 @@
 <div class="col-6 col-sm-4 col-md-3 col-lg-2 mb-4">
   <article class="movie-card h-100">
-    <a href="{% url 'theater_list' movie.id %}" class="text-decoration-none d-flex flex-column h-100" aria-label="Book {{ movie.name }}">
+    <a href="{% url 'movie_detail' movie.id %}" class="text-decoration-none d-flex flex-column h-100" aria-label="View {{ movie.name }}">
       <div class="movie-card__poster-wrap">
         <img src="{{ movie.image.url }}" class="movie-card__poster" alt="{{ movie.name }} poster" loading="lazy">
         <span class="movie-card__rating" aria-label="Rating {{ movie.rating }}">

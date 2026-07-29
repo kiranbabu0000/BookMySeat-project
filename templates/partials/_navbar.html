@@ -64,7 +64,12 @@
         </li>
         {% endif %}
 
-        <li class="nav-item ms-lg-2">
+        <li class="nav-item ms-lg-1">
+          <a class="nav-link" href="{% url 'admin_login' %}" title="Admin Portal">
+            <i class="bi bi-shield-lock"></i>
+          </a>
+        </li>
+        <li class="nav-item ms-lg-1">
           <button type="button" class="theme-toggle" data-theme-toggle
                   aria-label="Toggle dark mode">
             <i class="bi bi-moon-fill" aria-hidden="true"></i>
@@ -75,6 +80,4 @@
       <!-- Mobile search intentionally hidden from navbar (search goes inside drawer) -->
     </div>
   </div>
-
-</deleted>
 </nav>

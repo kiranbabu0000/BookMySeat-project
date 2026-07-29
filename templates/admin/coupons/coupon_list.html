@@ -1,0 +1,38 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Coupons{% endblock %}
+{% block page_title %}Coupon Management{% endblock %}
+{% block content %}
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <form method="get" class="d-flex gap-2">
+      <input type="search" name="search" class="form-control form-control-sm" placeholder="Search coupons..." value="{{ request.GET.search|default:'' }}" style="width: 250px;">
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
+    </form>
+    <a href="{% url 'admin_coupon_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Add Coupon</a>
+  </div>
+  <div class="card-bms-body p-0">
+    <table class="table table-bms mb-0">
+      <thead><tr><th>Code</th><th>Discount</th><th>Valid From</th><th>Valid To</th><th>Uses</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for c in coupons %}
+        <tr>
+          <td><strong>{{ c.code }}</strong></td>
+          <td>{% if c.discount_type == 'percentage' %}{{ c.discount_value }}%{% else %}<i class="bi bi-currency-rupee"></i>{{ c.discount_value }}{% endif %}</td>
+          <td>{{ c.valid_from|date:"d M Y" }}</td>
+          <td>{{ c.valid_to|date:"d M Y" }}</td>
+          <td>{{ c.used_count|default:0 }}/{{ c.max_uses|default:'∞' }}</td>
+          <td>{% if c.is_active %}<span class="badge-bms-success">Active</span>{% else %}<span class="badge-bms-danger">Expired</span>{% endif %}</td>
+          <td>
+            <a href="{% url 'admin_coupon_edit' c.id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+            <a href="{% url 'admin_coupon_delete' c.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-4">No coupons found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
+</div>
+{% endblock %}

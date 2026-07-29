@@ -1,0 +1,24 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}{% if object %}Edit{% else %}Add{% endif %} Coupon{% endblock %}
+{% block page_title %}{% if object %}Edit Coupon{% else %}Add New Coupon{% endif %}{% endblock %}
+{% block content %}
+<div class="card-bms" style="max-width: 700px;">
+  <div class="card-bms-body">
+    <form method="post">{% csrf_token %}
+      <div class="row g-3">
+        {% for field in form %}
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors.0 }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="mt-4">
+        <button type="submit" class="btn btn-bms-primary"><i class="bi bi-check-lg"></i> {% if object %}Update{% else %}Create{% endif %} Coupon</button>
+        <a href="{% url 'admin_coupon_list' %}" class="btn btn-outline-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

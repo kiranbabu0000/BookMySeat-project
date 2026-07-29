@@ -1,0 +1,49 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Cast{% endblock %}
+{% block page_title %}Cast Management{% endblock %}
+{% block content %}
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <form method="get" class="d-flex gap-2 align-items-center">
+      <input type="search" name="search" class="form-control form-control-sm" placeholder="Search cast..." value="{{ request.GET.search|default:'' }}" style="width: 200px;">
+      <select name="movie" class="form-select form-select-sm" style="width: auto;">
+        <option value="">All Movies</option>
+        {% for m in movies %}
+        <option value="{{ m.id }}" {% if request.GET.movie == m.id|stringformat:'s' %}selected{% endif %}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
+    </form>
+    <a href="{% url 'admin_cast_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Add Cast</a>
+  </div>
+  <div class="card-bms-body p-0">
+    <table class="table table-bms mb-0">
+      <thead><tr><th>Image</th><th>Name</th><th>Movie</th><th>Character</th><th>Role</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for c in cast_members %}
+        <tr>
+          <td>
+            {% if c.image %}
+            <img src="{{ c.image.url }}" alt="{{ c.name }}" style="width: 36px; height: 36px; object-fit: cover; border-radius: 50%;">
+            {% else %}
+            <div style="width: 36px; height: 36px; background: var(--bg-tertiary); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text-muted);"><i class="bi bi-person"></i></div>
+            {% endif %}
+          </td>
+          <td><strong>{{ c.name }}</strong></td>
+          <td>{{ c.movie.name|truncatechars:30 }}</td>
+          <td>{{ c.character_name|default:'-' }}</td>
+          <td><span class="badge-bms-info">{{ c.get_role_display }}</span></td>
+          <td>
+            <a href="{% url 'admin_cast_edit' c.id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+            <a href="{% url 'admin_cast_delete' c.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-4">No cast members found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
+</div>
+{% endblock %}

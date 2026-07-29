@@ -1,0 +1,61 @@
+{% load static %}
+<aside class="admin-sidebar" id="adminSidebar">
+  <div class="sidebar-brand">
+    <i class="bi bi-film"></i>
+    <span>BookMySeat</span>
+  </div>
+  <nav class="sidebar-nav" aria-label="Admin Navigation">
+    <a href="{% url 'admin_dashboard' %}" class="sidebar-link {% if request.resolver_match.url_name == 'admin_dashboard' %}active{% endif %}">
+      <i class="bi bi-speedometer2"></i><span>Dashboard</span>
+    </a>
+    <a href="{% url 'admin_movie_list' %}" class="sidebar-link {% if 'movie' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-film"></i><span>Movies</span>
+    </a>
+    <a href="{% url 'admin_theatre_list' %}" class="sidebar-link {% if 'theatre' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-building"></i><span>Theatres</span>
+    </a>
+    <a href="{% url 'admin_screen_list' %}" class="sidebar-link {% if 'screen' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-tv"></i><span>Screens</span>
+    </a>
+    <a href="{% url 'admin_show_list' %}" class="sidebar-link {% if 'show' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-calendar-event"></i><span>Shows</span>
+    </a>
+    <a href="{% url 'admin_seat_management' %}" class="sidebar-link {% if 'seat' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-grid-3x3-gap-fill"></i><span>Seat Management</span>
+    </a>
+    <a href="{% url 'admin_booking_list' %}" class="sidebar-link {% if 'booking' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-ticket-perforated"></i><span>Bookings</span>
+    </a>
+    <a href="{% url 'admin_user_list' %}" class="sidebar-link {% if 'user' in request.resolver_match.url_name and 'staff' not in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-people-fill"></i><span>Users</span>
+    </a>
+    <a href="{% url 'admin_staff_list' %}" class="sidebar-link {% if 'staff' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-person-badge"></i><span>Staff Management</span>
+    </a>
+    <a href="{% url 'admin_review_list' %}" class="sidebar-link {% if 'review' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-star-fill"></i><span>Reviews</span>
+    </a>
+    <a href="{% url 'admin_coupon_list' %}" class="sidebar-link {% if 'coupon' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-ticket"></i><span>Coupons</span>
+    </a>
+    <a href="{% url 'admin_notification_list' %}" class="sidebar-link {% if 'notification' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-bell-fill"></i><span>Notifications</span>
+    </a>
+    <a href="{% url 'admin_audit_logs' %}" class="sidebar-link {% if 'audit' in request.resolver_match.url_name or 'log' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-journal-text"></i><span>Audit Logs</span>
+    </a>
+    <a href="{% url 'admin_settings' %}" class="sidebar-link {% if 'setting' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-gear"></i><span>Settings</span>
+    </a>
+    <hr class="my-2" style="border-color: rgba(255,255,255,0.08); opacity: 0.5;">
+    <a href="{% url 'admin_profile' %}" class="sidebar-link {% if 'profile' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-person-circle"></i><span>Profile</span>
+    </a>
+    <a href="/" class="sidebar-link" target="_blank" rel="noopener noreferrer">
+      <i class="bi bi-globe"></i><span>View Website</span>
+    </a>
+    <a href="{% url 'admin_logout' %}" class="sidebar-link text-danger">
+      <i class="bi bi-box-arrow-left"></i><span>Logout</span>
+    </a>
+  </nav>
+</aside>

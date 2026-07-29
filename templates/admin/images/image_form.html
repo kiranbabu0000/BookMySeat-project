@@ -1,0 +1,28 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Upload Image{% endblock %}
+{% block page_title %}Upload New Image{% endblock %}
+{% block content %}
+<div class="card-bms" style="max-width: 600px;">
+  <div class="card-bms-body">
+    <form method="post" enctype="multipart/form-data">{% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Movie</label>
+        {{ form.movie }}
+        {% if form.movie.errors %}<div class="invalid-feedback d-block">{{ form.movie.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Image File</label>
+        {{ form.image }}
+        {% if form.image.errors %}<div class="invalid-feedback d-block">{{ form.image.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Caption</label>
+        {{ form.caption }}
+        {% if form.caption.errors %}<div class="invalid-feedback d-block">{{ form.caption.errors.0 }}</div>{% endif %}
+      </div>
+      <button type="submit" class="btn btn-bms-primary"><i class="bi bi-upload"></i> Upload Image</button>
+      <a href="{% url 'admin_image_list' %}" class="btn btn-outline-secondary">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

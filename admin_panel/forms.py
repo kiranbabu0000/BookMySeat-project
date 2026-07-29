@@ -1,0 +1,342 @@
+from django import forms
+from django.contrib.auth.models import User
+from movies.models import Movie, Theater, Seat, Booking
+from .models import Genre, Language, CastMember, Theatre, Screen, Show, Trailer, MovieImage, AdminProfile, AdminPermission, Coupon, Notification, Review
+
+
+class AdminLoginForm(forms.Form):
+    username = forms.CharField(
+        max_length=150,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Username'})
+    )
+    password = forms.CharField(
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Password'})
+    )
+
+
+class MovieForm(forms.ModelForm):
+    class Meta:
+        model = Movie
+        fields = [
+            'name', 'description', 'duration', 'release_date', 'certificate',
+            'rating', 'imdb_rating', 'image', 'thumbnail', 'banner', 'cast',
+            'director', 'producer', 'trailer_url', 'status',
+            'genres', 'languages',
+        ]
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
+            'duration': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Duration in minutes'}),
+            'release_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'certificate': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'U, UA, A'}),
+            'rating': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1'}),
+            'imdb_rating': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1'}),
+            'image': forms.FileInput(attrs={'class': 'form-control'}),
+            'thumbnail': forms.FileInput(attrs={'class': 'form-control'}),
+            'banner': forms.FileInput(attrs={'class': 'form-control'}),
+            'cast': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'director': forms.TextInput(attrs={'class': 'form-control'}),
+            'producer': forms.TextInput(attrs={'class': 'form-control'}),
+            'trailer_url': forms.URLInput(attrs={'class': 'form-control'}),
+            'status': forms.Select(attrs={'class': 'form-select'}),
+            'genres': forms.SelectMultiple(attrs={'class': 'form-select'}),
+            'languages': forms.SelectMultiple(attrs={'class': 'form-select'}),
+        }
+
+
+class GenreForm(forms.ModelForm):
+    class Meta:
+        model = Genre
+        fields = ['name']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter genre name'}),
+        }
+
+
+class LanguageForm(forms.ModelForm):
+    class Meta:
+        model = Language
+        fields = ['name', 'code']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Enter language name'}),
+            'code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., EN, HI'}),
+        }
+
+
+class CastMemberForm(forms.ModelForm):
+    class Meta:
+        model = CastMember
+        fields = ['movie', 'name', 'character_name', 'image', 'role']
+        widgets = {
+            'movie': forms.Select(attrs={'class': 'form-select'}),
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Actor name'}),
+            'character_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Character name'}),
+            'image': forms.FileInput(attrs={'class': 'form-control'}),
+            'role': forms.Select(attrs={'class': 'form-select'}),
+        }
+
+
+class TheatreForm(forms.ModelForm):
+    class Meta:
+        model = Theatre
+        fields = ['name', 'location', 'address', 'city', 'contact', 'description', 'facilities', 'is_active']
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Theatre name'}),
+            'location': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Location'}),
+            'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'city': forms.TextInput(attrs={'class': 'form-control'}),
+            'contact': forms.TextInput(attrs={'class': 'form-control'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'facilities': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+
+class ScreenForm(forms.ModelForm):
+    class Meta:
+        model = Screen
+        fields = ['theatre', 'name', 'capacity', 'seat_layout']
+        widgets = {
+            'theatre': forms.Select(attrs={'class': 'form-select'}),
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Screen name (e.g., Screen 1)'}),
+            'capacity': forms.NumberInput(attrs={'class': 'form-control'}),
+            'seat_layout': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+
+class ShowForm(forms.ModelForm):
+    class Meta:
+        model = Show
+        fields = ['movie', 'theatre', 'screen', 'date', 'time', 'ticket_price', 'status']
+        widgets = {
+            'movie': forms.Select(attrs={'class': 'form-select'}),
+            'theatre': forms.Select(attrs={'class': 'form-select'}),
+            'screen': forms.Select(attrs={'class': 'form-select'}),
+            'date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
+            'ticket_price': forms.NumberInput(attrs={'class': 'form-control'}),
+            'status': forms.Select(attrs={'class': 'form-select'}),
+        }
+
+
+class TrailerForm(forms.ModelForm):
+    class Meta:
+        model = Trailer
+        fields = ['movie', 'title', 'url', 'is_featured']
+        widgets = {
+            'movie': forms.Select(attrs={'class': 'form-select'}),
+            'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Trailer title'}),
+            'url': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'YouTube URL'}),
+            'is_featured': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def clean_url(self):
+        url = self.cleaned_data.get('url', '')
+        if url and 'youtube.com' not in url and 'youtu.be' not in url:
+            raise forms.ValidationError('Only YouTube URLs are allowed.')
+        return url
+
+
+class MovieImageForm(forms.ModelForm):
+    class Meta:
+        model = MovieImage
+        fields = ['movie', 'image', 'caption']
+        widgets = {
+            'movie': forms.Select(attrs={'class': 'form-select'}),
+            'image': forms.FileInput(attrs={'class': 'form-control'}),
+            'caption': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Optional caption'}),
+        }
+
+
+class SeatStatusForm(forms.Form):
+    seat_id = forms.IntegerField(widget=forms.HiddenInput())
+    status = forms.ChoiceField(
+        choices=[
+            ('available', 'Available'),
+            ('booked', 'Booked'),
+            ('blocked', 'Blocked'),
+            ('maintenance', 'Maintenance'),
+        ],
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
+
+class BookingSearchForm(forms.Form):
+    movie = forms.ModelChoiceField(
+        queryset=Movie.objects.all(), required=False,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    user = forms.CharField(
+        max_length=150, required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Username'})
+    )
+    date_from = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+    )
+    date_to = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+    )
+    theatre = forms.ChoiceField(
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        theatres = Theater.objects.values_list('name', flat=True).distinct().order_by('name')
+        self.fields['theatre'].choices = [('', 'All Theatres')] + [(t, t) for t in theatres]
+
+
+class StaffCreateForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password', 'first_name', 'last_name']
+        widgets = {
+            'username': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'password': forms.PasswordInput(attrs={'class': 'form-control'}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+    def clean_password(self):
+        return self.cleaned_data.get('password')
+
+
+class StaffUpdateForm(forms.ModelForm):
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'first_name', 'last_name', 'is_active']
+        widgets = {
+            'username': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+
+class AdminProfileForm(forms.ModelForm):
+    class Meta:
+        model = AdminProfile
+        fields = ['role', 'department', 'phone', 'is_active']
+        widgets = {
+            'role': forms.Select(attrs={'class': 'form-select'}),
+            'department': forms.TextInput(attrs={'class': 'form-control'}),
+            'phone': forms.TextInput(attrs={'class': 'form-control'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+
+class AdminPermissionForm(forms.ModelForm):
+    class Meta:
+        model = AdminPermission
+        fields = ['module', 'can_view', 'can_create', 'can_edit', 'can_delete']
+        widgets = {
+            'module': forms.Select(attrs={'class': 'form-select'}),
+            'can_view': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'can_create': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'can_edit': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'can_delete': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+
+class CouponForm(forms.ModelForm):
+    class Meta:
+        model = Coupon
+        fields = ['code', 'description', 'discount_percent', 'discount_amount', 'max_uses', 'min_order_amount', 'is_active', 'valid_from', 'valid_to']
+        widgets = {
+            'code': forms.TextInput(attrs={'class': 'form-control'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'discount_percent': forms.NumberInput(attrs={'class': 'form-control'}),
+            'discount_amount': forms.NumberInput(attrs={'class': 'form-control'}),
+            'max_uses': forms.NumberInput(attrs={'class': 'form-control'}),
+            'min_order_amount': forms.NumberInput(attrs={'class': 'form-control'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'valid_from': forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'}),
+            'valid_to': forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'}),
+        }
+
+
+class NotificationForm(forms.ModelForm):
+    class Meta:
+        model = Notification
+        fields = ['title', 'message', 'notification_type', 'link']
+        widgets = {
+            'title': forms.TextInput(attrs={'class': 'form-control'}),
+            'message': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
+            'notification_type': forms.Select(attrs={'class': 'form-control'}),
+            'link': forms.URLInput(attrs={'class': 'form-control'}),
+        }
+
+
+class ReviewForm(forms.ModelForm):
+    class Meta:
+        model = Review
+        fields = ['movie', 'user', 'booking', 'rating', 'comment', 'is_approved', 'is_hidden', 'is_reported']
+        widgets = {
+            'movie': forms.Select(attrs={'class': 'form-select'}),
+            'user': forms.Select(attrs={'class': 'form-select'}),
+            'booking': forms.Select(attrs={'class': 'form-select'}),
+            'rating': forms.NumberInput(attrs={'class': 'form-control'}),
+            'comment': forms.Textarea(attrs={'class': 'form-control'}),
+            'is_approved': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_hidden': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_reported': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+
+class ReserveBookingForm(forms.Form):
+    user = forms.ModelChoiceField(
+        queryset=User.objects.all(),
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    movie = forms.ModelChoiceField(
+        queryset=Movie.objects.all(),
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    show = forms.ModelChoiceField(
+        queryset=Show.objects.all(),
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    seat_count = forms.IntegerField(
+        min_value=1, max_value=10, initial=1,
+        widget=forms.NumberInput(attrs={'class': 'form-control'})
+    )
+
+
+class RefundForm(forms.Form):
+    booking_id = forms.IntegerField(widget=forms.HiddenInput())
+    refund_amount = forms.DecimalField(
+        max_digits=10, decimal_places=2,
+        widget=forms.NumberInput(attrs={'class': 'form-control'})
+    )
+    reason = forms.CharField(
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3})
+    )
+
+
+class ShowFilterForm(forms.Form):
+    movie = forms.ModelChoiceField(
+        queryset=Movie.objects.all(), required=False,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    theatre = forms.ModelChoiceField(
+        queryset=Theatre.objects.all(), required=False,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    status = forms.ChoiceField(
+        choices=[('', 'All'), ('active', 'Active'), ('cancelled', 'Cancelled'), ('completed', 'Completed'), ('sold_out', 'Sold Out'), ('paused', 'Paused')],
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    date_from = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+    )
+    date_to = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+    )

@@ -1,14 +1,11 @@
-/**
- * BookMySeat — Theme toggle with localStorage persistence
- */
 (function () {
   'use strict';
 
-  const STORAGE_KEY = 'bookmyseat-theme';
-  const root = document.documentElement;
+  var STORAGE_KEY = 'bookmyseat-theme';
+  var root = document.documentElement;
 
   function getPreferredTheme() {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    var stored = localStorage.getItem(STORAGE_KEY);
     if (stored === 'light' || stored === 'dark') return stored;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
@@ -16,29 +13,39 @@
   function applyTheme(theme) {
     root.setAttribute('data-theme', theme);
     localStorage.setItem(STORAGE_KEY, theme);
-    updateToggleIcon(theme);
+    updateToggleIcons(theme);
   }
 
-  function updateToggleIcon(theme) {
+  function updateToggleIcons(theme) {
+    var isDark = theme === 'dark';
+    var iconClass = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
+    var label = isDark ? 'Switch to light mode' : 'Switch to dark mode';
     document.querySelectorAll('[data-theme-toggle]').forEach(function (btn) {
-      const icon = btn.querySelector('i');
-      if (!icon) return;
-      icon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
-      btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+      var icon = btn.querySelector('i');
+      if (icon) icon.className = iconClass;
+      btn.setAttribute('aria-label', label);
     });
+    var themeIcon = document.getElementById('themeIcon');
+    if (themeIcon) themeIcon.className = iconClass;
   }
 
-  function toggleTheme() {
-    const current = root.getAttribute('data-theme') || getPreferredTheme();
+  window.toggleTheme = function () {
+    var current = root.getAttribute('data-theme') || getPreferredTheme();
     applyTheme(current === 'dark' ? 'light' : 'dark');
-  }
+  };
 
-  // Apply immediately to prevent flash
   applyTheme(getPreferredTheme());
 
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+    if (!localStorage.getItem(STORAGE_KEY)) {
+      applyTheme(e.matches ? 'dark' : 'light');
+    }
+  });
+
   document.addEventListener('DOMContentLoaded', function () {
+    updateToggleIcons(root.getAttribute('data-theme') || getPreferredTheme());
     document.querySelectorAll('[data-theme-toggle]').forEach(function (btn) {
-      btn.addEventListener('click', toggleTheme);
+      btn.addEventListener('click', window.toggleTheme);
     });
   });
 })();

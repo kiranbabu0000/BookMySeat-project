@@ -1,0 +1,889 @@
+{% extends "base.html" %}
+{% load static %}
+{% load movie_extras %}
+
+{% block title %}{{ movie.name }}{% endblock %}
+
+{% block content %}
+<section class="page-section">
+  <div class="container-bms">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb breadcrumb-bms">
+        <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'movie_list' %}">Movies</a></li>
+        <li class="breadcrumb-item active" aria-current="page">{{ movie.name }}</li>
+      </ol>
+    </nav>
+
+    <!-- Movie Hero Section -->
+    <div class="movie-hero">
+      {% if movie.banner %}
+      <div class="movie-hero__banner">
+        <img src="{{ movie.banner.url }}" alt="{{ movie.name }} banner" class="movie-hero__banner-img">
+        <div class="movie-hero__overlay"></div>
+      </div>
+      {% endif %}
+      <div class="movie-hero__content">
+        <div class="row g-4 align-items-end">
+          <div class="col-md-3">
+            <div class="movie-hero__poster">
+              {% if movie.thumbnail %}
+              <img src="{{ movie.thumbnail.url }}" alt="{{ movie.name }}" loading="lazy">
+              {% elif movie.image %}
+              <img src="{{ movie.image.url }}" alt="{{ movie.name }}" loading="lazy">
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-md-9">
+            <div class="movie-hero__info">
+              <h1 class="movie-hero__title">{{ movie.name }}</h1>
+              <div class="movie-hero__badges">
+                {% if movie.certificate %}
+                <span class="badge-bms-outline">{{ movie.certificate }}</span>
+                {% endif %}
+                {% if movie.duration %}
+                <span class="badge-bms-outline"><i class="bi bi-clock"></i> {{ movie.duration }} min</span>
+                {% endif %}
+                {% if movie.release_date %}
+                <span class="badge-bms-outline"><i class="bi bi-calendar"></i> {{ movie.release_date|date:"M d, Y" }}</span>
+                {% endif %}
+                {% if movie.status == 'now_showing' %}
+                <span class="badge-bms-success">Now Showing</span>
+                {% elif movie.status == 'coming_soon' %}
+                <span class="badge-bms-warning">Coming Soon</span>
+                {% elif movie.status == 'ended' %}
+                <span class="badge-bms-secondary">Ended</span>
+                {% endif %}
+              </div>
+              <div class="movie-hero__ratings">
+                <span class="movie-hero__rating">
+                  <i class="bi bi-star-fill"></i> {{ movie.rating }}
+                </span>
+                {% if movie.imdb_rating %}
+                <span class="movie-hero__rating movie-hero__rating--imdb">
+                  IMDb {{ movie.imdb_rating }}
+                </span>
+                {% endif %}
+              </div>
+              {% if movie.genres.all %}
+              <div class="movie-hero__genres">
+                {% for genre in movie.genres.all %}
+                <a href="{% url 'movie_list' %}?genre={{ genre.slug }}" class="genre-tag">{{ genre.name }}</a>
+                {% endfor %}
+              </div>
+              {% endif %}
+              {% if movie.languages.all %}
+              <div class="movie-hero__langs">
+                <i class="bi bi-translate"></i>
+                {% for lang in movie.languages.all %}
+                <a href="{% url 'movie_list' %}?language={{ lang.code }}" class="lang-tag">{{ lang.name }}</a>
+                {% endfor %}
+              </div>
+              {% endif %}
+              {% if movie.director %}
+              <p class="movie-hero__meta"><strong>Director:</strong> {{ movie.director }}</p>
+              {% endif %}
+              {% if movie.producer %}
+              <p class="movie-hero__meta"><strong>Producer:</strong> {{ movie.producer }}</p>
+              {% endif %}
+              {% if movie.cast %}
+              <p class="movie-hero__meta"><strong>Cast:</strong> {{ movie.cast|truncatewords:20 }}</p>
+              {% endif %}
+              {% if movie.description %}
+              <p class="movie-hero__desc">{{ movie.description }}</p>
+              {% endif %}
+              <div class="movie-hero__actions">
+                {% if movie.status == 'now_showing' %}
+                <a href="{% url 'theater_list' movie.id %}" class="btn btn-bms-primary btn-lg">
+                  <i class="bi bi-ticket-perforated"></i> Book Now
+                </a>
+                {% endif %}
+                {% if movie.trailer_url %}
+                <a href="{{ movie.trailer_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-bms btn-lg">
+                  <i class="bi bi-play-circle"></i> Watch Trailer
+                </a>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cast Section -->
+    {% if cast_members %}
+    <section class="detail-section" id="cast">
+      <div class="section-header">
+        <h2 class="section-title">Cast &amp; Crew</h2>
+      </div>
+      <div class="cast-grid">
+        {% for member in cast_members %}
+        <div class="cast-card">
+          <div class="cast-card__image">
+            {% if member.image %}
+            <img src="{{ member.image.url }}" alt="{{ member.name }}" loading="lazy">
+            {% else %}
+            <div class="cast-card__placeholder"><i class="bi bi-person"></i></div>
+            {% endif %}
+          </div>
+          <div class="cast-card__info">
+            <h4 class="cast-card__name">{{ member.name }}</h4>
+            {% if member.character_name %}
+            <p class="cast-card__character">{{ member.character_name }}</p>
+            {% endif %}
+            <span class="cast-card__role">{{ member.get_role_display }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Gallery Section -->
+    {% if gallery %}
+    <section class="detail-section" id="gallery">
+      <div class="section-header">
+        <h2 class="section-title">Gallery</h2>
+      </div>
+      <div class="gallery-grid">
+        {% for img in gallery %}
+        <a href="{{ img.image.url }}" class="gallery-item" data-lightbox="movie-gallery" data-title="{{ img.caption|default:movie.name }}">
+          <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Gallery image' }}" loading="lazy">
+          {% if img.caption %}
+          <div class="gallery-item__caption">{{ img.caption }}</div>
+          {% endif %}
+        </a>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Trailers Section -->
+    {% if trailers %}
+    <section class="detail-section" id="trailers">
+      <div class="section-header">
+        <h2 class="section-title">Trailers &amp; Videos</h2>
+      </div>
+      <div class="trailers-grid">
+        {% for trailer in trailers %}
+        <div class="trailer-card">
+          <div class="trailer-card__embed">
+            {% if trailer.url %}
+            <iframe src="{{ trailer.url|youtube_embed }}" title="{{ trailer.title|default:'Trailer' }}" frameborder="0" allowfullscreen loading="lazy"></iframe>
+            {% endif %}
+          </div>
+          {% if trailer.title %}
+          <div class="trailer-card__info">
+            <h4>{{ trailer.title }}</h4>
+            {% if trailer.is_featured %}<span class="badge-bms-primary">Featured</span>{% endif %}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Show Timings -->
+    {% if shows or theaters %}
+    <section class="detail-section" id="showtimes">
+      <div class="section-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <h2 class="section-title">Show Timings</h2>
+          <p class="section-subtitle text-muted mb-0">Select a showtime to book your seats</p>
+        </div>
+        <a href="{% url 'theater_list' movie.id %}" class="btn btn-bms-primary">
+          <i class="bi bi-ticket-perforated"></i> Book Now
+        </a>
+      </div>
+
+      {% if shows %}
+      {% regroup shows by theatre as theatre_list %}
+      {% for theatre_group in theatre_list %}
+      <div class="card mb-3" style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-lg);">
+        <div class="card-body">
+          <h4 class="mb-1" style="color:var(--text-primary);">{{ theatre_group.grouper.name }}</h4>
+          {% if theatre_group.grouper.location %}
+          <p class="small text-muted mb-3">{{ theatre_group.grouper.location }}</p>
+          {% endif %}
+          {% regroup theatre_group.list by screen as screen_list %}
+          {% for screen_group in screen_list %}
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <strong class="text-muted small">{{ screen_group.grouper.name }}</strong>
+              <span class="text-muted small">Capacity: {{ screen_group.grouper.capacity }}</span>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+              {% for show in screen_group.list %}
+              <span class="btn btn-sm" style="background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border-color); cursor:default;">
+                {{ show.time|time:"g:i A" }}<br><small class="text-muted">&#8377;{{ show.ticket_price }}</small>
+              </span>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      {% elif theaters %}
+      <div class="row">
+        {% for theater in theaters %}
+        <div class="col-md-6 col-lg-4 mb-3">
+          <div class="showtime-card">
+            <div class="showtime-card__header">
+              <h3 class="showtime-card__name">{{ theater.name }}</h3>
+              <span class="badge-bms-outline">{{ theater.time|date:"D, M d" }}</span>
+            </div>
+            <div class="showtime-card__body">
+              <span class="showtime-card__time">{{ theater.time|date:"g:i A" }}</span>
+            </div>
+            <div class="showtime-card__footer">
+              <a href="{% url 'book_seats' theater.id %}" class="btn btn-bms-primary btn-sm w-100">Book Seats</a>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    <!-- Reviews Section -->
+    <section class="detail-section" id="reviews">
+      <div class="section-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <h2 class="section-title">
+            Reviews
+            {% if total_reviews > 0 %}
+            <span class="text-muted fs-6 fw-normal">({{ total_reviews }})</span>
+            {% endif %}
+          </h2>
+          <p class="section-subtitle text-muted mb-0">What audiences are saying</p>
+        </div>
+      </div>
+
+      <!-- Rating Summary -->
+      {% if total_reviews > 0 %}
+      <div class="rating-summary mb-4">
+        <div class="row g-3 align-items-center">
+          <div class="col-md-4 text-center">
+            <div class="rating-summary__score">{{ avg_rating }}</div>
+            <div class="rating-summary__stars mb-1">
+              {% for i in "12345" %}
+              <i class="bi bi-star{% if forloop.counter <= avg_rating|add:0 %}-fill text-warning{% else %} text-muted{% endif %}"></i>
+              {% endfor %}
+            </div>
+            <small class="text-muted">{{ total_reviews }} review{{ total_reviews|pluralize }}</small>
+          </div>
+          <div class="col-md-8">
+            {% with r5=rating_dist|get_item:5 r4=rating_dist|get_item:4 r3=rating_dist|get_item:3 r2=rating_dist|get_item:2 r1=rating_dist|get_item:1 %}
+            {% with t=total_reviews %}
+            <div class="rating-bar d-flex align-items-center gap-2 mb-1">
+              <span class="rating-bar__label text-muted small" style="min-width:40px;">5★</span>
+              <div class="rating-bar__track"><div class="rating-bar__fill" style="width:{% widthratio r5 t 100 %}%"></div></div>
+              <span class="rating-bar__count text-muted small" style="min-width:24px;">{{ r5 }}</span>
+            </div>
+            <div class="rating-bar d-flex align-items-center gap-2 mb-1">
+              <span class="rating-bar__label text-muted small" style="min-width:40px;">4★</span>
+              <div class="rating-bar__track"><div class="rating-bar__fill" style="width:{% widthratio r4 t 100 %}%"></div></div>
+              <span class="rating-bar__count text-muted small" style="min-width:24px;">{{ r4 }}</span>
+            </div>
+            <div class="rating-bar d-flex align-items-center gap-2 mb-1">
+              <span class="rating-bar__label text-muted small" style="min-width:40px;">3★</span>
+              <div class="rating-bar__track"><div class="rating-bar__fill" style="width:{% widthratio r3 t 100 %}%"></div></div>
+              <span class="rating-bar__count text-muted small" style="min-width:24px;">{{ r3 }}</span>
+            </div>
+            <div class="rating-bar d-flex align-items-center gap-2 mb-1">
+              <span class="rating-bar__label text-muted small" style="min-width:40px;">2★</span>
+              <div class="rating-bar__track"><div class="rating-bar__fill" style="width:{% widthratio r2 t 100 %}%"></div></div>
+              <span class="rating-bar__count text-muted small" style="min-width:24px;">{{ r2 }}</span>
+            </div>
+            <div class="rating-bar d-flex align-items-center gap-2 mb-1">
+              <span class="rating-bar__label text-muted small" style="min-width:40px;">1★</span>
+              <div class="rating-bar__track"><div class="rating-bar__fill" style="width:{% widthratio r1 t 100 %}%"></div></div>
+              <span class="rating-bar__count text-muted small" style="min-width:24px;">{{ r1 }}</span>
+            </div>
+            {% endwith %}{% endwith %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if user.is_authenticated %}
+        {% if has_booked_and_completed %}
+        <div class="review-form-card mb-4">
+          <h4 class="mb-3">
+            {% if user_review %}Edit Your Review{% else %}Write a Review{% endif %}
+          </h4>
+          <form method="POST" action="{% url 'submit_review' movie.id %}">
+            {% csrf_token %}
+            <div class="star-rating mb-3">
+              <p class="mb-2 text-muted small">Your Rating</p>
+              <div class="star-rating__stars" id="starRating">
+                {% for i in "12345" %}
+                <input type="radio" name="rating" value="{{ i }}" id="star{{ i }}"
+                       {% if user_review and user_review.rating == forloop.counter %}checked{% endif %}>
+                <label for="star{{ i }}" title="{{ i }} star{% if i > 1 %}s{% endif %}">
+                  <i class="bi bi-star-fill"></i>
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="mb-3">
+              <textarea name="comment" class="form-control form-bms" rows="3"
+                        placeholder="Share your experience...">{% if user_review %}{{ user_review.comment }}{% endif %}</textarea>
+            </div>
+            <button type="submit" class="btn btn-bms-primary">
+              <i class="bi bi-send"></i> {% if user_review %}Update Review{% else %}Submit Review{% endif %}
+            </button>
+          </form>
+        </div>
+        {% elif user_review %}
+        <div class="review-form-card mb-4">
+          <h4 class="mb-3">Edit Your Review</h4>
+          <form method="POST" action="{% url 'submit_review' movie.id %}">
+            {% csrf_token %}
+            <div class="star-rating mb-3">
+              <p class="mb-2 text-muted small">Your Rating</p>
+              <div class="star-rating__stars" id="starRating">
+                {% for i in "12345" %}
+                <input type="radio" name="rating" value="{{ i }}" id="star{{ i }}"
+                       {% if user_review.rating == forloop.counter %}checked{% endif %}>
+                <label for="star{{ i }}" title="{{ i }} star{% if i > 1 %}s{% endif %}">
+                  <i class="bi bi-star-fill"></i>
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="mb-3">
+              <textarea name="comment" class="form-control form-bms" rows="3">{% if user_review %}{{ user_review.comment }}{% endif %}</textarea>
+            </div>
+            <button type="submit" class="btn btn-bms-primary">
+              <i class="bi bi-send"></i> Update Review
+            </button>
+          </form>
+        </div>
+        {% else %}
+        <div class="alert alert-bms alert-info mb-4">
+          <i class="bi bi-info-circle me-2"></i>
+          You need to book a ticket and watch the show before you can write a review.
+          <a href="{% url 'theater_list' movie.id %}" class="alert-link">Book Now</a>
+        </div>
+        {% endif %}
+      {% else %}
+      <div class="alert alert-bms alert-info mb-4">
+        <i class="bi bi-info-circle me-2"></i>
+        <a href="{% url 'login' %}?next={{ request.path }}" class="alert-link">Log in</a> to write a review.
+      </div>
+      {% endif %}
+
+      {% if reviews %}
+      <div class="reviews-list">
+        {% for review in reviews %}
+        <div class="review-card">
+          <div class="review-card__avatar">
+            <div class="review-card__avatar-placeholder">
+              {{ review.user.username|first|upper }}
+            </div>
+          </div>
+          <div class="review-card__body">
+            <div class="review-card__header">
+              <strong class="review-card__user">{{ review.user.username }}</strong>
+              {% if review.booking %}
+              <span class="review-card__verified" title="Verified ticket buyer">
+                <i class="bi bi-patch-check-fill"></i> Verified Viewer
+              </span>
+              {% endif %}
+              <span class="review-card__date">{{ review.created_at|date:"M d, Y" }}</span>
+            </div>
+            <div class="review-card__rating">
+              {% for i in "12345" %}
+              <i class="bi bi-star{% if forloop.counter <= review.rating %}-fill text-warning{% else %} text-muted{% endif %}"></i>
+              {% endfor %}
+            </div>
+            <p class="review-card__comment">{{ review.comment }}</p>
+            {% if review.edited_at %}
+            <small class="text-muted">Edited {{ review.edited_at|timesince }} ago</small>
+            {% endif %}
+            <div class="review-card__actions mt-2">
+              {% if user.is_authenticated and review.user != user %}
+              <a href="{% url 'report_review' review.id %}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Report this review as inappropriate?')">
+                <i class="bi bi-flag"></i> Report
+              </a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state__icon"><i class="bi bi-chat-square-text"></i></div>
+        <p class="empty-state__text">No reviews yet. Be the first to review!</p>
+      </div>
+      {% endif %}
+    </section>
+
+    <!-- Similar Movies -->
+    {% if similar_movies %}
+    <section class="detail-section" id="similar">
+      <div class="section-header">
+        <h2 class="section-title">Similar Movies</h2>
+      </div>
+      <div class="row">
+        {% for sm in similar_movies %}
+          {% include 'partials/_movie_card.html' with movie=sm %}
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Trending Movies -->
+    {% if trending_movies %}
+    <section class="detail-section" id="trending">
+      <div class="section-header">
+        <h2 class="section-title">Trending Now</h2>
+      </div>
+      <div class="row">
+        {% for tm in trending_movies %}
+          {% include 'partials/_movie_card.html' with movie=tm %}
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- Recently Released -->
+    {% if recently_released %}
+    <section class="detail-section" id="recent">
+      <div class="section-header">
+        <h2 class="section-title">Recently Released</h2>
+      </div>
+      <div class="row">
+        {% for rr in recently_released %}
+          {% include 'partials/_movie_card.html' with movie=rr %}
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.movie-hero {
+  position: relative;
+  margin-bottom: 3rem;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
+.movie-hero__banner {
+  position: relative;
+  height: 320px;
+  overflow: hidden;
+}
+.movie-hero__banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.movie-hero__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, var(--bg-card) 0%, transparent 60%);
+}
+.movie-hero__content {
+  position: relative;
+  padding: 1.5rem 2rem 2rem;
+  margin-top: -120px;
+}
+.movie-hero__poster {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.movie-hero__poster img {
+  width: 100%;
+  display: block;
+}
+.movie-hero__title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+.movie-hero__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.movie-hero__ratings {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.movie-hero__rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(212, 175, 55, 0.15);
+  color: var(--accent-gold);
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.movie-hero__rating--imdb {
+  background: rgba(245, 197, 24, 0.15);
+  color: #f5c518;
+}
+.movie-hero__genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.genre-tag {
+  display: inline-block;
+  padding: 0.2rem 0.7rem;
+  border-radius: var(--radius-pill);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  text-decoration: none;
+  transition: all var(--transition-fast);
+}
+.genre-tag:hover { color: var(--accent-gold); border-color: var(--accent-gold); }
+.movie-hero__langs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+.lang-tag {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.lang-tag:hover { color: var(--accent-gold); }
+.movie-hero__meta {
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+}
+.movie-hero__desc {
+  color: var(--text-secondary);
+  margin-top: 0.75rem;
+  line-height: 1.7;
+}
+.movie-hero__actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+/* Cast */
+.cast-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+}
+.cast-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  text-align: center;
+  transition: all var(--transition-fast);
+}
+.cast-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+.cast-card__image {
+  width: 100%;
+  height: 180px;
+  overflow: hidden;
+}
+.cast-card__image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cast-card__placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  font-size: 2.5rem;
+  color: var(--text-muted);
+}
+.cast-card__info {
+  padding: 0.75rem;
+}
+.cast-card__name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.15rem;
+}
+.cast-card__character {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+.cast-card__role {
+  font-size: 0.7rem;
+  color: var(--accent-gold);
+  background: rgba(212,175,55,0.12);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-pill);
+}
+
+/* Gallery */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+.gallery-item {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: block;
+}
+.gallery-item img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+  transition: transform var(--transition-fast);
+}
+.gallery-item:hover img { transform: scale(1.05); }
+.gallery-item__caption {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0.5rem;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7));
+  color: #fff;
+  font-size: 0.75rem;
+}
+
+/* Trailers */
+.trailers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+}
+.trailer-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.trailer-card__embed {
+  position: relative;
+  padding-bottom: 56.25%;
+  height: 0;
+  overflow: hidden;
+}
+.trailer-card__embed iframe {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+}
+.trailer-card__info {
+  padding: 0.75rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.trailer-card__info h4 {
+  font-size: 0.9rem;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+/* Showtime Card */
+.showtime-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.showtime-card__header {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.showtime-card__name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+.showtime-card__body {
+  padding: 1rem;
+  text-align: center;
+}
+.showtime-card__time {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent-gold);
+}
+.showtime-card__footer {
+  padding: 0 1rem 1rem;
+}
+
+/* Rating Summary */
+.rating-summary {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+}
+.rating-summary__score {
+  font-size: 3rem;
+  font-weight: 800;
+  color: var(--accent-gold);
+  line-height: 1;
+}
+.rating-summary__stars i { font-size: 1.1rem; }
+.rating-bar__track {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.rating-bar__fill {
+  height: 100%;
+  background: var(--accent-gold);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* Reviews */
+.review-form-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+}
+.star-rating__stars {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 0.25rem;
+}
+.star-rating__stars input { display: none; }
+.star-rating__stars label {
+  font-size: 1.5rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.star-rating__stars input:checked ~ label,
+.star-rating__stars label:hover,
+.star-rating__stars label:hover ~ label {
+  color: #ffc107;
+}
+.reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.review-card {
+  display: flex;
+  gap: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+}
+.review-card__avatar {
+  flex-shrink: 0;
+}
+.review-card__avatar-placeholder {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-gold), var(--accent-primary));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+.review-card__body { flex: 1; min-width: 0; }
+.review-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.review-card__user {
+  font-size: 0.9rem;
+}
+.review-card__verified {
+  font-size: 0.75rem;
+  color: #0d6efd;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+.review-card__date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.review-card__rating {
+  margin-bottom: 0.5rem;
+}
+.review-card__rating i {
+  font-size: 0.85rem;
+}
+.review-card__comment {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+.review-card__comment:empty { display: none; }
+
+/* Sections */
+.detail-section {
+  margin-top: 3rem;
+  padding-top: 1rem;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const textareas = document.querySelectorAll('.review-form-card textarea');
+    textareas.forEach(ta => {
+      ta.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+      });
+    });
+  });
+</script>
+{% endblock %}

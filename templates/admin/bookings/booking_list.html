@@ -1,0 +1,74 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Bookings{% endblock %}
+{% block page_title %}Booking Management{% endblock %}
+{% block content %}
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-md-2">
+        <label class="small text-muted">Movie</label>
+        <select name="movie" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for m in movies %}
+          <option value="{{ m.id }}" {% if request.GET.movie == m.id|stringformat:'s' %}selected{% endif %}>{{ m.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">Username</label>
+        <input type="text" name="user" class="form-control form-control-sm" value="{{ request.GET.user|default:'' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">From</label>
+        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ request.GET.date_from|default:'' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">To</label>
+        <input type="date" name="date_to" class="form-control form-control-sm" value="{{ request.GET.date_to|default:'' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">Theatre</label>
+        <select name="theatre" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for t in theatres %}
+          <option value="{{ t.id }}" {% if request.GET.theatre == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1">
+        <button type="submit" class="btn btn-sm btn-outline-secondary w-100"><i class="bi bi-search"></i></button>
+      </div>
+      <div class="col-md-1">
+        <a href="{% url 'admin_booking_reserve' %}" class="btn btn-bms-primary btn-sm w-100"><i class="bi bi-ticket"></i></a>
+      </div>
+    </form>
+  </div>
+  <div class="card-bms-body p-0">
+    <div class="table-responsive">
+      <table class="table table-bms mb-0">
+        <thead><tr><th>ID</th><th>User</th><th>Movie</th><th>Theatre</th><th>Seat</th><th>Date</th><th>Amount</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for b in bookings %}
+          <tr>
+            <td>{{ b.id }}</td>
+            <td>{{ b.user.username }}</td>
+            <td>{{ b.movie.name|truncatechars:30 }}</td>
+            <td>{{ b.theater.name|truncatechars:25 }}</td>
+            <td>{{ b.seat.seat_number }}</td>
+            <td>{{ b.booked_at|date:"d M Y, g:i A" }}</td>
+            <td><i class="bi bi-currency-rupee"></i>{{ b.total_amount }}</td>
+            <td>
+              <a href="{% url 'admin_booking_detail' b.id %}" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
+              <a href="{% url 'admin_booking_cancel' b.id %}" class="btn btn-sm btn-outline-danger" title="Cancel" onclick="return confirm('Cancel this booking?')"><i class="bi bi-x-circle"></i></a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="text-center text-muted py-4">No bookings found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
+</div>
+{% endblock %}

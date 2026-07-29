@@ -1,0 +1,99 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Booking #{{ booking.id }}{% endblock %}
+{% block page_title %}Booking #{{ booking.id }}{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-md-8">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-ticket-perforated me-2"></i>Booking Details</h5></div>
+      <div class="card-bms-body">
+        <div class="row g-4">
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Booking ID</span>
+              <h5 class="mb-0">#{{ booking.id }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">User</span>
+              <h5 class="mb-0">{{ booking.user.username }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Movie</span>
+              <h5 class="mb-0">{{ booking.movie.name }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Theatre</span>
+              <h5 class="mb-0">{{ booking.theater.name }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Screen</span>
+              <h5 class="mb-0">{{ booking.screen.name }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Seat</span>
+              <h5 class="mb-0">{{ booking.seat.seat_number }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Date & Time</span>
+              <h5 class="mb-0">{{ booking.booked_at|date:"d M Y, g:i A" }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Total Amount</span>
+              <h5 class="mb-0 text-success"><i class="bi bi-currency-rupee"></i>{{ booking.total_amount }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Status</span>
+              <h5 class="mb-0">
+                {% if booking.status == 'confirmed' %}
+                <span class="badge-bms-success">Confirmed</span>
+                {% elif booking.status == 'cancelled' %}
+                <span class="badge-bms-danger">Cancelled</span>
+                {% else %}
+                <span class="badge-bms-info">{{ booking.status }}</span>
+                {% endif %}
+              </h5>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-gear me-2"></i>Actions</h5></div>
+      <div class="card-bms-body">
+        <div class="d-grid gap-2">
+          <a href="{% url 'admin_booking_cancel' booking.id %}" class="btn btn-outline-danger" onclick="return confirm('Cancel this booking?')">
+            <i class="bi bi-x-circle me-2"></i>Cancel Booking
+          </a>
+          <a href="{% url 'admin_booking_modify' booking.id %}" class="btn btn-outline-warning">
+            <i class="bi bi-pencil me-2"></i>Modify Booking
+          </a>
+          <a href="{% url 'admin_booking_resend' booking.id %}" class="btn btn-outline-info">
+            <i class="bi bi-envelope me-2"></i>Resend Confirmation
+          </a>
+          <a href="{% url 'admin_booking_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>Back to List
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

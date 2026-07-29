@@ -1,0 +1,42 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}{% if object %}Edit{% else %}Add{% endif %} Theatre{% endblock %}
+{% block page_title %}{% if object %}Edit Theatre: {{ object.name }}{% else %}Add New Theatre{% endif %}{% endblock %}
+{% block content %}
+<div class="card-bms" style="max-width: 700px;">
+  <div class="card-bms-body">
+    <form method="post">{% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">Theatre Name</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="invalid-feedback d-block">{{ form.name.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">City</label>
+          {{ form.city }}
+          {% if form.city.errors %}<div class="invalid-feedback d-block">{{ form.city.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="col-md-12">
+          <label class="form-label fw-semibold small">Location</label>
+          {{ form.location }}
+          {% if form.location.errors %}<div class="invalid-feedback d-block">{{ form.location.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">Contact</label>
+          {{ form.contact }}
+          {% if form.contact.errors %}<div class="invalid-feedback d-block">{{ form.contact.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">Is Active</label>
+          {{ form.is_active }}
+          {% if form.is_active.errors %}<div class="invalid-feedback d-block">{{ form.is_active.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+      <div class="mt-4">
+        <button type="submit" class="btn btn-bms-primary"><i class="bi bi-check-lg"></i> {% if object %}Update{% else %}Create{% endif %} Theatre</button>
+        <a href="{% url 'admin_theatre_list' %}" class="btn btn-outline-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

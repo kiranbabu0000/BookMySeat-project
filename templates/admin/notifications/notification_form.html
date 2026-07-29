@@ -1,0 +1,40 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}{% if object %}Edit{% else %}Create{% endif %} Notification{% endblock %}
+{% block page_title %}{% if object %}Edit Notification{% else %}Create Notification{% endif %}{% endblock %}
+{% block content %}
+<div class="card-bms" style="max-width: 600px;">
+  <div class="card-bms-body">
+    <form method="post">{% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Title</label>
+        {{ form.title }}
+        {% if form.title.errors %}<div class="invalid-feedback d-block">{{ form.title.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Message</label>
+        {{ form.message }}
+        {% if form.message.errors %}<div class="invalid-feedback d-block">{{ form.message.errors.0 }}</div>{% endif %}
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">Notification Type</label>
+          {{ form.notification_type }}
+          {% if form.notification_type.errors %}<div class="invalid-feedback d-block">{{ form.notification_type.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small">User (Optional)</label>
+          {{ form.user }}
+          {% if form.user.errors %}<div class="invalid-feedback d-block">{{ form.user.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Link (Optional)</label>
+        {{ form.link }}
+        {% if form.link.errors %}<div class="invalid-feedback d-block">{{ form.link.errors.0 }}</div>{% endif %}
+      </div>
+      <button type="submit" class="btn btn-bms-primary"><i class="bi bi-send"></i> {% if object %}Update{% else %}Send{% endif %} Notification</button>
+      <a href="{% url 'admin_notification_list' %}" class="btn btn-outline-secondary">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Notifications{% endblock %}
+{% block page_title %}Notification Management{% endblock %}
+{% block content %}
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <form method="get" class="d-flex gap-2">
+      <input type="search" name="search" class="form-control form-control-sm" placeholder="Search notifications..." value="{{ request.GET.search|default:'' }}" style="width: 250px;">
+      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
+    </form>
+    <a href="{% url 'admin_notification_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Create Notification</a>
+  </div>
+  <div class="card-bms-body p-0">
+    <table class="table table-bms mb-0">
+      <thead><tr><th>Title</th><th>Message</th><th>Type</th><th>User</th><th>Read</th><th>Date</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for n in notifications %}
+        <tr class="{% if not n.is_read %}table-active{% endif %}">
+          <td><strong>{{ n.title|truncatechars:30 }}</strong></td>
+          <td class="small text-muted">{{ n.message|truncatechars:50 }}</td>
+          <td>
+            {% if n.notification_type == 'info' %}
+            <span class="badge-bms-info">Info</span>
+            {% elif n.notification_type == 'warning' %}
+            <span class="badge-bms-warning">Warning</span>
+            {% elif n.notification_type == 'success' %}
+            <span class="badge-bms-success">Success</span>
+            {% else %}
+            <span class="badge-bms-danger">Alert</span>
+            {% endif %}
+          </td>
+          <td>{{ n.user.username|default:'All' }}</td>
+          <td>{% if n.is_read %}<span class="badge-bms-success">Read</span>{% else %}<span class="badge-bms-warning">Unread</span>{% endif %}</td>
+          <td class="small">{{ n.created_at|date:"d M Y, g:i A" }}</td>
+          <td>
+            <div class="d-flex gap-1">
+              {% if not n.is_read %}
+              <a href="{% url 'admin_notification_mark_read' n.id %}" class="btn btn-sm btn-outline-success" title="Mark Read"><i class="bi bi-check2"></i></a>
+              {% endif %}
+              <a href="{% url 'admin_notification_delete' n.id %}" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-4">No notifications found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
+</div>
+{% endblock %}

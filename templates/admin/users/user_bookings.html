@@ -1,0 +1,34 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}{{ user_obj.username }} Bookings{% endblock %}
+{% block page_title %}Booking History: {{ user_obj.username }}{% endblock %}
+{% block content %}
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <h5 class="mb-0">{{ user_obj.username }}</h5>
+      <span class="text-muted small">{{ user_obj.email|default:'No email' }} | Joined {{ user_obj.date_joined|date:"d M Y" }}</span>
+      <span class="badge-bms-{% if user_obj.is_active %}success{% else %}danger{% endif %} ms-2">{% if user_obj.is_active %}Active{% else %}Inactive{% endif %}</span>
+    </div>
+    <a href="{% url 'admin_user_list' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Users</a>
+  </div>
+  <div class="card-bms-body p-0">
+    <table class="table table-bms mb-0">
+      <thead><tr><th>ID</th><th>Movie</th><th>Theatre</th><th>Seat</th><th>Amount</th><th>Date</th></tr></thead>
+      <tbody>
+        {% for b in bookings %}
+        <tr>
+          <td>{{ b.id }}</td>
+          <td>{{ b.movie.name }}</td>
+          <td>{{ b.theater.name }}</td>
+          <td>{{ b.seat.seat_number }}</td>
+          <td><i class="bi bi-currency-rupee"></i>{{ b.total_amount }}</td>
+          <td>{{ b.booked_at|date:"d M Y, g:i A" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-4">No bookings found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

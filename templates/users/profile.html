@@ -7,18 +7,18 @@
 <section class="page-section">
   <div class="container-bms">
     <!-- Profile Banner -->
-    <div class="card mb-5 border-0 shadow-lg overflow-hidden" style="background: linear-gradient(135deg, var(--accent-primary) 0%, #7f1d1d 100%); border-radius: var(--radius-xl);">
-      <div class="card-body p-4 p-md-5 text-white">
+    <div class="card mb-5 border-0 shadow-lg overflow-hidden profile-banner">
+      <div class="card-body p-4 p-md-5">
         <div class="d-flex align-items-center gap-4 flex-wrap">
           <div class="profile-avatar m-0 shadow">
             <i class="bi bi-person-fill"></i>
           </div>
           <div>
-            <span class="badge bg-white text-dark mb-2 px-3 py-1 rounded-pill fw-semibold">Member</span>
-            <h1 class="h2 fw-bold mb-1 text-white">{{ user.username }}</h1>
-            <p class="text-white-50 mb-3"><i class="bi bi-envelope me-1"></i>{{ user.email }}</p>
+            <span class="badge profile-badge mb-2 px-3 py-1 rounded-pill fw-semibold">Member</span>
+            <h1 class="h2 fw-bold mb-1" style="color: var(--text-primary);">{{ user.username }}</h1>
+            <p class="profile-meta mb-3"><i class="bi bi-envelope me-1"></i>{{ user.email }}</p>
             <div class="d-flex gap-2 flex-wrap">
-              <a href="{% url 'password_reset' %}" class="btn btn-sm btn-light fw-semibold rounded-pill">
+              <a href="{% url 'password_reset' %}" class="btn btn-sm btn-bms-outline fw-semibold rounded-pill">
                 <i class="bi bi-key me-1"></i> Reset Password
               </a>
             </div>
@@ -65,7 +65,7 @@
         <div class="card h-100 border-0 shadow-sm" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
           <div class="card-header bg-transparent border-bottom p-4 d-flex align-items-center justify-content-between" style="border-color: var(--border-color) !important;">
             <h2 class="h5 fw-bold mb-0"><i class="bi bi-ticket-perforated me-2 text-danger"></i>Your Bookings</h2>
-            <span class="badge bg-secondary rounded-pill">{{ bookings|length }} Tickets</span>
+            <span class="badge rounded-pill" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color);">{{ bookings|length }} Tickets</span>
           </div>
           <div class="card-body p-4">
             {% if bookings %}
@@ -84,7 +84,7 @@
                     </div>
                     <div class="pt-2 border-top d-flex justify-content-between align-items-center" style="border-color: var(--border-color) !important;">
                       <span class="small text-muted"><i class="bi bi-qr-code-scan me-1"></i>M-Ticket Valid</span>
-                      <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">Confirmed</span>
+                      <span class="badge px-2 py-1" style="background: rgba(34, 197, 94, 0.14); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.28);">Confirmed</span>
                     </div>
                   </article>
                 {% endfor %}

@@ -1,0 +1,32 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Languages{% endblock %}
+{% block page_title %}Language Management{% endblock %}
+{% block content %}
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center">
+    <span class="text-muted small">{{ page_obj.paginator.count }} languages</span>
+    <a href="{% url 'admin_language_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Add Language</a>
+  </div>
+  <div class="card-bms-body p-0">
+    <table class="table table-bms mb-0">
+      <thead><tr><th>ID</th><th>Name</th><th>Code</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for lang in languages %}
+        <tr>
+          <td>{{ lang.id }}</td>
+          <td><strong>{{ lang.name }}</strong></td>
+          <td><code>{{ lang.code|default:'-' }}</code></td>
+          <td>
+            <a href="{% url 'admin_language_edit' lang.id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+            <a href="{% url 'admin_language_delete' lang.id %}" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center text-muted py-4">No languages found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
+</div>
+{% endblock %}
