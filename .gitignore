@@ -1,0 +1,40 @@
+# Django
+*.pyc
+__pycache__/
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Environment
+.env
+*.env.local
+venv/
+.env/
+
+# Database
+*.sqlite3
+*.db
+
+# Media files
+/media/
+
+# Static files (build output only)
+/staticfiles/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Migration files (keep these for dev)
+# Migrations are committed for reproducibility
