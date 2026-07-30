@@ -6,7 +6,11 @@ from django.contrib.auth.decorators import login_required
 from movies.models import Movie , Booking
 
 def home(request):
-    movies = Movie.objects.filter(status='now_showing')
+    movies = Movie.objects.filter(
+        status='now_showing',
+        show_on_homepage=True,
+        is_deleted=False
+    )
     return render(request,'home.html',{'movies':movies})
 def register(request):
     if request.method == 'POST':

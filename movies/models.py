@@ -4,9 +4,11 @@ from django.contrib.auth.models import User
 
 class Movie(models.Model):
     STATUS_CHOICES = [
+        ('draft', 'Draft'),
         ('coming_soon', 'Coming Soon'),
         ('now_showing', 'Now Showing'),
-        ('ended', 'Ended'),
+        ('archived', 'Archived'),
+        ('hidden', 'Hidden'),
     ]
     name = models.CharField(max_length=255)
     image = models.ImageField(upload_to="movies/")
@@ -21,8 +23,10 @@ class Movie(models.Model):
     director = models.CharField(max_length=255, blank=True, null=True)
     producer = models.CharField(max_length=255, blank=True, null=True)
     trailer_url = models.URLField(max_length=500, blank=True, null=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='now_showing')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     imdb_rating = models.DecimalField(max_digits=3, decimal_places=1, blank=True, null=True)
+    show_on_homepage = models.BooleanField(default=True, help_text="Show this movie on the homepage")
+    is_deleted = models.BooleanField(default=False, help_text="Soft delete flag")
     genres = models.ManyToManyField('admin_panel.Genre', blank=True, related_name='movies')
     languages = models.ManyToManyField('admin_panel.Language', blank=True, related_name='movies')
 

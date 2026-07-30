@@ -15,12 +15,34 @@ class AdminLoginForm(forms.Form):
 
 
 class MovieForm(forms.ModelForm):
+    genres = forms.ModelMultipleChoiceField(
+        queryset=Genre.objects.all(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={
+            'class': 'form-select multi-select-hidden-select',
+            'multiple': 'multiple',
+            'size': '6'
+        }),
+        help_text='Hold Ctrl (Windows) or Cmd (Mac) to select multiple genres.'
+    )
+    languages = forms.ModelMultipleChoiceField(
+        queryset=Language.objects.all(),
+        required=False,
+        widget=forms.SelectMultiple(attrs={
+            'class': 'form-select multi-select-hidden-select',
+            'multiple': 'multiple',
+            'size': '6'
+        }),
+        help_text='Hold Ctrl (Windows) or Cmd (Mac) to select multiple languages.'
+    )
+
     class Meta:
         model = Movie
         fields = [
             'name', 'description', 'duration', 'release_date', 'certificate',
             'rating', 'imdb_rating', 'image', 'thumbnail', 'banner', 'cast',
             'director', 'producer', 'trailer_url', 'status',
+            'show_on_homepage',
             'genres', 'languages',
         ]
         widgets = {
@@ -39,8 +61,7 @@ class MovieForm(forms.ModelForm):
             'producer': forms.TextInput(attrs={'class': 'form-control'}),
             'trailer_url': forms.URLInput(attrs={'class': 'form-control'}),
             'status': forms.Select(attrs={'class': 'form-select'}),
-            'genres': forms.SelectMultiple(attrs={'class': 'form-select'}),
-            'languages': forms.SelectMultiple(attrs={'class': 'form-select'}),
+            'show_on_homepage': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
 

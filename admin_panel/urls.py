@@ -13,16 +13,11 @@ urlpatterns = [
     path('movies/<int:pk>/delete/', views.MovieDeleteView.as_view(), name='admin_movie_delete'),
     path('movies/<int:pk>/', views.MovieDetailView.as_view(), name='admin_movie_detail'),
     path('movies/<int:pk>/toggle-status/', views.movie_toggle_status, name='admin_movie_toggle_status'),
+    path('movies/<int:pk>/toggle-homepage/', views.movie_toggle_homepage, name='admin_movie_toggle_homepage'),
+    path('movies/<int:pk>/restore/', views.movie_restore, name='admin_movie_restore'),
 
-    path('genres/', views.GenreListView.as_view(), name='admin_genre_list'),
-    path('genres/add/', views.GenreCreateView.as_view(), name='admin_genre_add'),
-    path('genres/<int:pk>/edit/', views.GenreUpdateView.as_view(), name='admin_genre_edit'),
-    path('genres/<int:pk>/delete/', views.GenreDeleteView.as_view(), name='admin_genre_delete'),
-
-    path('languages/', views.LanguageListView.as_view(), name='admin_language_list'),
-    path('languages/add/', views.LanguageCreateView.as_view(), name='admin_language_add'),
-    path('languages/<int:pk>/edit/', views.LanguageUpdateView.as_view(), name='admin_language_edit'),
-    path('languages/<int:pk>/delete/', views.LanguageDeleteView.as_view(), name='admin_language_delete'),
+    path('genres/ajax-add/', views.genre_ajax_add, name='admin_genre_ajax_add'),
+    path('languages/ajax-add/', views.language_ajax_add, name='admin_language_ajax_add'),
 
     path('cast/', views.CastListView.as_view(), name='admin_cast_list'),
     path('cast/add/', views.CastCreateView.as_view(), name='admin_cast_add'),
@@ -33,6 +28,8 @@ urlpatterns = [
     path('theatres/add/', views.TheatreCreateView.as_view(), name='admin_theatre_add'),
     path('theatres/<int:pk>/edit/', views.TheatreUpdateView.as_view(), name='admin_theatre_edit'),
     path('theatres/<int:pk>/delete/', views.TheatreDeleteView.as_view(), name='admin_theatre_delete'),
+    path('theatres/<int:pk>/movies/', views.theatre_movie_management, name='admin_theatre_movies'),
+    path('theatres/remove-movie/', views.theatre_remove_movie, name='admin_theatre_remove_movie'),
 
     path('screens/', views.ScreenListView.as_view(), name='admin_screen_list'),
     path('screens/add/', views.ScreenCreateView.as_view(), name='admin_screen_add'),
@@ -95,4 +92,5 @@ urlpatterns = [
     path('logs/', views.AuditLogListView.as_view(), name='admin_audit_logs'),
 
     path('settings/', views.SettingsView.as_view(), name='admin_settings'),
+    path('search-suggestions/', views.search_suggestions, name='search_suggestions'),
 ]

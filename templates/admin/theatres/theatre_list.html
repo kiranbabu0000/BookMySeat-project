@@ -26,7 +26,10 @@
           <td><span class="badge-bms-info">{{ t.movie_count }}</span></td>
           <td class="small">{{ t.last_show|date:"d M Y, g:i A"|default:'-' }}</td>
           <td>
-            <a href="{% url 'admin_screen_list' %}?theatre={{ t.name }}" class="btn btn-sm btn-outline-info" title="View Screenings"><i class="bi bi-tv"></i></a>
+            <div class="d-flex gap-1">
+              <a href="{% url 'admin_screen_list' %}?theatre={{ t.name }}" class="btn btn-sm btn-outline-info" title="View Screenings"><i class="bi bi-tv"></i></a>
+              <a href="{% url 'admin_show_list' %}?theatre={{ t.name }}" class="btn btn-sm btn-outline-primary" title="View Shows"><i class="bi bi-calendar-event"></i></a>
+            </div>
           </td>
         </tr>
         {% empty %}
@@ -36,5 +39,32 @@
     </table>
   </div>
   {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
+</div>
+
+<div class="card-bms mt-4">
+  <div class="card-bms-header"><h5 class="mb-0">Theatre Profiles (Manage Movies & Shows)</h5></div>
+  <div class="card-bms-body p-0">
+    <table class="table table-bms mb-0">
+      <thead><tr><th>Theatre</th><th>City</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for theatre in theatre_profiles %}
+        <tr>
+          <td><strong>{{ theatre.name }}</strong></td>
+          <td>{{ theatre.city|default:'-' }}</td>
+          <td>{% if theatre.is_active %}<span class="badge-bms-success">Active</span>{% else %}<span class="badge-bms-secondary">Inactive</span>{% endif %}</td>
+          <td>
+            <div class="d-flex gap-1">
+              <a href="{% url 'admin_theatre_edit' theatre.id %}" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
+              <a href="{% url 'admin_theatre_movies' theatre.id %}" class="btn btn-sm btn-outline-success" title="Manage Movies"><i class="bi bi-film"></i> Movies</a>
+              <a href="{% url 'admin_show_add' %}?theatre={{ theatre.id }}" class="btn btn-sm btn-outline-info" title="Add Show"><i class="bi bi-plus-circle"></i></a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center text-muted py-3">No theatre profiles set up yet. <a href="{% url 'admin_theatre_add' %}">Add one</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

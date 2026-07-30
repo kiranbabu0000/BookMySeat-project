@@ -300,14 +300,14 @@ a:hover { color: var(--accent-secondary-hover); }
 }
 
 .auth-page {
-  min-height: calc(100vh - var(--navbar-height));
+  min-height: 100vh;
   display: flex; align-items: center; justify-content: center;
-  padding: var(--space-2xl) var(--space-md);
+  padding: 1rem;
   background: var(--bg-secondary);
 }
 .auth-container {
   width: 100%;
-  max-width: 1140px;
+  max-width: 1280px;
   margin: 0 auto;
 }
 .auth-hero-card {
@@ -341,6 +341,9 @@ a:hover { color: var(--accent-secondary-hover); }
   color: #fff; text-align: center;
 }
 .auth-card__body { padding: var(--space-xl); }
+.auth-card-form { display: flex; flex-direction: column; }
+.auth-card-form .auth-card__body { flex: 1; }
+.auth-card-form .auth-card__footer { margin-top: auto; }
 .auth-card__footer {
   padding: var(--space-lg) var(--space-xl);
   background: var(--bg-tertiary); border-top: 1px solid var(--border-color);
@@ -382,4 +385,9 @@ a:focus-visible {
 @media (max-width: 767.98px) {
   .page-section { padding: var(--space-2xl) 0; }
   main { padding-top: var(--navbar-height); }
+  .auth-card__header { padding: var(--space-lg); }
+  .auth-card__body { padding: var(--space-lg); }
+  .auth-card__footer { padding: var(--space-md) var(--space-lg); }
+  .auth-page { padding: 0.75rem; }
+  .auth-hero-card { min-height: 400px; padding: var(--space-lg); }
 }

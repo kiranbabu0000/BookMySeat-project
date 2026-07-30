@@ -17,8 +17,22 @@
           <span class="badge-bms-success">Now Showing</span>
           {% elif movie.status == 'coming_soon' %}
           <span class="badge-bms-warning">Coming Soon</span>
-          {% else %}
+          {% elif movie.status == 'draft' %}
+          <span class="badge-bms-secondary">Draft</span>
+          {% elif movie.status == 'archived' %}
+          <span class="badge-bms-secondary">Archived</span>
+          {% elif movie.status == 'hidden' %}
+          <span class="badge-bms-secondary">Hidden</span>
+          {% elif movie.status == 'ended' %}
           <span class="badge-bms-secondary">Ended</span>
+          {% endif %}
+          {% if movie.show_on_homepage %}
+          <span class="badge-bms-success"><i class="bi bi-house"></i> On Homepage</span>
+          {% else %}
+          <span class="badge-bms-secondary"><i class="bi bi-house-slash"></i> Hidden from Homepage</span>
+          {% endif %}
+          {% if movie.is_deleted %}
+          <span class="badge-bms-secondary"><i class="bi bi-trash"></i> Deleted</span>
           {% endif %}
         </div>
       </div>

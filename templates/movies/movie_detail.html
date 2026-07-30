@@ -52,6 +52,12 @@
                 <span class="badge-bms-success">Now Showing</span>
                 {% elif movie.status == 'coming_soon' %}
                 <span class="badge-bms-warning">Coming Soon</span>
+                {% elif movie.status == 'draft' %}
+                <span class="badge-bms-secondary">Draft</span>
+                {% elif movie.status == 'archived' %}
+                <span class="badge-bms-secondary">Archived</span>
+                {% elif movie.status == 'hidden' %}
+                <span class="badge-bms-secondary">Hidden</span>
                 {% elif movie.status == 'ended' %}
                 <span class="badge-bms-secondary">Ended</span>
                 {% endif %}

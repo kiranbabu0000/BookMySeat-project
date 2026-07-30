@@ -5,8 +5,17 @@
 {% block content %}
 <div class="card-bms">
   <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-    <form method="get" class="d-flex gap-2 align-items-center">
-      <input type="search" name="search" class="form-control form-control-sm" placeholder="Search movies..." value="{{ request.GET.search|default:'' }}" style="width: 250px;">
+    <form method="get" class="d-flex gap-2 align-items-center flex-wrap">
+      <div class="position-relative">
+        <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-2 text-muted"></i>
+        <input type="search" name="search" class="form-control form-control-sm ps-4" placeholder="Search movies..." value="{{ request.GET.search|default:'' }}" style="width: min(260px, 100%); min-width: 220px;">
+      </div>
+      <select name="status" class="form-select form-select-sm" style="width: auto; min-width: 150px;" onchange="this.form.submit()">
+        <option value="">All Status</option>
+        {% for val, label in status_choices %}
+        <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
       <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
     </form>
     <a href="{% url 'admin_movie_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Add Movie</a>
@@ -22,13 +31,13 @@
             <th>Rating</th>
             <th>Duration</th>
             <th>Status</th>
-            <th>Bookings</th>
+            <th>Homepage</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for movie in movies %}
-          <tr>
+          <tr class="{% if movie.is_deleted %}table-danger{% endif %}">
             <td>{{ movie.id }}</td>
             <td>
               {% if movie.image %}
@@ -37,7 +46,7 @@
               <div style="width: 40px; height: 56px; background: var(--bg-tertiary); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--text-muted);"><i class="bi bi-image"></i></div>
               {% endif %}
             </td>
-            <td><strong>{{ movie.name }}</strong></td>
+            <td><strong>{{ movie.name }}</strong>{% if movie.is_deleted %} <span class="badge-bms-secondary">Deleted</span>{% endif %}</td>
             <td><span class="badge-bms-warning"><i class="bi bi-star-fill me-1"></i>{{ movie.rating }}</span></td>
             <td>{{ movie.duration }} min</td>
             <td>
@@ -45,19 +54,34 @@
               <span class="badge-bms-success">Now Showing</span>
               {% elif movie.status == 'coming_soon' %}
               <span class="badge-bms-warning">Coming Soon</span>
-              {% else %}
+              {% elif movie.status == 'draft' %}
+              <span class="badge-bms-secondary">Draft</span>
+              {% elif movie.status == 'archived' %}
+              <span class="badge-bms-secondary">Archived</span>
+              {% elif movie.status == 'hidden' %}
+              <span class="badge-bms-secondary">Hidden</span>
+              {% elif movie.status == 'ended' %}
               <span class="badge-bms-secondary">Ended</span>
               {% endif %}
             </td>
-            <td><span class="badge-bms-info">{{ movie.booking_set.count }}</span></td>
             <td>
-              <div class="d-flex gap-1">
+              {% if movie.show_on_homepage %}
+              <span class="badge-bms-success"><i class="bi bi-check-lg"></i></span>
+              {% else %}
+              <span class="badge-bms-secondary"><i class="bi bi-x-lg"></i></span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="d-flex gap-1 flex-wrap">
                 <a href="{% url 'admin_movie_detail' movie.id %}" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
                 <a href="{% url 'admin_movie_edit' movie.id %}" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
-                <a href="{% url 'admin_movie_delete' movie.id %}" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></a>
-                <a href="{% url 'admin_movie_toggle_status' movie.id %}" class="btn btn-sm btn-outline-secondary" title="Toggle Status">
-                  <i class="bi bi-arrow-left-right"></i>
-                </a>
+                {% if movie.is_deleted %}
+                <a href="{% url 'admin_movie_restore' movie.id %}" class="btn btn-sm btn-outline-success" title="Restore" onclick="return confirm('Restore this movie and make it visible again?')"><i class="bi bi-arrow-counterclockwise"></i></a>
+                {% else %}
+                <a href="{% url 'admin_movie_delete' movie.id %}" class="btn btn-sm btn-outline-danger" title="Archive or delete" onclick="return confirm('Archive &quot;{{ movie.name }}&quot; and remove it from public listings?')"><i class="bi bi-archive"></i></a>
+                {% endif %}
+                <a href="{% url 'admin_movie_toggle_status' movie.id %}" class="btn btn-sm btn-outline-secondary" title="Toggle Status"><i class="bi bi-arrow-left-right"></i></a>
+                <a href="{% url 'admin_movie_toggle_homepage' movie.id %}" class="btn btn-sm btn-outline-warning" title="Toggle Homepage Visibility"><i class="bi bi-house{% if movie.show_on_homepage %}-dash{% endif %}{% if not movie.show_on_homepage %}-add{% endif %}"></i></a>
               </div>
             </td>
           </tr>

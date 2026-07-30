@@ -2,16 +2,84 @@
 {% block title %}Delete Movie{% endblock %}
 {% block page_title %}Delete Movie{% endblock %}
 {% block content %}
-<div class="card-bms" style="max-width: 500px; margin: 0 auto;">
-  <div class="card-bms-body text-center py-5">
-    <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 3rem;"></i>
-    <h4 class="mt-3">Delete "{{ object.name }}"?</h4>
-    <p class="text-muted">This action cannot be undone. All related data will be deleted.</p>
-    <form method="post">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i> Yes, Delete</button>
-      <a href="{% url 'admin_movie_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
-    </form>
+<div class="card-bms" style="max-width: 600px; margin: 0 auto;">
+  <div class="card-bms-body py-4">
+    <div class="text-center mb-4">
+      <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size: 3rem;"></i>
+      <h4 class="mt-3">Archive or delete "{{ object.name }}"?</h4>
+    </div>
+
+    {% if active_bookings or future_shows %}
+    <div class="alert alert-warning">
+      <i class="bi bi-exclamation-circle me-1"></i> This movie has active dependencies and cannot be permanently deleted.
+    </div>
+    {% endif %}
+
+    {% if active_bookings %}
+    <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+      <span><i class="bi bi-ticket-perforated me-2"></i>Active Bookings</span>
+      <span class="badge bg-danger rounded-pill">{{ active_bookings }}</span>
+    </div>
+    {% endif %}
+    {% if future_shows %}
+    <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+      <span><i class="bi bi-calendar-event me-2"></i>Future Shows</span>
+      <span class="badge bg-warning rounded-pill">{{ future_shows }}</span>
+    </div>
+    {% endif %}
+    {% if past_shows %}
+    <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+      <span><i class="bi bi-clock-history me-2"></i>Past Shows</span>
+      <span class="badge bg-secondary rounded-pill">{{ past_shows }}</span>
+    </div>
+    {% endif %}
+    {% if related_cast %}
+    <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+      <span><i class="bi bi-people me-2"></i>Cast Members</span>
+      <span class="badge bg-info rounded-pill">{{ related_cast }}</span>
+    </div>
+    {% endif %}
+    {% if related_trailers %}
+    <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+      <span><i class="bi bi-film me-2"></i>Trailers</span>
+      <span class="badge bg-info rounded-pill">{{ related_trailers }}</span>
+    </div>
+    {% endif %}
+    {% if related_gallery %}
+    <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+      <span><i class="bi bi-images me-2"></i>Gallery Images</span>
+      <span class="badge bg-info rounded-pill">{{ related_gallery }}</span>
+    </div>
+    {% endif %}
+
+    <p class="text-muted mt-3 mb-4">
+      Archiving <strong>removes the movie from homepage, listings, search, and booking pages</strong> while preserving its history so it can be restored later.
+      {% if can_hard_delete %}
+      Permanent deletion <strong>removes related cast, trailers, and gallery images</strong> and is only available when there are no active bookings or future shows.
+      {% endif %}
+    </p>
+
+    <div class="d-flex justify-content-center gap-2 flex-wrap">
+      <a href="{% url 'admin_movie_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-x-lg me-1"></i> Cancel
+      </a>
+      <form method="post" class="d-inline">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="archive">
+        <button type="submit" class="btn btn-warning">
+          <i class="bi bi-archive me-1"></i> Archive Movie
+        </button>
+      </form>
+      {% if can_hard_delete %}
+      <form method="post" class="d-inline" onsubmit="return confirm('This will permanently delete all related data. Are you sure?');">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="hard_delete">
+        <button type="submit" class="btn btn-danger">
+          <i class="bi bi-trash me-1"></i> Permanently Delete
+        </button>
+      </form>
+      {% endif %}
+    </div>
   </div>
 </div>
 {% endblock %}

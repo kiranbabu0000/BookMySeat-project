@@ -12,7 +12,7 @@ def movie_list(request):
     search_query = request.GET.get('search')
     genre_slug = request.GET.get('genre')
     lang_code = request.GET.get('language')
-    movies = Movie.objects.all()
+    movies = Movie.objects.filter(is_deleted=False).exclude(status__in=['archived', 'hidden'])
     if search_query:
         movies = movies.filter(name__icontains=search_query)
     if genre_slug:
@@ -31,8 +31,11 @@ def movie_list(request):
 def movie_detail(request, movie_id):
     movie = get_object_or_404(
         Movie.objects.prefetch_related('genres', 'languages', 'cast_members', 'gallery_images', 'trailers'),
-        id=movie_id
+        id=movie_id, is_deleted=False
     )
+    if movie.status in ['archived', 'hidden']:
+        from django.http import Http404
+        raise Http404("Movie not available")
     cast_members = CastMember.objects.filter(movie=movie)
     gallery = MovieImage.objects.filter(movie=movie)
     trailers = Trailer.objects.filter(movie=movie)
@@ -53,9 +56,10 @@ def movie_detail(request, movie_id):
     for r in reviews:
         if r.rating in rating_dist:
             rating_dist[r.rating] += 1
-    similar_movies = Movie.objects.filter(genres__in=movie.genres.all()).exclude(id=movie.id).distinct()[:6]
-    trending_movies = Movie.objects.annotate(booking_count=Count('booking')).exclude(id=movie.id).order_by('-booking_count')[:6]
-    recently_released = Movie.objects.filter(status='now_showing').exclude(id=movie.id).order_by('-release_date')[:6]
+    visible_filter = {'is_deleted': False}
+    similar_movies = Movie.objects.filter(genres__in=movie.genres.all(), **visible_filter).exclude(id=movie.id).exclude(status__in=['archived', 'hidden']).distinct()[:6]
+    trending_movies = Movie.objects.filter(**visible_filter).exclude(status__in=['archived', 'hidden']).annotate(booking_count=Count('booking')).exclude(id=movie.id).order_by('-booking_count')[:6]
+    recently_released = Movie.objects.filter(status='now_showing', **visible_filter).exclude(id=movie.id).order_by('-release_date')[:6]
     theaters = Theater.objects.filter(movie=movie).order_by('time')
     shows = Show.objects.filter(movie=movie, status='active').select_related('theatre', 'screen').order_by('date', 'time')
     return render(request, 'movies/movie_detail.html', {

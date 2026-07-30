@@ -227,18 +227,55 @@ class MovieDeleteView(AdminSessionMixin, DeleteView):
     template_name = 'admin/movies/movie_confirm_delete.html'
     success_url = reverse_lazy('admin_movie_list')
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        movie = self.get_object()
+        today = timezone.now().date()
+        context['active_bookings'] = Booking.objects.filter(movie=movie).exclude(seat__isnull=True).count()
+        context['future_shows'] = Show.objects.filter(movie=movie, date__gte=today, status='active').count()
+        context['past_shows'] = Show.objects.filter(movie=movie, date__lt=today).count()
+        context['related_trailers'] = Trailer.objects.filter(movie=movie).count()
+        context['related_gallery'] = MovieImage.objects.filter(movie=movie).count()
+        context['related_cast'] = CastMember.objects.filter(movie=movie).count()
+        context['has_dependencies'] = any([context['active_bookings'], context['future_shows'], context['past_shows'], context['related_trailers'], context['related_gallery'], context['related_cast']])
+        context['can_hard_delete'] = not any([context['active_bookings'], context['future_shows']])
+        return context
+
     def delete(self, request, *args, **kwargs):
         movie = self.get_object()
-        AuditLog.objects.create(
-            user=request.user,
-            action='Movie Deleted',
-            module='Movie',
-            object_id=movie.id,
-            details=f'Deleted movie: {movie.name}',
-            ip_address=request.META.get('REMOTE_ADDR')
-        )
-        messages.success(request, 'Movie deleted successfully.')
-        return super().delete(request, *args, **kwargs)
+        action = request.POST.get('action', 'archive')
+        today = timezone.now().date()
+        active_bookings = Booking.objects.filter(movie=movie).exclude(seat__isnull=True).count()
+        future_shows = Show.objects.filter(movie=movie, date__gte=today, status='active').count()
+
+        if action == 'hard_delete' and not active_bookings and not future_shows:
+            name = movie.name
+            movie.delete()
+            AuditLog.objects.create(
+                user=request.user,
+                action='Movie Permanently Deleted',
+                module='Movie',
+                object_id=movie.id,
+                details=f'Permanently deleted movie: {name}',
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            messages.success(request, f'Movie "{name}" has been permanently deleted.')
+            return redirect(self.success_url)
+        else:
+            movie.is_deleted = True
+            movie.show_on_homepage = False
+            movie.status = 'archived'
+            movie.save()
+            AuditLog.objects.create(
+                user=request.user,
+                action='Movie Deleted',
+                module='Movie',
+                object_id=movie.id,
+                details=f'Soft-deleted movie: {movie.name}',
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            messages.success(request, f'Movie "{movie.name}" has been archived and removed from all public listings.')
+            return redirect(self.success_url)
 
 
 class MovieDetailView(AdminSessionMixin, TemplateView):
@@ -259,7 +296,7 @@ class MovieDetailView(AdminSessionMixin, TemplateView):
 @admin_session_required
 def movie_toggle_status(request, pk):
     movie = get_object_or_404(Movie, id=pk)
-    status_cycle = {'now_showing': 'coming_soon', 'coming_soon': 'ended', 'ended': 'now_showing'}
+    status_cycle = {'draft': 'coming_soon', 'coming_soon': 'now_showing', 'now_showing': 'archived', 'archived': 'hidden', 'hidden': 'draft'}
     old_status = movie.status
     movie.status = status_cycle.get(movie.status, 'now_showing')
     movie.save()
@@ -273,6 +310,98 @@ def movie_toggle_status(request, pk):
     )
     messages.success(request, f'Movie "{movie.name}" status changed to {movie.get_status_display()}.')
     return redirect('admin_movie_list')
+
+
+@admin_session_required
+def movie_toggle_homepage(request, pk):
+    movie = get_object_or_404(Movie, id=pk)
+    movie.show_on_homepage = not movie.show_on_homepage
+    movie.save()
+    status = 'shown' if movie.show_on_homepage else 'hidden'
+    AuditLog.objects.create(
+        user=request.user,
+        action='Movie Homepage Toggled',
+        module='Movie',
+        object_id=movie.id,
+        details=f'{movie.name} homepage visibility: {status}',
+        ip_address=request.META.get('REMOTE_ADDR')
+    )
+    messages.success(request, f'Movie "{movie.name}" homepage visibility updated.')
+    return redirect('admin_movie_list')
+
+
+@admin_session_required
+def movie_restore(request, pk):
+    movie = get_object_or_404(Movie, id=pk)
+    movie.is_deleted = False
+    movie.show_on_homepage = True
+    if movie.status in ['archived', 'hidden']:
+        movie.status = 'draft'
+    movie.save()
+    AuditLog.objects.create(
+        user=request.user,
+        action='Movie Restored',
+        module='Movie',
+        object_id=movie.id,
+        details=f'Restored movie: {movie.name}',
+        ip_address=request.META.get('REMOTE_ADDR')
+    )
+    messages.success(request, f'Movie "{movie.name}" restored successfully and is visible again in public listings.')
+    return redirect('admin_movie_list')
+
+
+@admin_session_required
+def search_suggestions(request):
+    q = request.GET.get('q', '').strip()
+    if len(q) < 1:
+        return JsonResponse([], safe=False)
+    movies = Movie.objects.filter(
+        name__icontains=q,
+        is_deleted=False
+    ).exclude(
+        status__in=['archived', 'hidden']
+    )[:8]
+    results = []
+    for m in movies:
+        results.append({
+            'id': m.id,
+            'name': m.name,
+            'image': m.image.url if m.image and hasattr(m.image, 'url') else '',
+            'url': f'/movies/{m.id}/'
+        })
+    return JsonResponse(results, safe=False)
+
+
+@admin_session_required
+def genre_ajax_add(request):
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        if not name:
+            return JsonResponse({'error': 'Name is required'}, status=400)
+        genre, created = Genre.objects.get_or_create(name=name)
+        return JsonResponse({
+            'id': genre.id,
+            'name': genre.name,
+            'slug': genre.slug,
+            'created': created,
+        })
+    return JsonResponse({'error': 'POST required'}, status=405)
+
+
+@admin_session_required
+def language_ajax_add(request):
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        if not name:
+            return JsonResponse({'error': 'Name is required'}, status=400)
+        lang, created = Language.objects.get_or_create(name=name)
+        return JsonResponse({
+            'id': lang.id,
+            'name': lang.name,
+            'code': lang.code,
+            'created': created,
+        })
+    return JsonResponse({'error': 'POST required'}, status=405)
 
 
 class GenreListView(AdminSessionMixin, ListView):
@@ -508,6 +637,7 @@ class TheatreListView(AdminSessionMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['total_theatres'] = Theater.objects.values('name').distinct().count()
+        context['theatre_profiles'] = Theatre.objects.all().order_by('name')
         return context
 
 
@@ -568,6 +698,48 @@ class TheatreDeleteView(AdminSessionMixin, DeleteView):
         )
         messages.success(request, 'Theatre deleted successfully.')
         return super().delete(request, *args, **kwargs)
+
+
+@admin_session_required
+def theatre_movie_management(request, pk):
+    theatre = get_object_or_404(Theatre, id=pk)
+    assigned_movies = Movie.objects.filter(theaters__name=theatre.name, is_deleted=False).distinct()
+    running_shows = Show.objects.filter(theatre=theatre, status='active', date__gte=timezone.now().date()).select_related('movie', 'screen').order_by('date', 'time')
+    all_movies = Movie.objects.filter(is_deleted=False).exclude(status__in=['archived', 'hidden'])
+    return render(request, 'admin/theatres/theatre_movies.html', {
+        'theatre': theatre,
+        'assigned_movies': assigned_movies,
+        'running_shows': running_shows,
+        'all_movies': all_movies,
+    })
+
+
+@admin_session_required
+def theatre_remove_movie(request):
+    if request.method == 'POST':
+        theatre_id = request.POST.get('theatre_id')
+        movie_id = request.POST.get('movie_id')
+        theatre = get_object_or_404(Theatre, id=theatre_id)
+        movie = get_object_or_404(Movie, id=movie_id)
+        future_shows = Show.objects.filter(
+            theatre=theatre, movie=movie,
+            date__gte=timezone.now().date(),
+            status='active'
+        )
+        count = future_shows.count()
+        future_shows.update(status='cancelled')
+        old_theaters = Theater.objects.filter(name=theatre.name, movie=movie, time__gte=timezone.now())
+        old_count = old_theaters.count()
+        old_theaters.delete()
+        AuditLog.objects.create(
+            user=request.user,
+            action='Movie Removed from Theatre',
+            module='Theatre',
+            details=f'Removed {movie.name} from {theatre.name}: cancelled {count} show(s), removed {old_count} old listing(s)',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        messages.success(request, f'"{movie.name}" removed from "{theatre.name}". {count} future show(s) cancelled.')
+    return redirect('admin_theatre_list')
 
 
 class ScreenListView(AdminSessionMixin, ListView):

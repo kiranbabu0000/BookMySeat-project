@@ -11,6 +11,15 @@
     <a href="{% url 'admin_movie_list' %}" class="sidebar-link {% if 'movie' in request.resolver_match.url_name %}active{% endif %}">
       <i class="bi bi-film"></i><span>Movies</span>
     </a>
+    <a href="{% url 'admin_cast_list' %}" class="sidebar-link {% if 'cast' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-people"></i><span>Cast</span>
+    </a>
+    <a href="{% url 'admin_trailer_list' %}" class="sidebar-link {% if 'trailer' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-play-circle"></i><span>Trailers</span>
+    </a>
+    <a href="{% url 'admin_image_list' %}" class="sidebar-link {% if 'image' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-images"></i><span>Gallery</span>
+    </a>
     <a href="{% url 'admin_theatre_list' %}" class="sidebar-link {% if 'theatre' in request.resolver_match.url_name %}active{% endif %}">
       <i class="bi bi-building"></i><span>Theatres</span>
     </a>
