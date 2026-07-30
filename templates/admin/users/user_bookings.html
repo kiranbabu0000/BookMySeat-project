@@ -21,7 +21,7 @@
           <td>{{ b.movie.name }}</td>
           <td>{{ b.theater.name }}</td>
           <td>{{ b.seat.seat_number }}</td>
-          <td><i class="bi bi-currency-rupee"></i>{{ b.total_amount }}</td>
+          <td><i class="bi bi-currency-rupee"></i>{% if b.payment %}{{ b.payment.amount }}{% else %}—{% endif %}</td>
           <td>{{ b.booked_at|date:"d M Y, g:i A" }}</td>
         </tr>
         {% empty %}

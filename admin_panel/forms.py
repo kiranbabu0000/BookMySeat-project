@@ -1,3 +1,5 @@
+from datetime import date
+
 from django import forms
 from django.contrib.auth.models import User
 from movies.models import Movie, Theater, Seat, Booking
@@ -19,21 +21,17 @@ class MovieForm(forms.ModelForm):
         queryset=Genre.objects.all(),
         required=False,
         widget=forms.SelectMultiple(attrs={
-            'class': 'form-select multi-select-hidden-select',
-            'multiple': 'multiple',
-            'size': '6'
+            'class': 'form-control',
+            'placeholder': 'Select genres...'
         }),
-        help_text='Hold Ctrl (Windows) or Cmd (Mac) to select multiple genres.'
     )
     languages = forms.ModelMultipleChoiceField(
         queryset=Language.objects.all(),
         required=False,
         widget=forms.SelectMultiple(attrs={
-            'class': 'form-select multi-select-hidden-select',
-            'multiple': 'multiple',
-            'size': '6'
+            'class': 'form-control',
+            'placeholder': 'Select languages...'
         }),
-        help_text='Hold Ctrl (Windows) or Cmd (Mac) to select multiple languages.'
     )
 
     class Meta:
@@ -63,6 +61,75 @@ class MovieForm(forms.ModelForm):
             'status': forms.Select(attrs={'class': 'form-select'}),
             'show_on_homepage': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
+    def clean_name(self):
+        name = self.cleaned_data.get('name')
+        if not name or not name.strip():
+            raise forms.ValidationError('This field is required.')
+        return name.strip()
+
+    def clean_duration(self):
+        duration = self.cleaned_data.get('duration')
+        if duration is not None and duration <= 0:
+            raise forms.ValidationError('Ensure this value is greater than 0.')
+        return duration
+
+    def clean_rating(self):
+        rating = self.cleaned_data.get('rating')
+        if rating is None:
+            raise forms.ValidationError('This field is required.')
+        if rating < 0 or rating > 10:
+            raise forms.ValidationError('Ensure this value is between 0 and 10.')
+        return rating
+
+    def clean_imdb_rating(self):
+        imdb_rating = self.cleaned_data.get('imdb_rating')
+        if imdb_rating is not None:
+            if imdb_rating < 0 or imdb_rating > 10:
+                raise forms.ValidationError('Ensure this value is between 0 and 10.')
+        return imdb_rating
+
+    def clean_trailer_url(self):
+        url = self.cleaned_data.get('trailer_url')
+        if url and 'youtube.com' not in url and 'youtu.be' not in url:
+            raise forms.ValidationError('Enter a valid YouTube URL.')
+        return url
+
+    def clean_certificate(self):
+        certificate = self.cleaned_data.get('certificate')
+        allowed = ['U', 'UA', 'A', 'PG', 'PG-13', 'R']
+        if certificate:
+            if certificate not in allowed:
+                raise forms.ValidationError(
+                    f"Select a valid choice. '{certificate}' is not one of the available choices."
+                )
+        return certificate
+
+    def clean_languages(self):
+        languages = self.cleaned_data.get('languages')
+        if Language.objects.exists() and not languages:
+            raise forms.ValidationError('Select at least one language.')
+        return languages
+
+    def clean_genres(self):
+        genres = self.cleaned_data.get('genres')
+        if Genre.objects.exists() and not genres:
+            raise forms.ValidationError('Select at least one genre.')
+        return genres
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        release_date = cleaned_data.get('release_date')
+        if release_date and not self.instance.pk:
+            if release_date < date.today():
+                self.add_error('release_date', 'Release date cannot be in the past.')
+
+        duration = cleaned_data.get('duration')
+        if duration is not None and duration <= 0:
+            self.add_error('duration', 'Ensure this value is greater than 0.')
+
+        return cleaned_data
 
 
 class GenreForm(forms.ModelForm):

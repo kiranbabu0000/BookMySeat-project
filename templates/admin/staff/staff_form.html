@@ -34,24 +34,24 @@
         </div>
         {% endif %}
         <div class="col-md-6">
-          <label class="form-label fw-semibold small">Role</label>
-          {{ form.role }}
-          {% if form.role.errors %}<div class="invalid-feedback d-block">{{ form.role.errors.0 }}</div>{% endif %}
+            <label class="form-label fw-semibold small">Role</label>
+            {{ profile_form.role }}
+            {% if profile_form.role.errors %}<div class="invalid-feedback d-block">{{ profile_form.role.errors.0 }}</div>{% endif %}
         </div>
         <div class="col-md-6">
-          <label class="form-label fw-semibold small">Department</label>
-          {{ form.department }}
-          {% if form.department.errors %}<div class="invalid-feedback d-block">{{ form.department.errors.0 }}</div>{% endif %}
+            <label class="form-label fw-semibold small">Department</label>
+            {{ profile_form.department }}
+            {% if profile_form.department.errors %}<div class="invalid-feedback d-block">{{ profile_form.department.errors.0 }}</div>{% endif %}
         </div>
         <div class="col-md-6">
-          <label class="form-label fw-semibold small">Phone</label>
-          {{ form.phone }}
-          {% if form.phone.errors %}<div class="invalid-feedback d-block">{{ form.phone.errors.0 }}</div>{% endif %}
+            <label class="form-label fw-semibold small">Phone</label>
+            {{ profile_form.phone }}
+            {% if profile_form.phone.errors %}<div class="invalid-feedback d-block">{{ profile_form.phone.errors.0 }}</div>{% endif %}
         </div>
         <div class="col-md-6">
           <div class="form-check mt-4">
-            {{ form.is_active }}
-            <label class="form-check-label fw-semibold small">{{ form.is_active.label }}</label>
+            {{ profile_form.is_active }}
+            <label class="form-check-label fw-semibold small">{{ profile_form.is_active.label }}</label>
           </div>
         </div>
       </div>

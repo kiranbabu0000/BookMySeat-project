@@ -1,6 +1,6 @@
 {% extends 'admin/base_admin.html' %}
-{% block title %}Upload Image{% endblock %}
-{% block page_title %}Upload New Image{% endblock %}
+{% block title %}{% if object %}Edit{% else %}Upload{% endif %} Image{% endblock %}
+{% block page_title %}{% if object %}Edit Image{% else %}Upload New Image{% endif %}{% endblock %}
 {% block content %}
 <div class="card-bms" style="max-width: 600px;">
   <div class="card-bms-body">
@@ -14,13 +14,18 @@
         <label class="form-label fw-semibold small">Image File</label>
         {{ form.image }}
         {% if form.image.errors %}<div class="invalid-feedback d-block">{{ form.image.errors.0 }}</div>{% endif %}
+        {% if object and object.image %}
+        <div class="mt-2">
+          <img src="{{ object.image.url }}" alt="Current" style="max-width: 100%; max-height: 150px; object-fit: contain; border-radius: 8px; background: var(--bg-tertiary);">
+        </div>
+        {% endif %}
       </div>
       <div class="mb-3">
         <label class="form-label fw-semibold small">Caption</label>
         {{ form.caption }}
         {% if form.caption.errors %}<div class="invalid-feedback d-block">{{ form.caption.errors.0 }}</div>{% endif %}
       </div>
-      <button type="submit" class="btn btn-bms-primary"><i class="bi bi-upload"></i> Upload Image</button>
+      <button type="submit" class="btn btn-bms-primary"><i class="bi bi-{% if object %}check-lg{% else %}upload{% endif %}"></i> {% if object %}Update{% else %}Upload{% endif %} Image</button>
       <a href="{% url 'admin_image_list' %}" class="btn btn-outline-secondary">Cancel</a>
     </form>
   </div>

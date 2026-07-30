@@ -3,6 +3,8 @@ from .views import register, login_view, profile, reset_password, home
 from django.contrib.auth import views as auth_views
 
 class CustomLogoutView(auth_views.LogoutView):
+    http_method_names = ["get", "post", "options"]
+
     def get(self, request, *args, **kwargs):
         return self.post(request, *args, **kwargs)
 

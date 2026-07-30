@@ -1,19 +1,8 @@
 from django.contrib import admin
 from .models import (
-    Genre, Language, CastMember, Theatre, Screen, Show, Trailer, MovieImage,
+    CastMember, Theatre, Screen, Show, Trailer, MovieImage,
     AdminProfile, AdminPermission, AuditLog, Coupon, Notification, Review, Payment
 )
-
-
-@admin.register(Genre)
-class GenreAdmin(admin.ModelAdmin):
-    list_display = ['name', 'slug']
-    prepopulated_fields = {'slug': ('name',)}
-
-
-@admin.register(Language)
-class LanguageAdmin(admin.ModelAdmin):
-    list_display = ['name', 'code']
 
 
 @admin.register(CastMember)

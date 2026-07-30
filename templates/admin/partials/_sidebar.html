@@ -11,6 +11,12 @@
     <a href="{% url 'admin_movie_list' %}" class="sidebar-link {% if 'movie' in request.resolver_match.url_name %}active{% endif %}">
       <i class="bi bi-film"></i><span>Movies</span>
     </a>
+    <a href="{% url 'admin_genre_list' %}" class="sidebar-link {% if 'genre' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-tags"></i><span>Genres</span>
+    </a>
+    <a href="{% url 'admin_language_list' %}" class="sidebar-link {% if 'language' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-translate"></i><span>Languages</span>
+    </a>
     <a href="{% url 'admin_cast_list' %}" class="sidebar-link {% if 'cast' in request.resolver_match.url_name %}active{% endif %}">
       <i class="bi bi-people"></i><span>Cast</span>
     </a>

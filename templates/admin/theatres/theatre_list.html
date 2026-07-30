@@ -1,4 +1,5 @@
 {% extends 'admin/base_admin.html' %}
+{% load admin_tags %}
 {% block title %}Theatres{% endblock %}
 {% block page_title %}Theatre Management{% endblock %}
 {% block content %}
@@ -9,15 +10,22 @@
     </div>
     <div class="d-flex gap-2">
       <form method="get" class="d-flex gap-2">
-        <input type="search" name="search" class="form-control form-control-sm" placeholder="Search theatres..." value="{{ request.GET.search|default:'' }}" style="width: 250px;">
+        <input type="search" name="search" class="form-control form-control-sm" placeholder="Search theatres..." value="{{ request.GET.search|default:'' }}" style="max-width: 250px; width: 100%;">
         <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
+        <label class="small text-muted ms-2 me-1">Show</label>
+        <select name="per_page" class="form-select form-select-sm" style="width: auto;" data-auto-submit>
+          <option value="10" {% if request.GET.per_page == '10' %}selected{% endif %}>10</option>
+          <option value="20" {% if request.GET.per_page == '20' or not request.GET.per_page %}selected{% endif %}>20</option>
+          <option value="50" {% if request.GET.per_page == '50' %}selected{% endif %}>50</option>
+          <option value="100" {% if request.GET.per_page == '100' %}selected{% endif %}>100</option>
+        </select>
       </form>
       <a href="{% url 'admin_theatre_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Add Theatre</a>
     </div>
   </div>
-  <div class="card-bms-body p-0">
+  <div class="card-bms-body p-0 table-responsive">
     <table class="table table-bms mb-0">
-      <thead><tr><th>Theatre Name</th><th>Screenings</th><th>Movies</th><th>Last Show</th><th>Actions</th></tr></thead>
+      <thead><tr><th>{% if request.GET.sort == 'name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='name' order='desc' %}" class="text-decoration-none text-reset">Theatre Name <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'name' %}<a href="?{% url_replace sort='name' order='asc' %}" class="text-decoration-none text-reset">Theatre Name <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='name' order='asc' %}" class="text-decoration-none text-reset">Theatre Name</a>{% endif %}</th><th>{% if request.GET.sort == 'show_count' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='show_count' order='desc' %}" class="text-decoration-none text-reset">Screenings <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'show_count' %}<a href="?{% url_replace sort='show_count' order='asc' %}" class="text-decoration-none text-reset">Screenings <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='show_count' order='asc' %}" class="text-decoration-none text-reset">Screenings</a>{% endif %}</th><th>{% if request.GET.sort == 'movie_count' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='movie_count' order='desc' %}" class="text-decoration-none text-reset">Movies <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'movie_count' %}<a href="?{% url_replace sort='movie_count' order='asc' %}" class="text-decoration-none text-reset">Movies <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='movie_count' order='asc' %}" class="text-decoration-none text-reset">Movies</a>{% endif %}</th><th>{% if request.GET.sort == 'last_show' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='last_show' order='desc' %}" class="text-decoration-none text-reset">Last Show <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'last_show' %}<a href="?{% url_replace sort='last_show' order='asc' %}" class="text-decoration-none text-reset">Last Show <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='last_show' order='asc' %}" class="text-decoration-none text-reset">Last Show</a>{% endif %}</th><th>Actions</th></tr></thead>
       <tbody>
         {% for t in theatres %}
         <tr>
@@ -43,7 +51,7 @@
 
 <div class="card-bms mt-4">
   <div class="card-bms-header"><h5 class="mb-0">Theatre Profiles (Manage Movies & Shows)</h5></div>
-  <div class="card-bms-body p-0">
+  <div class="card-bms-body p-0 table-responsive">
     <table class="table table-bms mb-0">
       <thead><tr><th>Theatre</th><th>City</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>
@@ -57,6 +65,7 @@
               <a href="{% url 'admin_theatre_edit' theatre.id %}" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
               <a href="{% url 'admin_theatre_movies' theatre.id %}" class="btn btn-sm btn-outline-success" title="Manage Movies"><i class="bi bi-film"></i> Movies</a>
               <a href="{% url 'admin_show_add' %}?theatre={{ theatre.id }}" class="btn btn-sm btn-outline-info" title="Add Show"><i class="bi bi-plus-circle"></i></a>
+              <a href="{% url 'admin_theatre_delete' theatre.id %}" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></a>
             </div>
           </td>
         </tr>

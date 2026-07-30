@@ -577,27 +577,27 @@ h1, h2, h3, h4, h5, h6 {
 
 .badge-bms-success {
   background: rgba(22, 163, 74, 0.1);
-  color: #16a34a;
+  color: var(--accent-success);
 }
 
 .badge-bms-danger {
   background: rgba(220, 38, 38, 0.1);
-  color: #dc2626;
+  color: var(--accent-primary);
 }
 
 .badge-bms-warning {
   background: rgba(217, 119, 6, 0.1);
-  color: #d97706;
+  color: var(--accent-gold);
 }
 
 .badge-bms-info {
   background: rgba(37, 99, 235, 0.1);
-  color: #2563eb;
+  color: var(--accent-secondary);
 }
 
 .badge-bms-secondary {
   background: rgba(100, 116, 139, 0.1);
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 /* Ensure popular movie names are readable in dark mode */

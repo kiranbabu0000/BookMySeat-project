@@ -12,6 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'css/tokens.css' %}?v=202607">
   <link rel="stylesheet" href="{% static 'css/main.css' %}?v=202607">
   <link rel="stylesheet" href="{% static 'admin/css/admin.css' %}?v=202607">
@@ -24,21 +25,49 @@
     .admin-topbar .breadcrumb-item a { color: var(--text-muted); text-decoration: none; }
     .admin-topbar .breadcrumb-item a:hover { color: var(--accent-primary); }
     .admin-topbar .breadcrumb-item.active { color: var(--text-primary); }
+    .search-form {
+      display: flex;
+      align-items: center;
+    }
+    .search-input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .search-input-icon {
+      position: absolute;
+      left: 0.875rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      pointer-events: none;
+      z-index: 1;
+      line-height: 1;
+    }
     .search-form .search-input {
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23888' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: 0.75rem center;
-      background-size: 1rem;
       background-color: var(--bg-tertiary);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-full);
       color: var(--text-primary);
-      padding-left: 2.2rem;
+      padding-left: 2.5rem;
+      padding-right: 1rem;
+      padding-top: 0.45rem;
+      padding-bottom: 0.45rem;
+      font-size: 0.875rem;
+      width: 220px;
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast), width 0.2s ease;
+    }
+    .search-form .search-input::placeholder {
+      color: var(--text-muted);
+      opacity: 0.8;
     }
     .search-form .search-input:focus {
       border-color: var(--accent-primary);
       box-shadow: 0 0 0 3px rgba(220,38,38,0.12);
       background-color: var(--bg-tertiary);
+      width: 280px;
+      outline: none;
     }
     .notification-badge { position: relative; }
     .notification-badge .badge { position: absolute; top: -4px; right: -6px; font-size: 0.6rem; padding: 0.2rem 0.4rem; min-width: 16px; }
@@ -80,7 +109,7 @@
                 <i class="bi bi-{% if message.tags == 'error' %}exclamation-circle{% elif message.tags == 'success' %}check-circle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %} me-2"></i>
                 {{ message }}
               </div>
-              <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+              <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close toast"></button>
             </div>
           </div>
           {% endfor %}
@@ -94,11 +123,28 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
   <script src="{% static 'admin/js/admin.js' %}"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       var toastElList = [].slice.call(document.querySelectorAll('.toast'));
       toastElList.forEach(function(el) { new bootstrap.Toast(el).show(); });
+
+      document.addEventListener('change', function(e) {
+        if (e.target.matches('select[onchange*="this.form.submit()"], select[data-auto-submit]')) {
+          var form = e.target.closest('form');
+          if (form) form.submit();
+        }
+      });
+
+      document.addEventListener('click', function(e) {
+        var btn = e.target.closest('[data-confirm]');
+        if (btn) {
+          if (!confirm(btn.getAttribute('data-confirm') || 'Are you sure?')) {
+            e.preventDefault();
+          }
+        }
+      });
     });
   </script>
   {% block extra_js %}{% endblock %}

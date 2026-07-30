@@ -2,7 +2,13 @@
   <article class="movie-card h-100">
     <a href="{% url 'movie_detail' movie.id %}" class="text-decoration-none d-flex flex-column h-100" aria-label="View {{ movie.name }}">
       <div class="movie-card__poster-wrap">
+        {% if movie.image %}
         <img src="{{ movie.image.url }}" class="movie-card__poster" alt="{{ movie.name }} poster" loading="lazy">
+        {% else %}
+        <div class="movie-card__poster d-flex align-items-center justify-content-center" style="background: var(--bg-tertiary); color: var(--text-muted); font-size: 2rem;">
+          <i class="bi bi-film"></i>
+        </div>
+        {% endif %}
         <span class="movie-card__rating" aria-label="Rating {{ movie.rating }}">
           <i class="bi bi-star-fill" aria-hidden="true"></i> {{ movie.rating }}
         </span>

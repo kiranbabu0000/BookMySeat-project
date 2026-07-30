@@ -1,4 +1,5 @@
 {% extends 'admin/base_admin.html' %}
+{% load admin_tags %}
 {% block title %}Reviews{% endblock %}
 {% block page_title %}Review Management{% endblock %}
 {% block content %}
@@ -24,13 +25,21 @@
         <option value="">Visibility</option>
         <option value="1" {% if request.GET.hidden == '1' %}selected{% endif %}>Hidden</option>
       </select>
+      <input type="search" name="search" class="form-control form-control-sm" placeholder="Search reviews..." value="{{ request.GET.search|default:'' }}" style="width: 200px;">
       <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> Filter</button>
       <a href="{% url 'admin_review_list' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear</a>
+      <label class="small text-muted ms-2 me-1">Show</label>
+      <select name="per_page" class="form-select form-select-sm" style="width: auto;" data-auto-submit>
+        <option value="10" {% if request.GET.per_page == '10' %}selected{% endif %}>10</option>
+        <option value="20" {% if request.GET.per_page == '20' or not request.GET.per_page %}selected{% endif %}>20</option>
+        <option value="50" {% if request.GET.per_page == '50' %}selected{% endif %}>50</option>
+        <option value="100" {% if request.GET.per_page == '100' %}selected{% endif %}>100</option>
+      </select>
     </form>
   </div>
   <div class="card-bms-body p-0">
     <table class="table table-bms mb-0">
-      <thead><tr><th>ID</th><th>Movie</th><th>User</th><th>Rating</th><th>Comment</th><th>Date</th><th>Reported</th><th>Hidden</th><th>Approved</th><th>Actions</th></tr></thead>
+      <thead><tr><th>{% if request.GET.sort == 'id' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='id' order='desc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'id' %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID</a>{% endif %}</th><th>{% if request.GET.sort == 'movie__name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='movie__name' order='desc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'movie__name' %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie</a>{% endif %}</th><th>{% if request.GET.sort == 'user__username' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='user__username' order='desc' %}" class="text-decoration-none text-reset">User <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'user__username' %}<a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User</a>{% endif %}</th><th>{% if request.GET.sort == 'rating' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='rating' order='desc' %}" class="text-decoration-none text-reset">Rating <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'rating' %}<a href="?{% url_replace sort='rating' order='asc' %}" class="text-decoration-none text-reset">Rating <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='rating' order='asc' %}" class="text-decoration-none text-reset">Rating</a>{% endif %}</th><th>Comment</th><th>{% if request.GET.sort == 'created_at' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='created_at' order='desc' %}" class="text-decoration-none text-reset">Date <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'created_at' %}<a href="?{% url_replace sort='created_at' order='asc' %}" class="text-decoration-none text-reset">Date <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='created_at' order='asc' %}" class="text-decoration-none text-reset">Date</a>{% endif %}</th><th>Reported</th><th>Hidden</th><th>Approved</th><th>Actions</th></tr></thead>
       <tbody>
         {% for r in reviews %}
         <tr class="{% if r.is_reported %}table-warning{% endif %}">
@@ -63,7 +72,7 @@
                 <i class="bi bi-eye-slash"></i>
               </a>
               {% endif %}
-              <a href="{% url 'admin_review_delete' r.id %}" class="btn btn-sm btn-outline-danger" title="Delete permanently" onclick="return confirm('Delete this review permanently?')">
+              <a href="{% url 'admin_review_delete' r.id %}" class="btn btn-sm btn-outline-danger" title="Delete permanently" data-confirm="Delete this review permanently?">
                 <i class="bi bi-trash"></i>
               </a>
             </div>

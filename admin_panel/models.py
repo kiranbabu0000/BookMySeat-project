@@ -38,7 +38,7 @@ class CastMember(models.Model):
     name = models.CharField(max_length=255)
     character_name = models.CharField(max_length=255, blank=True, null=True)
     image = models.ImageField(upload_to='cast/', blank=True, null=True)
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='actor')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='other')
 
     class Meta:
         ordering = ['name']
@@ -83,6 +83,8 @@ class Show(models.Model):
         ('active', 'Active'),
         ('cancelled', 'Cancelled'),
         ('completed', 'Completed'),
+        ('sold_out', 'Sold Out'),
+        ('paused', 'Paused'),
     ]
     movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='shows')
     theatre = models.ForeignKey(Theatre, on_delete=models.CASCADE, related_name='shows')

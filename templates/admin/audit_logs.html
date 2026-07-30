@@ -1,4 +1,5 @@
 {% extends 'admin/base_admin.html' %}
+{% load admin_tags %}
 {% block title %}Audit Logs{% endblock %}
 {% block page_title %}Audit Logs{% endblock %}
 {% block content %}
@@ -13,18 +14,18 @@
         <label class="small text-muted">User</label>
         <select name="user" class="form-select form-select-sm">
           <option value="">All Users</option>
-          {% for u in users %}
+          {% if users %}{% for u in users %}
           <option value="{{ u.id }}" {% if request.GET.user == u.id|stringformat:'s' %}selected{% endif %}>{{ u.username }}</option>
-          {% endfor %}
+          {% endfor %}{% endif %}
         </select>
       </div>
       <div class="col-md-2">
         <label class="small text-muted">Module</label>
         <select name="module" class="form-select form-select-sm">
           <option value="">All Modules</option>
-          {% for mod in modules %}
+          {% if modules %}{% for mod in modules %}
           <option value="{{ mod }}" {% if request.GET.module == mod %}selected{% endif %}>{{ mod|title }}</option>
-          {% endfor %}
+          {% endfor %}{% endif %}
         </select>
       </div>
       <div class="col-md-2">
@@ -41,14 +42,23 @@
       <div class="col-md-1">
         <button type="submit" class="btn btn-sm btn-outline-secondary w-100"><i class="bi bi-search"></i></button>
       </div>
+      <div class="col-md-1">
+        <label class="small text-muted">Show</label>
+        <select name="per_page" class="form-select form-select-sm" style="width: auto;" data-auto-submit>
+          <option value="10" {% if request.GET.per_page == '10' %}selected{% endif %}>10</option>
+          <option value="20" {% if request.GET.per_page == '20' or not request.GET.per_page %}selected{% endif %}>20</option>
+          <option value="50" {% if request.GET.per_page == '50' %}selected{% endif %}>50</option>
+          <option value="100" {% if request.GET.per_page == '100' %}selected{% endif %}>100</option>
+        </select>
+      </div>
     </form>
   </div>
   <div class="card-bms-body p-0">
     <div class="table-responsive">
       <table class="table table-bms mb-0">
-        <thead><tr><th>ID</th><th>User</th><th>Action</th><th>Module</th><th>Details</th><th>IP Address</th><th>Date/Time</th></tr></thead>
+        <thead><tr><th>{% if request.GET.sort == 'id' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='id' order='desc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'id' %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID</a>{% endif %}</th><th>{% if request.GET.sort == 'user__username' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='user__username' order='desc' %}" class="text-decoration-none text-reset">User <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'user__username' %}<a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User</a>{% endif %}</th><th>{% if request.GET.sort == 'action' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='action' order='desc' %}" class="text-decoration-none text-reset">Action <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'action' %}<a href="?{% url_replace sort='action' order='asc' %}" class="text-decoration-none text-reset">Action <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='action' order='asc' %}" class="text-decoration-none text-reset">Action</a>{% endif %}</th><th>{% if request.GET.sort == 'module' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='module' order='desc' %}" class="text-decoration-none text-reset">Module <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'module' %}<a href="?{% url_replace sort='module' order='asc' %}" class="text-decoration-none text-reset">Module <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='module' order='asc' %}" class="text-decoration-none text-reset">Module</a>{% endif %}</th><th>Details</th><th>IP Address</th><th>{% if request.GET.sort == 'created_at' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='created_at' order='desc' %}" class="text-decoration-none text-reset">Date/Time <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'created_at' %}<a href="?{% url_replace sort='created_at' order='asc' %}" class="text-decoration-none text-reset">Date/Time <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='created_at' order='asc' %}" class="text-decoration-none text-reset">Date/Time</a>{% endif %}</th></tr></thead>
         <tbody>
-          {% for log in audit_logs %}
+          {% for log in logs %}
           <tr>
             <td>{{ log.id }}</td>
             <td>{{ log.user.username }}</td>

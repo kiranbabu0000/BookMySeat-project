@@ -1,5 +1,5 @@
 {% extends 'admin/base_admin.html' %}
-{% load static %}
+{% load static admin_tags %}
 {% block title %}Movies{% endblock %}
 {% block page_title %}Movie Management{% endblock %}
 {% block content %}
@@ -10,13 +10,20 @@
         <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-2 text-muted"></i>
         <input type="search" name="search" class="form-control form-control-sm ps-4" placeholder="Search movies..." value="{{ request.GET.search|default:'' }}" style="width: min(260px, 100%); min-width: 220px;">
       </div>
-      <select name="status" class="form-select form-select-sm" style="width: auto; min-width: 150px;" onchange="this.form.submit()">
+      <select name="status" class="form-select form-select-sm" style="width: auto; min-width: 150px;" data-auto-submit>
         <option value="">All Status</option>
         {% for val, label in status_choices %}
         <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
       <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
+      <label class="small text-muted ms-2 me-1">Show</label>
+      <select name="per_page" class="form-select form-select-sm" style="width: auto;" data-auto-submit>
+        <option value="10" {% if request.GET.per_page == '10' %}selected{% endif %}>10</option>
+        <option value="20" {% if request.GET.per_page == '20' or not request.GET.per_page %}selected{% endif %}>20</option>
+        <option value="50" {% if request.GET.per_page == '50' %}selected{% endif %}>50</option>
+        <option value="100" {% if request.GET.per_page == '100' %}selected{% endif %}>100</option>
+      </select>
     </form>
     <a href="{% url 'admin_movie_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Add Movie</a>
   </div>
@@ -25,12 +32,12 @@
       <table class="table table-bms mb-0">
         <thead>
           <tr>
-            <th>ID</th>
+            <th>{% if request.GET.sort == 'id' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='id' order='desc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'id' %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID</a>{% endif %}</th>
             <th>Poster</th>
-            <th>Name</th>
-            <th>Rating</th>
-            <th>Duration</th>
-            <th>Status</th>
+            <th>{% if request.GET.sort == 'name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='name' order='desc' %}" class="text-decoration-none text-reset">Name <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'name' %}<a href="?{% url_replace sort='name' order='asc' %}" class="text-decoration-none text-reset">Name <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='name' order='asc' %}" class="text-decoration-none text-reset">Name</a>{% endif %}</th>
+            <th>{% if request.GET.sort == 'rating' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='rating' order='desc' %}" class="text-decoration-none text-reset">Rating <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'rating' %}<a href="?{% url_replace sort='rating' order='asc' %}" class="text-decoration-none text-reset">Rating <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='rating' order='asc' %}" class="text-decoration-none text-reset">Rating</a>{% endif %}</th>
+            <th>{% if request.GET.sort == 'duration' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='duration' order='desc' %}" class="text-decoration-none text-reset">Duration <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'duration' %}<a href="?{% url_replace sort='duration' order='asc' %}" class="text-decoration-none text-reset">Duration <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='duration' order='asc' %}" class="text-decoration-none text-reset">Duration</a>{% endif %}</th>
+            <th>{% if request.GET.sort == 'status' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='status' order='desc' %}" class="text-decoration-none text-reset">Status <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'status' %}<a href="?{% url_replace sort='status' order='asc' %}" class="text-decoration-none text-reset">Status <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='status' order='asc' %}" class="text-decoration-none text-reset">Status</a>{% endif %}</th>
             <th>Homepage</th>
             <th>Actions</th>
           </tr>
@@ -76,9 +83,9 @@
                 <a href="{% url 'admin_movie_detail' movie.id %}" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
                 <a href="{% url 'admin_movie_edit' movie.id %}" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
                 {% if movie.is_deleted %}
-                <a href="{% url 'admin_movie_restore' movie.id %}" class="btn btn-sm btn-outline-success" title="Restore" onclick="return confirm('Restore this movie and make it visible again?')"><i class="bi bi-arrow-counterclockwise"></i></a>
+                <a href="{% url 'admin_movie_restore' movie.id %}" class="btn btn-sm btn-outline-success" title="Restore" data-confirm="Restore this movie and make it visible again?"><i class="bi bi-arrow-counterclockwise"></i></a>
                 {% else %}
-                <a href="{% url 'admin_movie_delete' movie.id %}" class="btn btn-sm btn-outline-danger" title="Archive or delete" onclick="return confirm('Archive &quot;{{ movie.name }}&quot; and remove it from public listings?')"><i class="bi bi-archive"></i></a>
+                <a href="{% url 'admin_movie_delete' movie.id %}" class="btn btn-sm btn-outline-danger" title="Delete movie"><i class="bi bi-trash"></i></a>
                 {% endif %}
                 <a href="{% url 'admin_movie_toggle_status' movie.id %}" class="btn btn-sm btn-outline-secondary" title="Toggle Status"><i class="bi bi-arrow-left-right"></i></a>
                 <a href="{% url 'admin_movie_toggle_homepage' movie.id %}" class="btn btn-sm btn-outline-warning" title="Toggle Homepage Visibility"><i class="bi bi-house{% if movie.show_on_homepage %}-dash{% endif %}{% if not movie.show_on_homepage %}-add{% endif %}"></i></a>

@@ -16,7 +16,15 @@ urlpatterns = [
     path('movies/<int:pk>/toggle-homepage/', views.movie_toggle_homepage, name='admin_movie_toggle_homepage'),
     path('movies/<int:pk>/restore/', views.movie_restore, name='admin_movie_restore'),
 
+    path('genres/', views.GenreListView.as_view(), name='admin_genre_list'),
+    path('genres/add/', views.GenreCreateView.as_view(), name='admin_genre_add'),
+    path('genres/<int:pk>/edit/', views.GenreUpdateView.as_view(), name='admin_genre_edit'),
+    path('genres/<int:pk>/delete/', views.GenreDeleteView.as_view(), name='admin_genre_delete'),
     path('genres/ajax-add/', views.genre_ajax_add, name='admin_genre_ajax_add'),
+    path('languages/', views.LanguageListView.as_view(), name='admin_language_list'),
+    path('languages/add/', views.LanguageCreateView.as_view(), name='admin_language_add'),
+    path('languages/<int:pk>/edit/', views.LanguageUpdateView.as_view(), name='admin_language_edit'),
+    path('languages/<int:pk>/delete/', views.LanguageDeleteView.as_view(), name='admin_language_delete'),
     path('languages/ajax-add/', views.language_ajax_add, name='admin_language_ajax_add'),
 
     path('cast/', views.CastListView.as_view(), name='admin_cast_list'),
@@ -50,6 +58,7 @@ urlpatterns = [
 
     path('images/', views.MovieImageListView.as_view(), name='admin_image_list'),
     path('images/add/', views.MovieImageCreateView.as_view(), name='admin_image_add'),
+    path('images/<int:pk>/edit/', views.MovieImageUpdateView.as_view(), name='admin_image_edit'),
     path('images/<int:pk>/delete/', views.MovieImageDeleteView.as_view(), name='admin_image_delete'),
 
     path('seats/', views.seat_management, name='admin_seat_management'),

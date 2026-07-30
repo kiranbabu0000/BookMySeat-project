@@ -1,4 +1,5 @@
 {% extends 'admin/base_admin.html' %}
+{% load admin_tags %}
 {% block title %}Bookings{% endblock %}
 {% block page_title %}Booking Management{% endblock %}
 {% block content %}
@@ -9,9 +10,9 @@
         <label class="small text-muted">Movie</label>
         <select name="movie" class="form-select form-select-sm">
           <option value="">All</option>
-          {% for m in movies %}
+          {% if movies %}{% for m in movies %}
           <option value="{{ m.id }}" {% if request.GET.movie == m.id|stringformat:'s' %}selected{% endif %}>{{ m.name }}</option>
-          {% endfor %}
+          {% endfor %}{% endif %}
         </select>
       </div>
       <div class="col-md-2">
@@ -30,10 +31,14 @@
         <label class="small text-muted">Theatre</label>
         <select name="theatre" class="form-select form-select-sm">
           <option value="">All</option>
-          {% for t in theatres %}
+          {% if theatres %}{% for t in theatres %}
           <option value="{{ t.id }}" {% if request.GET.theatre == t.id|stringformat:'s' %}selected{% endif %}>{{ t.name }}</option>
-          {% endfor %}
+          {% endfor %}{% endif %}
         </select>
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">Search</label>
+        <input type="search" name="search" class="form-control form-control-sm" placeholder="Search bookings..." value="{{ request.GET.search|default:'' }}">
       </div>
       <div class="col-md-1">
         <button type="submit" class="btn btn-sm btn-outline-secondary w-100"><i class="bi bi-search"></i></button>
@@ -41,12 +46,21 @@
       <div class="col-md-1">
         <a href="{% url 'admin_booking_reserve' %}" class="btn btn-bms-primary btn-sm w-100"><i class="bi bi-ticket"></i></a>
       </div>
+      <div class="col-md-1">
+        <label class="small text-muted">Show</label>
+        <select name="per_page" class="form-select form-select-sm" style="width: auto;" data-auto-submit>
+          <option value="10" {% if request.GET.per_page == '10' %}selected{% endif %}>10</option>
+          <option value="20" {% if request.GET.per_page == '20' or not request.GET.per_page %}selected{% endif %}>20</option>
+          <option value="50" {% if request.GET.per_page == '50' %}selected{% endif %}>50</option>
+          <option value="100" {% if request.GET.per_page == '100' %}selected{% endif %}>100</option>
+        </select>
+      </div>
     </form>
   </div>
   <div class="card-bms-body p-0">
     <div class="table-responsive">
       <table class="table table-bms mb-0">
-        <thead><tr><th>ID</th><th>User</th><th>Movie</th><th>Theatre</th><th>Seat</th><th>Date</th><th>Amount</th><th>Actions</th></tr></thead>
+        <thead><tr><th>{% if request.GET.sort == 'id' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='id' order='desc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'id' %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID</a>{% endif %}</th><th>{% if request.GET.sort == 'user__username' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='user__username' order='desc' %}" class="text-decoration-none text-reset">User <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'user__username' %}<a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User</a>{% endif %}</th><th>{% if request.GET.sort == 'movie__name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='movie__name' order='desc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'movie__name' %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie</a>{% endif %}</th><th>{% if request.GET.sort == 'theater__name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='theater__name' order='desc' %}" class="text-decoration-none text-reset">Theatre <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'theater__name' %}<a href="?{% url_replace sort='theater__name' order='asc' %}" class="text-decoration-none text-reset">Theatre <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='theater__name' order='asc' %}" class="text-decoration-none text-reset">Theatre</a>{% endif %}</th><th>Seat</th><th>{% if request.GET.sort == 'booked_at' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='booked_at' order='desc' %}" class="text-decoration-none text-reset">Date <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'booked_at' %}<a href="?{% url_replace sort='booked_at' order='asc' %}" class="text-decoration-none text-reset">Date <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='booked_at' order='asc' %}" class="text-decoration-none text-reset">Date</a>{% endif %}</th><th>Amount</th><th>Actions</th></tr></thead>
         <tbody>
           {% for b in bookings %}
           <tr>
@@ -56,10 +70,10 @@
             <td>{{ b.theater.name|truncatechars:25 }}</td>
             <td>{{ b.seat.seat_number }}</td>
             <td>{{ b.booked_at|date:"d M Y, g:i A" }}</td>
-            <td><i class="bi bi-currency-rupee"></i>{{ b.total_amount }}</td>
+            <td><i class="bi bi-currency-rupee"></i>{% if b.payment %}{{ b.payment.amount }}{% else %}—{% endif %}</td>
             <td>
               <a href="{% url 'admin_booking_detail' b.id %}" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
-              <a href="{% url 'admin_booking_cancel' b.id %}" class="btn btn-sm btn-outline-danger" title="Cancel" onclick="return confirm('Cancel this booking?')"><i class="bi bi-x-circle"></i></a>
+              <a href="{% url 'admin_booking_cancel' b.id %}" class="btn btn-sm btn-outline-danger" title="Cancel" data-confirm="Cancel this booking?"><i class="bi bi-x-circle"></i></a>
             </td>
           </tr>
           {% empty %}

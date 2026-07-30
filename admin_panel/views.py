@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.db.models import Count, Sum, Q, Avg, Max
 from django.db.models.functions import TruncMonth, TruncDate
 from django.utils import timezone
+from django.utils.text import slugify
 from django.core.paginator import Paginator
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View, TemplateView, DetailView
 from django.urls import reverse_lazy, reverse
@@ -12,6 +13,8 @@ from django.http import JsonResponse, HttpResponseRedirect
 import json
 from datetime import datetime, date, timedelta
 
+import sys
+import django
 from movies.models import Movie, Theater, Seat, Booking
 from .models import Genre, Language, CastMember, Theatre, Screen, Show, Trailer, MovieImage, AdminProfile, AdminPermission, AuditLog, Coupon, Notification, Review, Payment
 from .forms import (
@@ -164,16 +167,33 @@ class MovieListView(AdminSessionMixin, ListView):
     model = Movie
     template_name = 'admin/movies/movie_list.html'
     context_object_name = 'movies'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
 
     def get_queryset(self):
-        qs = Movie.objects.all().order_by('-id')
+        qs = Movie.objects.all()
         search = self.request.GET.get('search')
         status = self.request.GET.get('status')
         if search:
             qs = qs.filter(Q(name__icontains=search) | Q(director__icontains=search))
         if status:
             qs = qs.filter(status=status)
+        sort = self.request.GET.get('sort', 'id')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['id', 'name', 'rating', 'duration', 'status']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-id')
         return qs
 
     def get_context_data(self, **kwargs):
@@ -265,6 +285,8 @@ class MovieDeleteView(AdminSessionMixin, DeleteView):
             movie.is_deleted = True
             movie.show_on_homepage = False
             movie.status = 'archived'
+            # Cancel all future shows for this movie
+            Show.objects.filter(movie=movie, date__gte=today, status='active').update(status='cancelled')
             movie.save()
             AuditLog.objects.create(
                 user=request.user,
@@ -296,9 +318,14 @@ class MovieDetailView(AdminSessionMixin, TemplateView):
 @admin_session_required
 def movie_toggle_status(request, pk):
     movie = get_object_or_404(Movie, id=pk)
+    valid_statuses = [s[0] for s in Movie.STATUS_CHOICES]
+    default_status = 'draft'
     status_cycle = {'draft': 'coming_soon', 'coming_soon': 'now_showing', 'now_showing': 'archived', 'archived': 'hidden', 'hidden': 'draft'}
     old_status = movie.status
-    movie.status = status_cycle.get(movie.status, 'now_showing')
+    if old_status not in status_cycle:
+        movie.status = default_status
+    else:
+        movie.status = status_cycle[old_status]
     movie.save()
     AuditLog.objects.create(
         user=request.user,
@@ -408,7 +435,36 @@ class GenreListView(AdminSessionMixin, ListView):
     model = Genre
     template_name = 'admin/genres/genre_list.html'
     context_object_name = 'genres'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
+
+    def get_queryset(self):
+        qs = Genre.objects.annotate(movie_count=Count('movies'))
+        search = self.request.GET.get('search')
+        if search:
+            qs = qs.filter(name__icontains=search)
+        sort = self.request.GET.get('sort', 'name')
+        order = self.request.GET.get('order', 'asc')
+        valid_sort = ['name', 'movie_count']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('name')
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['total_genres'] = Genre.objects.count()
+        return context
 
 
 class GenreCreateView(AdminSessionMixin, CreateView):
@@ -418,6 +474,7 @@ class GenreCreateView(AdminSessionMixin, CreateView):
     success_url = reverse_lazy('admin_genre_list')
 
     def form_valid(self, form):
+        form.instance.slug = slugify(form.instance.name)
         response = super().form_valid(form)
         messages.success(self.request, 'Genre added successfully.')
         AuditLog.objects.create(
@@ -438,6 +495,7 @@ class GenreUpdateView(AdminSessionMixin, UpdateView):
     success_url = reverse_lazy('admin_genre_list')
 
     def form_valid(self, form):
+        form.instance.slug = slugify(form.instance.name)
         response = super().form_valid(form)
         messages.success(self.request, 'Genre updated successfully.')
         AuditLog.objects.create(
@@ -456,8 +514,15 @@ class GenreDeleteView(AdminSessionMixin, DeleteView):
     template_name = 'admin/genres/genre_confirm_delete.html'
     success_url = reverse_lazy('admin_genre_list')
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        genre = self.get_object()
+        context['movie_count'] = genre.movies.count()
+        return context
+
     def delete(self, request, *args, **kwargs):
         obj = self.get_object()
+        movie_count = obj.movies.count()
         AuditLog.objects.create(
             user=request.user,
             action='Genre Deleted',
@@ -466,6 +531,8 @@ class GenreDeleteView(AdminSessionMixin, DeleteView):
             details=f'Deleted genre: {obj.name}',
             ip_address=request.META.get('REMOTE_ADDR')
         )
+        if movie_count > 0:
+            messages.warning(request, f'Genre "{obj.name}" is used by {movie_count} movie(s).')
         messages.success(request, 'Genre deleted successfully.')
         return super().delete(request, *args, **kwargs)
 
@@ -474,7 +541,36 @@ class LanguageListView(AdminSessionMixin, ListView):
     model = Language
     template_name = 'admin/languages/language_list.html'
     context_object_name = 'languages'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
+
+    def get_queryset(self):
+        qs = Language.objects.annotate(movie_count=Count('movies'))
+        search = self.request.GET.get('search')
+        if search:
+            qs = qs.filter(name__icontains=search)
+        sort = self.request.GET.get('sort', 'name')
+        order = self.request.GET.get('order', 'asc')
+        valid_sort = ['name', 'movie_count']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('name')
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['total_languages'] = Language.objects.count()
+        return context
 
 
 class LanguageCreateView(AdminSessionMixin, CreateView):
@@ -484,6 +580,7 @@ class LanguageCreateView(AdminSessionMixin, CreateView):
     success_url = reverse_lazy('admin_language_list')
 
     def form_valid(self, form):
+        form.instance.code = slugify(form.instance.name).replace('-', '_').upper()[:10]
         response = super().form_valid(form)
         messages.success(self.request, 'Language added successfully.')
         AuditLog.objects.create(
@@ -504,6 +601,7 @@ class LanguageUpdateView(AdminSessionMixin, UpdateView):
     success_url = reverse_lazy('admin_language_list')
 
     def form_valid(self, form):
+        form.instance.code = slugify(form.instance.name).replace('-', '_').upper()[:10]
         response = super().form_valid(form)
         messages.success(self.request, 'Language updated successfully.')
         AuditLog.objects.create(
@@ -522,8 +620,15 @@ class LanguageDeleteView(AdminSessionMixin, DeleteView):
     template_name = 'admin/languages/language_confirm_delete.html'
     success_url = reverse_lazy('admin_language_list')
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        lang = self.get_object()
+        context['movie_count'] = lang.movies.count()
+        return context
+
     def delete(self, request, *args, **kwargs):
         obj = self.get_object()
+        movie_count = obj.movies.count()
         AuditLog.objects.create(
             user=request.user,
             action='Language Deleted',
@@ -532,24 +637,45 @@ class LanguageDeleteView(AdminSessionMixin, DeleteView):
             details=f'Deleted language: {obj.name}',
             ip_address=request.META.get('REMOTE_ADDR')
         )
+        if movie_count > 0:
+            messages.warning(request, f'Language "{obj.name}" is used by {movie_count} movie(s).')
         messages.success(request, 'Language deleted successfully.')
         return super().delete(request, *args, **kwargs)
+
+
 
 
 class CastListView(AdminSessionMixin, ListView):
     model = CastMember
     template_name = 'admin/cast/cast_list.html'
     context_object_name = 'cast_members'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
 
     def get_queryset(self):
-        qs = CastMember.objects.select_related('movie').all().order_by('-id')
+        qs = CastMember.objects.select_related('movie').all()
         search = self.request.GET.get('search')
         movie_id = self.request.GET.get('movie')
         if search:
             qs = qs.filter(name__icontains=search)
         if movie_id:
             qs = qs.filter(movie_id=movie_id)
+        sort = self.request.GET.get('sort', 'id')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['id', 'name', 'movie__name', 'character_name', 'role']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-id')
         return qs
 
     def get_context_data(self, **kwargs):
@@ -621,17 +747,34 @@ class TheatreListView(AdminSessionMixin, ListView):
     model = Theater
     template_name = 'admin/theatres/theatre_list.html'
     context_object_name = 'theatres'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
 
     def get_queryset(self):
         qs = Theater.objects.values('name').annotate(
             show_count=Count('id'),
             movie_count=Count('movie', distinct=True),
             last_show=Max('time')
-        ).order_by('-last_show')
+        )
         search = self.request.GET.get('search')
         if search:
             qs = qs.filter(name__icontains=search)
+        sort = self.request.GET.get('sort', 'last_show')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['name', 'show_count', 'movie_count', 'last_show']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-last_show')
         return qs
 
     def get_context_data(self, **kwargs):
@@ -746,17 +889,34 @@ class ScreenListView(AdminSessionMixin, ListView):
     model = Theater
     template_name = 'admin/screens/screen_list.html'
     context_object_name = 'screens'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
 
     def get_queryset(self):
         qs = Theater.objects.select_related('movie').annotate(
             total_seats=Count('seats'),
             available_seats=Count('seats', filter=Q(seats__is_booked=False)),
             booked_seats=Count('seats', filter=Q(seats__is_booked=True))
-        ).order_by('-time')
+        )
         theatre_name = self.request.GET.get('theatre')
         if theatre_name:
             qs = qs.filter(name__icontains=theatre_name)
+        sort = self.request.GET.get('sort', 'time')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['id', 'name', 'movie__name', 'time', 'total_seats', 'available_seats', 'booked_seats']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-time')
         return qs
 
     def get_context_data(self, **kwargs):
@@ -828,7 +988,13 @@ class ShowListView(AdminSessionMixin, ListView):
     model = Theater
     template_name = 'admin/shows/show_list.html'
     context_object_name = 'shows'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
 
     def get_queryset(self):
         today = timezone.now().date()
@@ -836,7 +1002,7 @@ class ShowListView(AdminSessionMixin, ListView):
             total_seats=Count('seats'),
             available_seats=Count('seats', filter=Q(seats__is_booked=False)),
             booked_seats=Count('seats', filter=Q(seats__is_booked=True))
-        ).order_by('-time')
+        )
         movie_id = self.request.GET.get('movie')
         theatre_name = self.request.GET.get('theatre')
         date_from = self.request.GET.get('date_from')
@@ -849,6 +1015,17 @@ class ShowListView(AdminSessionMixin, ListView):
             qs = qs.filter(time__date__gte=date_from)
         if date_to:
             qs = qs.filter(time__date__lte=date_to)
+        sort = self.request.GET.get('sort', 'time')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['id', 'movie__name', 'name', 'time', 'total_seats', 'available_seats', 'booked_seats']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-time')
         return qs
 
     def get_context_data(self, **kwargs):
@@ -965,13 +1142,33 @@ class TrailerListView(AdminSessionMixin, ListView):
     model = Trailer
     template_name = 'admin/trailers/trailer_list.html'
     context_object_name = 'trailers'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
 
     def get_queryset(self):
-        qs = Trailer.objects.select_related('movie').all().order_by('-id')
+        qs = Trailer.objects.select_related('movie').all()
         movie_id = self.request.GET.get('movie')
         if movie_id:
             qs = qs.filter(movie_id=movie_id)
+        search = self.request.GET.get('search', '')
+        if search:
+            qs = qs.filter(Q(title__icontains=search) | Q(movie__name__icontains=search))
+        sort = self.request.GET.get('sort', 'id')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['id', 'movie__name', 'title', 'is_featured']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-id')
         return qs
 
     def get_context_data(self, **kwargs):
@@ -1043,19 +1240,64 @@ class MovieImageListView(AdminSessionMixin, ListView):
     model = MovieImage
     template_name = 'admin/images/image_list.html'
     context_object_name = 'images'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
 
     def get_queryset(self):
-        qs = MovieImage.objects.select_related('movie').all().order_by('-uploaded_at')
+        qs = MovieImage.objects.select_related('movie').all()
         movie_id = self.request.GET.get('movie')
         if movie_id:
             qs = qs.filter(movie_id=movie_id)
+        search = self.request.GET.get('search', '')
+        if search:
+            qs = qs.filter(Q(caption__icontains=search) | Q(movie__name__icontains=search))
+        sort = self.request.GET.get('sort', 'uploaded_at')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['id', 'movie__name', 'uploaded_at']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-uploaded_at')
         return qs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['movies'] = Movie.objects.all()
         return context
+
+
+class MovieImageUpdateView(AdminSessionMixin, UpdateView):
+    model = MovieImage
+    form_class = MovieImageForm
+    template_name = 'admin/images/image_form.html'
+    success_url = reverse_lazy('admin_image_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['object'] = self.object
+        return context
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(self.request, 'Image updated successfully.')
+        AuditLog.objects.create(
+            user=self.request.user,
+            action='Image Updated',
+            module='MovieImage',
+            object_id=self.object.id,
+            details=f'Updated image for {self.object.movie.name}',
+            ip_address=self.request.META.get('REMOTE_ADDR')
+        )
+        return response
 
 
 class MovieImageCreateView(AdminSessionMixin, CreateView):
@@ -1200,10 +1442,16 @@ class BookingListView(AdminSessionMixin, ListView):
     model = Booking
     template_name = 'admin/bookings/booking_list.html'
     context_object_name = 'bookings'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
 
     def get_queryset(self):
-        qs = Booking.objects.select_related('user', 'movie', 'theater').all().order_by('-booked_at')
+        qs = Booking.objects.select_related('user', 'movie', 'theater', 'payment').all()
         form = BookingSearchForm(self.request.GET)
         if form.is_valid():
             movie = form.cleaned_data.get('movie')
@@ -1221,17 +1469,30 @@ class BookingListView(AdminSessionMixin, ListView):
                 qs = qs.filter(booked_at__date__lte=date_to)
             if theatre:
                 qs = qs.filter(theater__name__icontains=theatre)
+        sort = self.request.GET.get('sort', 'booked_at')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['id', 'user__username', 'movie__name', 'theater__name', 'booked_at']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-booked_at')
         return qs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['search_form'] = BookingSearchForm(self.request.GET)
+        context['movies'] = Movie.objects.all()
+        context['theatres'] = Theater.objects.values('name', 'id').distinct().order_by('name')
         return context
 
 
 @admin_session_required
 def booking_detail(request, pk):
-    booking = get_object_or_404(Booking.objects.select_related('user', 'movie', 'theater', 'seat'), id=pk)
+    booking = get_object_or_404(Booking.objects.select_related('user', 'movie', 'theater', 'seat', 'payment'), id=pk)
     return render(request, 'admin/bookings/booking_detail.html', {'booking': booking})
 
 
@@ -1257,6 +1518,7 @@ def booking_cancel(request, pk):
 
 @admin_session_required
 def booking_reserve(request):
+    form = ReserveBookingForm()
     if request.method == 'POST':
         form = ReserveBookingForm(request.POST)
         if form.is_valid():
@@ -1291,7 +1553,8 @@ def booking_reserve(request):
                 ip_address=request.META.get('REMOTE_ADDR')
             )
             messages.success(request, f'{created_count} seat(s) reserved successfully for {user.username}.')
-    return redirect('admin_booking_list')
+            return redirect('admin_booking_list')
+    return render(request, 'admin/bookings/booking_reserve.html', {'form': form})
 
 
 @admin_session_required
@@ -1302,7 +1565,7 @@ def booking_modify(request, pk):
         new_seat = get_object_or_404(Seat, id=new_seat_id)
         if new_seat.is_booked:
             messages.error(request, 'Selected seat is already booked.')
-            return redirect('booking_detail', pk=pk)
+            return redirect('admin_booking_detail', pk=pk)
         old_seat = booking.seat
         if old_seat:
             old_seat.is_booked = False
@@ -1320,24 +1583,30 @@ def booking_modify(request, pk):
             ip_address=request.META.get('REMOTE_ADDR')
         )
         messages.success(request, 'Booking modified successfully.')
-    return redirect('booking_detail', pk=pk)
+    return redirect('admin_booking_detail', pk=pk)
 
 
 @admin_session_required
 def booking_resend_confirmation(request, pk):
     booking = get_object_or_404(Booking, id=pk)
     messages.success(request, f'Confirmation resent for booking #{booking.id}.')
-    return redirect('booking_detail', pk=pk)
+    return redirect('admin_booking_detail', pk=pk)
 
 
 class UserListView(AdminSessionMixin, ListView):
     model = User
     template_name = 'admin/users/user_list.html'
     context_object_name = 'users'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
 
     def get_queryset(self):
-        qs = User.objects.all().order_by('-date_joined')
+        qs = User.objects.all()
         search = self.request.GET.get('search')
         if search:
             qs = qs.filter(
@@ -1346,6 +1615,17 @@ class UserListView(AdminSessionMixin, ListView):
                 Q(first_name__icontains=search) |
                 Q(last_name__icontains=search)
             )
+        sort = self.request.GET.get('sort', 'date_joined')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['id', 'username', 'email', 'date_joined', 'is_active', 'is_staff']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-date_joined')
         return qs
 
 
@@ -1400,13 +1680,30 @@ class StaffListView(AdminSessionMixin, ListView):
     model = AdminProfile
     template_name = 'admin/staff/staff_list.html'
     context_object_name = 'staff_members'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
 
     def get_queryset(self):
         qs = AdminProfile.objects.select_related('user').all()
         search = self.request.GET.get('search')
         if search:
             qs = qs.filter(Q(user__username__icontains=search) | Q(user__email__icontains=search))
+        sort = self.request.GET.get('sort', 'id')
+        order = self.request.GET.get('order', 'asc')
+        valid_sort = ['id', 'user__username', 'user__email', 'role', 'department']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('id')
         return qs
 
 
@@ -1440,7 +1737,8 @@ def staff_create(request):
             messages.error(request, 'Please correct the errors below.')
     else:
         form = StaffCreateForm()
-    return render(request, 'admin/staff/staff_form.html', {'form': form, 'is_create': True})
+    profile_form = AdminProfileForm()
+    return render(request, 'admin/staff/staff_form.html', {'form': form, 'profile_form': profile_form, 'is_create': True})
 
 
 @admin_session_required
@@ -1466,10 +1764,10 @@ def staff_edit(request, pk):
     else:
         user_form = StaffUpdateForm(instance=user)
         profile_form = AdminProfileForm(instance=profile)
-    return render(request, 'admin/staff/staff_edit.html', {
-        'user_form': user_form,
+    return render(request, 'admin/staff/staff_form.html', {
+        'form': user_form,
         'profile_form': profile_form,
-        'staff_profile': profile,
+        'object': user,
     })
 
 
@@ -1477,19 +1775,21 @@ def staff_edit(request, pk):
 def staff_delete(request, pk):
     profile = get_object_or_404(AdminProfile, id=pk)
     user = profile.user
-    AuditLog.objects.create(
-        user=request.user,
-        action='Staff Deleted',
-        module='Staff',
-        object_id=user.id,
-        details=f'Deleted staff: {user.username}',
-        ip_address=request.META.get('REMOTE_ADDR')
-    )
-    profile.delete()
-    user.is_staff = False
-    user.save()
-    messages.success(request, f'Staff {user.username} removed successfully.')
-    return redirect('admin_staff_list')
+    if request.method == 'POST':
+        AuditLog.objects.create(
+            user=request.user,
+            action='Staff Deleted',
+            module='Staff',
+            object_id=user.id,
+            details=f'Deleted staff: {user.username}',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        profile.delete()
+        user.is_staff = False
+        user.save()
+        messages.success(request, f'Staff {user.username} removed successfully.')
+        return redirect('admin_staff_list')
+    return render(request, 'admin/staff/staff_confirm_delete.html', {'object': user})
 
 
 @admin_session_required
@@ -1535,7 +1835,13 @@ class CouponListView(AdminSessionMixin, ListView):
     model = Coupon
     template_name = 'admin/coupons/coupon_list.html'
     context_object_name = 'coupons'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
 
 
 class CouponCreateView(AdminSessionMixin, CreateView):
@@ -1601,7 +1907,31 @@ class NotificationListView(AdminSessionMixin, ListView):
     model = Notification
     template_name = 'admin/notifications/notification_list.html'
     context_object_name = 'notifications'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
+
+    def get_queryset(self):
+        qs = Notification.objects.select_related('user').all()
+        search = self.request.GET.get('search')
+        if search:
+            qs = qs.filter(Q(title__icontains=search) | Q(message__icontains=search))
+        sort = self.request.GET.get('sort', 'created_at')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['title', 'notification_type', 'created_at']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-created_at')
+        return qs
 
 
 @admin_session_required
@@ -1679,10 +2009,16 @@ class ReviewListView(AdminSessionMixin, ListView):
     model = Review
     template_name = 'admin/reviews/review_list.html'
     context_object_name = 'reviews'
-    paginate_by = 20
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
 
     def get_queryset(self):
-        qs = Review.objects.select_related('movie', 'user').all().order_by('-created_at')
+        qs = Review.objects.select_related('movie', 'user').all()
         status = self.request.GET.get('status')
         movie_id = self.request.GET.get('movie')
         reported = self.request.GET.get('reported')
@@ -1697,6 +2033,17 @@ class ReviewListView(AdminSessionMixin, ListView):
             qs = qs.filter(is_reported=True)
         if hidden == '1':
             qs = qs.filter(is_hidden=True)
+        sort = self.request.GET.get('sort', 'created_at')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['id', 'movie__name', 'user__username', 'rating', 'created_at']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-created_at')
         return qs
 
     def get_context_data(self, **kwargs):
@@ -1782,11 +2129,23 @@ class AuditLogListView(AdminSessionMixin, ListView):
     model = AuditLog
     template_name = 'admin/audit_logs.html'
     context_object_name = 'logs'
-    paginate_by = 30
     ordering = ['-created_at']
 
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '30')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 30
+        except (ValueError, TypeError):
+            return 30
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['users'] = User.objects.filter(is_staff=True).order_by('username')
+        context['modules'] = AuditLog.objects.values_list('module', flat=True).distinct().order_by('module')
+        return context
+
     def get_queryset(self):
-        qs = AuditLog.objects.select_related('user').all().order_by('-created_at')
+        qs = AuditLog.objects.select_related('user').all()
         search = self.request.GET.get('search')
         action = self.request.GET.get('action')
         module = self.request.GET.get('module')
@@ -1801,6 +2160,17 @@ class AuditLogListView(AdminSessionMixin, ListView):
             qs = qs.filter(action__icontains=action)
         if module:
             qs = qs.filter(module__icontains=module)
+        sort = self.request.GET.get('sort', 'created_at')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['id', 'user__username', 'action', 'module', 'created_at']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-created_at')
         return qs
 
 
@@ -1814,11 +2184,20 @@ class SettingsView(AdminSessionMixin, TemplateView):
     template_name = 'admin/settings.html'
 
     def get_context_data(self, **kwargs):
+        from django.conf import settings
         context = super().get_context_data(**kwargs)
         context['total_movies'] = Movie.objects.count()
         context['total_theatres'] = Theater.objects.values('name').distinct().count()
         context['total_screens'] = Theater.objects.count()
         context['total_staff'] = AdminProfile.objects.count()
+        context['django_version'] = django.get_version()
+        context['python_version'] = sys.version
+        context['database_type'] = settings.DATABASES['default']['ENGINE'].split('.')[-1]
+        context['server_time'] = timezone.now()
+        context['session_timeout'] = settings.ADMIN_SESSION_TIMEOUT // 60 if hasattr(settings, 'ADMIN_SESSION_TIMEOUT') else 60
+        context['admin_count'] = AdminProfile.objects.filter(role='super_admin').count() + AdminProfile.objects.filter(role='admin').count()
+        context['staff_count'] = AdminProfile.objects.filter(role='staff').count()
+        context['debug'] = settings.DEBUG
         return context
 
 
