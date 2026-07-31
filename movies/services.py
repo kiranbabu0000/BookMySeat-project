@@ -1,0 +1,618 @@
+"""Core seat reservation business logic.
+
+All seat state transitions are enforced here inside explicit transactions.
+Concurrency is protected with select_for_update() row locking; the unique
+OneToOne relationship on ReservedSeat.seat provides a database-level backstop
+so the same seat can never be part of two active reservations.
+"""
+import secrets
+from datetime import timedelta
+from decimal import Decimal, ROUND_HALF_UP
+
+from django.db import transaction, IntegrityError
+from django.db.models import Exists, F, OuterRef
+from django.utils import timezone
+
+from admin_panel.models import Coupon, GSTSlab, Payment, PricingConfig
+from .models import (
+    RESERVATION_HOLD_SECONDS,
+    Booking,
+    Reservation,
+    ReservedSeat,
+    Seat,
+    SeatCategory,
+    ShowPrice,
+    Theater,
+)
+
+
+def _round2(value):
+    return value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+
+def row_of(seat_number):
+    return (seat_number or '').rstrip('0123456789').upper() or 'Z'
+
+
+def _row_index(row):
+    """Numeric row band for ordering; multi-letter rows sit beyond 'Z'."""
+    row = (row or '').upper()
+    if len(row) == 1 and 'A' <= row <= 'Z':
+        return ord(row)
+    return 1000
+
+
+def _load_categories():
+    return list(SeatCategory.objects.all())
+
+
+def _price_map(show):
+    return {
+        row.category_id: Decimal(row.price)
+        for row in ShowPrice.objects.filter(theater=show)
+    }
+
+
+def category_for_seat(seat_number, categories=None):
+    """Return the SeatCategory covering a seat, or the last one as fallback."""
+    idx = _row_index(row_of(seat_number))
+    cats = categories if categories is not None else _load_categories()
+    for category in cats:
+        if _row_index(category.row_start) <= idx <= _row_index(category.row_end):
+            return category
+    if cats:
+        return cats[-1]
+    return None
+
+
+def seat_price(show, seat_number, categories=None, price_map=None):
+    """Ticket price for a seat from the show's per-category catalog.
+
+    Falls back to the show's reference ticket_price when the catalog has no
+    entry for the seat's category.
+    """
+    if price_map is None or categories is None:
+        categories = categories or _load_categories()
+        price_map = price_map or _price_map(show)
+    category = category_for_seat(seat_number, categories)
+    if category is not None and category.id in price_map:
+        return _round2(price_map[category.id])
+    return _round2(Decimal(show.ticket_price))
+
+
+def get_pricing_config():
+    """Current platform (per ticket) and miscellaneous (per booking) fees."""
+    config, _ = PricingConfig.objects.get_or_create(pk=1)
+    return {
+        'platform_fee_per_ticket': Decimal(config.platform_fee_per_ticket),
+        'misc_fee_per_booking': Decimal(config.misc_fee_per_booking),
+    }
+
+
+def gst_rate_for(taxable):
+    """Return the GST percentage for a taxable amount using the configured slabs."""
+    slabs = list(GSTSlab.objects.all().order_by('display_order'))
+    if not slabs:
+        return Decimal('0.00')
+    taxable = Decimal(taxable)
+    for slab in slabs:
+        if taxable < slab.min_amount:
+            continue
+        if slab.max_amount is None or taxable <= slab.max_amount:
+            return Decimal(slab.rate)
+    return Decimal(slabs[-1].rate)
+
+
+def gst_slabs():
+    """Serializable GST slab list for the client-side price breakdown."""
+    return [
+        {
+            'min_amount': str(s.min_amount),
+            'max_amount': str(s.max_amount) if s.max_amount is not None else None,
+            'rate': str(s.rate),
+        }
+        for s in GSTSlab.objects.all().order_by('display_order')
+    ]
+
+
+def validate_coupon(code, subtotal):
+    """Return the Coupon for a code or None; raise ReservationError if unusable."""
+    if not code or not str(code).strip():
+        return None
+    coupon = Coupon.objects.filter(code__iexact=str(code).strip()).first()
+    if not coupon or not coupon.is_active:
+        raise ReservationError('This coupon code is invalid or inactive.')
+    now = timezone.now()
+    if coupon.valid_from and coupon.valid_from > now:
+        raise ReservationError('This coupon is not active yet.')
+    if coupon.valid_to and coupon.valid_to < now:
+        raise ReservationError('This coupon has expired.')
+    if subtotal < coupon.min_order_amount:
+        raise ReservationError(
+            'This coupon requires a minimum order of \u20b9{:.2f}.'.format(coupon.min_order_amount)
+        )
+    if coupon.max_uses and coupon.used_count >= coupon.max_uses:
+        raise ReservationError('This coupon has reached its usage limit.')
+    return coupon
+
+
+def discount_for(subtotal, coupon):
+    if not coupon:
+        return Decimal('0.00')
+    if coupon.discount_amount:
+        return min(Decimal(coupon.discount_amount), subtotal)
+    return _round2(subtotal * Decimal(coupon.discount_percent) / 100)
+
+
+def reservation_pricing(reservation, coupon_code=None):
+    """Full price breakdown for a reservation (seats, fees, GST, discount, total)."""
+    entries = list(
+        reservation.reserved_seats.select_related('seat').order_by('seat__seat_number')
+    )
+    categories = _load_categories()
+    price_map = _price_map(reservation.show)
+    seats = []
+    for entry in entries:
+        number = entry.seat.seat_number
+        category = category_for_seat(number, categories)
+        category_name = category.name if category else ''
+        seats.append({
+            'seat_id': entry.seat_id,
+            'seat_number': number,
+            'tier': category_name,
+            'category': category_name,
+            'price': seat_price(reservation.show, number, categories, price_map),
+        })
+    subtotal = sum((s['price'] for s in seats), Decimal('0.00'))
+    config = get_pricing_config()
+    platform_fee = config['platform_fee_per_ticket'] * len(seats)
+    misc_fee = config['misc_fee_per_booking'] if seats else Decimal('0.00')
+    convenience_fee = _round2(platform_fee + misc_fee)
+    taxable = subtotal + platform_fee + misc_fee
+    gst_rate = gst_rate_for(taxable)
+    gst = _round2(taxable * gst_rate / 100)
+    coupon = validate_coupon(coupon_code, subtotal)
+    discount = discount_for(subtotal, coupon) if coupon else Decimal('0.00')
+    total = subtotal + platform_fee + misc_fee + gst - discount
+    return {
+        'seats': seats,
+        'subtotal': _round2(subtotal),
+        'platform_fee': _round2(platform_fee),
+        'misc_fee': _round2(misc_fee),
+        'convenience_fee': convenience_fee,
+        'gst_rate': gst_rate,
+        'gst': gst,
+        'discount': discount,
+        'total': _round2(total),
+        'coupon': coupon,
+    }
+
+
+class ReservationError(Exception):
+    """Raised for any business-rule violation during seat reservation."""
+
+
+def _expire_stale_reservations(show, now=None):
+    """Lazily release expired reservations for a show (bulk, one UPDATE)."""
+    now = now or timezone.now()
+    expired_ids = list(
+        Reservation.objects.filter(show=show, status='active', expires_at__lte=now)
+        .values_list('id', flat=True)
+    )
+    if not expired_ids:
+        return 0
+    Reservation.objects.filter(id__in=expired_ids).update(status='expired')
+    ReservedSeat.objects.filter(reservation_id__in=expired_ids).delete()
+    Theater.objects.filter(pk=show.pk).update(seat_revision=F('seat_revision') + 1)
+    return len(expired_ids)
+
+
+def expire_stale_for_show(show):
+    """Release a show's expired reservations inside its own transaction."""
+    with transaction.atomic():
+        try:
+            locked = Theater.objects.select_for_update().get(pk=show.pk)
+        except Theater.DoesNotExist:
+            raise ReservationError('Show not found.') from None
+        return _expire_stale_reservations(locked)
+
+
+def release_expired_reservations():
+    """Release every expired reservation across all shows. Returns count.
+
+    Intended to be run periodically (cron / management command). User-facing
+    requests also perform lazy expiry, so this is a safety net rather than the
+    only mechanism, avoiding continuous database polling.
+    """
+    now = timezone.now()
+    expired = list(
+        Reservation.objects.filter(status='active', expires_at__lte=now)
+        .values_list('id', 'show_id')
+    )
+    if not expired:
+        return 0
+    ids = [row[0] for row in expired]
+    show_ids = {row[1] for row in expired}
+    with transaction.atomic():
+        Reservation.objects.filter(id__in=ids).update(status='expired')
+        ReservedSeat.objects.filter(reservation_id__in=ids).delete()
+        if show_ids:
+            Theater.objects.filter(id__in=show_ids).update(
+                seat_revision=F('seat_revision') + 1
+            )
+    return len(ids)
+
+
+def seat_data_for_show(show, now=None):
+    """Return ordered seat info: {id, number, row, tier, price, state} for a show."""
+    now = now or timezone.now()
+    reserved = Reservation.objects.filter(
+        show=show,
+        status='active',
+        expires_at__gt=now,
+        reserved_seats__seat=OuterRef('pk'),
+    )
+    seats = (
+        Seat.objects.filter(theater=show)
+        .annotate(is_reserved=Exists(reserved))
+        .order_by('seat_number')
+        .values_list('pk', 'seat_number', 'is_booked', 'is_reserved')
+    )
+    categories = _load_categories()
+    price_map = _price_map(show)
+    rows = []
+    for pk, number, booked, is_reserved in seats:
+        category = category_for_seat(number, categories)
+        rows.append({
+            'id': pk,
+            'number': number,
+            'row': number.rstrip('0123456789') or 'Z',
+            'tier': category.name if category else '',
+            'category': category.name if category else '',
+            'price': seat_price(show, number, categories, price_map),
+            'state': 'booked' if booked else ('reserved' if is_reserved else 'available'),
+        })
+    return rows
+
+
+def seat_states_for_show(show, now=None):
+    """Return {seat_id: state} where state is available|reserved|booked."""
+    return {
+        str(item['id']): item['state'] for item in seat_data_for_show(show, now)
+    }
+
+
+def _parse_seat_ids(raw_ids, limit=12):
+    """Validate and normalise seat id input from the client."""
+    if not raw_ids:
+        return set()
+    ids = set()
+    for value in raw_ids:
+        try:
+            seat_id = int(value)
+        except (TypeError, ValueError):
+            raise ReservationError('Invalid seat identifier received.')
+        if seat_id <= 0:
+            raise ReservationError('Invalid seat identifier received.')
+        ids.add(seat_id)
+    if len(ids) > limit:
+        raise ReservationError(f'You can select a maximum of {limit} seats at a time.')
+    return ids
+
+
+def _locked_seats(seat_ids, show):
+    seats = list(
+        Seat.objects.select_for_update().filter(pk__in=seat_ids, theater=show)
+    )
+    if len(seats) != len(seat_ids):
+        raise ReservationError('One or more seats are not part of this show.')
+    return seats
+
+
+def _assert_available(seats, now):
+    """Raise if any seat is booked or held by another active reservation."""
+    for seat in seats:
+        if seat.is_booked:
+            raise ReservationError(f'Seat {seat.seat_number} has already been booked.')
+        held = ReservedSeat.objects.filter(
+            seat=seat,
+            reservation__status='active',
+            reservation__expires_at__gt=now,
+        ).exists()
+        if held:
+            raise ReservationError(
+                f'Seat {seat.seat_number} has just been reserved by another user.'
+            )
+
+
+def _bulk_hold_seats(reservation, seats):
+    """Insert held seats, converting unique-constraint races to a clean error."""
+    try:
+        ReservedSeat.objects.bulk_create(
+            [ReservedSeat(reservation=reservation, seat=seat) for seat in seats]
+        )
+    except IntegrityError:
+        raise ReservationError(
+            'This seat has just been reserved by another user.'
+        ) from None
+
+
+def create_reservation(user, show_id, seat_ids):
+    """Atomically reserve a set of seats for the user."""
+    now = timezone.now()
+    requested = _parse_seat_ids(seat_ids)
+    if not requested:
+        raise ReservationError('Please select at least one seat.')
+
+    with transaction.atomic():
+        try:
+            show = Theater.objects.select_for_update().get(pk=show_id)
+        except Theater.DoesNotExist:
+            raise ReservationError('Show not found.') from None
+        if show.time <= now:
+            raise ReservationError('This show has already started and cannot be booked.')
+        _expire_stale_reservations(show, now)
+
+        existing = Reservation.objects.filter(
+            user=user, show=show, status='active'
+        ).select_for_update().first()
+        if existing and existing.expires_at > now:
+            return existing
+
+        seats = _locked_seats(requested, show)
+        _assert_available(seats, now)
+
+        reservation = Reservation.objects.create(
+            token=secrets.token_urlsafe(24),
+            user=user,
+            show=show,
+            status='active',
+            payment_status='pending',
+            expires_at=now + timedelta(seconds=RESERVATION_HOLD_SECONDS),
+        )
+        _bulk_hold_seats(reservation, seats)
+        show.bump_seat_revision()
+        return reservation
+
+
+def _get_owned_active_reservation(user, token, now=None):
+    now = now or timezone.now()
+    try:
+        reservation = (
+            Reservation.objects.select_for_update()
+            .select_related('show')
+            .get(token=token)
+        )
+    except Reservation.DoesNotExist:
+        raise ReservationError('Reservation not found.') from None
+    if reservation.user_id != user.id:
+        raise ReservationError('This reservation does not belong to you.')
+    if reservation.status == 'booked':
+        raise ReservationError('This reservation has already been completed.')
+    if reservation.status != 'active' or reservation.expires_at <= now:
+        raise ReservationError(
+            'Your reservation has expired. Please select your seats again.'
+        )
+    return reservation
+
+
+def modify_reservation(user, token, add_seat_ids, remove_seat_ids):
+    """Add/remove seats on an active reservation and refresh its expiry."""
+    now = timezone.now()
+    to_add = _parse_seat_ids(add_seat_ids)
+    to_remove = _parse_seat_ids(remove_seat_ids)
+    to_remove = {s for s in to_remove if s not in to_add}
+    if not to_add and not to_remove:
+        raise ReservationError('No seat changes requested.')
+
+    with transaction.atomic():
+        reservation = _get_owned_active_reservation(user, token, now)
+        show = reservation.show
+        if show.time <= now:
+            raise ReservationError('This show has already started and cannot be booked.')
+        _expire_stale_reservations(show, now)
+        reservation.refresh_from_db()
+        if reservation.status != 'active' or reservation.expires_at <= now:
+            raise ReservationError(
+                'Your reservation has expired. Please select your seats again.'
+            )
+
+        already_held = set(
+            ReservedSeat.objects.filter(reservation=reservation)
+            .values_list('seat_id', flat=True)
+        )
+        to_remove &= already_held
+        to_add -= already_held
+
+        if to_remove:
+            ReservedSeat.objects.filter(
+                reservation=reservation, seat_id__in=to_remove
+            ).delete()
+
+        if to_add:
+            seats = _locked_seats(to_add, show)
+            _assert_available(seats, now)
+            _bulk_hold_seats(reservation, seats)
+
+        if not ReservedSeat.objects.filter(reservation=reservation).exists():
+            raise ReservationError('Reservation must keep at least one seat.')
+
+        reservation.expires_at = now + timedelta(seconds=RESERVATION_HOLD_SECONDS)
+        reservation.save(update_fields=['expires_at', 'updated_at'])
+        show.bump_seat_revision()
+        return reservation
+
+
+def _generate_booking_ref():
+    while True:
+        ref = 'BMS' + secrets.token_hex(4).upper()
+        if not Booking.objects.filter(booking_ref=ref).exists():
+            return ref
+
+
+def confirm_booking(user, token, transaction_id=None, payment_method='upi', coupon_code=None):
+    """Mark an active reservation as paid and convert seats into bookings."""
+    now = timezone.now()
+    with transaction.atomic():
+        reservation = _get_owned_active_reservation(user, token, now)
+        show = reservation.show
+        if show.time <= now:
+            raise ReservationError('This show has already started and cannot be booked.')
+        _expire_stale_reservations(show, now)
+        reservation.refresh_from_db()
+        if reservation.status != 'active' or reservation.expires_at <= now:
+            raise ReservationError(
+                'Your reservation has expired. Please select your seats again.'
+            )
+
+        reserved_seats = list(
+            ReservedSeat.objects.select_for_update()
+            .filter(reservation=reservation)
+            .select_related('seat')
+        )
+        if not reserved_seats:
+            raise ReservationError('Reservation has no seats left.')
+
+        pricing = reservation_pricing(reservation, coupon_code=coupon_code)
+        coupon = pricing['coupon']
+        total = pricing['total']
+
+        seat_prices = {s['seat_id']: s['price'] for s in pricing['seats']}
+        seat_categories = {s['seat_id']: s['category'] for s in pricing['seats']}
+        count = len(reserved_seats)
+        platform_share = pricing['platform_fee'] / count
+        misc_share = pricing['misc_fee'] / count
+        gst_share = pricing['gst'] / count
+        subtotal = pricing['subtotal']
+
+        rows = []
+        charged = []
+        for entry in reserved_seats:
+            try:
+                seat = Seat.objects.select_for_update().get(pk=entry.seat_id)
+            except Seat.DoesNotExist:
+                raise ReservationError(
+                    f'Seat {entry.seat.seat_number} is no longer available. '
+                    'Please reselect your seats.'
+                ) from None
+            if seat.is_booked:
+                raise ReservationError(
+                    f'Seat {seat.seat_number} was booked by another user. '
+                    'Please reselect your seats.'
+                )
+            price = seat_prices[entry.seat_id]
+            disc_share = pricing['discount'] * price / subtotal if subtotal else Decimal('0.00')
+            amount = _round2(price + platform_share + misc_share + gst_share - disc_share)
+            rows.append({
+                'seat': seat,
+                'seat_id': entry.seat_id,
+                'price': price,
+                'disc_share': disc_share,
+                'amount': amount,
+            })
+            charged.append(amount)
+
+        if len(charged) > 1:
+            charged[-1] = _round2(total - sum(charged[:-1], Decimal('0.00')))
+
+        bookings = []
+        for idx, row in enumerate(rows):
+            seat = row['seat']
+            booking = Booking.objects.create(
+                user=user,
+                seat=seat,
+                movie=show.movie,
+                theater=show,
+                reservation=reservation,
+                booking_ref=_generate_booking_ref(),
+                seat_category=seat_categories.get(row['seat_id'], ''),
+                ticket_price=row['price'],
+                gst_rate=pricing['gst_rate'],
+                gst_amount=_round2(gst_share),
+                platform_fee=_round2(platform_share),
+                misc_fee=_round2(misc_share),
+                discount=_round2(row['disc_share']),
+                total=charged[idx],
+            )
+            Seat.objects.filter(pk=seat.pk).update(is_booked=True)
+            Payment.objects.create(
+                booking=booking,
+                amount=charged[idx],
+                payment_method=payment_method,
+                transaction_id=transaction_id or '',
+                status='completed',
+            )
+            bookings.append(booking)
+
+        reservation.coupon = coupon
+        reservation.coupon_code = coupon.code if coupon else ''
+        reservation.subtotal_amount = pricing['subtotal']
+        reservation.convenience_fee = pricing['convenience_fee']
+        reservation.platform_fee = pricing['platform_fee']
+        reservation.misc_fee = pricing['misc_fee']
+        reservation.gst_rate = pricing['gst_rate']
+        reservation.gst_amount = pricing['gst']
+        reservation.discount_amount = pricing['discount']
+        reservation.total_amount = total
+        reservation.status = 'booked'
+        reservation.payment_status = 'completed'
+        reservation.save(update_fields=[
+            'coupon', 'coupon_code', 'subtotal_amount', 'convenience_fee',
+            'platform_fee', 'misc_fee', 'gst_rate', 'gst_amount',
+            'discount_amount', 'total_amount', 'status',
+            'payment_status', 'updated_at',
+        ])
+        if coupon:
+            Coupon.objects.filter(pk=coupon.pk).update(used_count=F('used_count') + 1)
+        ReservedSeat.objects.filter(reservation=reservation).delete()
+        show.bump_seat_revision()
+        return reservation, bookings
+
+
+def cancel_booking(user, booking_id):
+    """Cancel a booking before showtime and issue a refund."""
+    now = timezone.now()
+    with transaction.atomic():
+        try:
+            booking = (
+                Booking.objects.select_for_update()
+                .select_related('seat', 'theater')
+                .get(pk=booking_id)
+            )
+        except Booking.DoesNotExist:
+            raise ReservationError('Booking not found.') from None
+        if booking.user_id != user.id:
+            raise ReservationError('This booking does not belong to you.')
+        if booking.theater.time <= now:
+            raise ReservationError(
+                'Cancellation is not allowed once the show has started.'
+            )
+        Payment.objects.filter(booking=booking, status='completed').update(
+            status='refunded'
+        )
+        Seat.objects.filter(pk=booking.seat_id).update(is_booked=False)
+        booking.theater.bump_seat_revision()
+        booking.delete()
+    return True
+
+
+def release_reservation(user, token):
+    """Cancel a reservation and immediately free its seats."""
+    with transaction.atomic():
+        try:
+            reservation = (
+                Reservation.objects.select_for_update().select_related('show').get(token=token)
+            )
+        except Reservation.DoesNotExist:
+            raise ReservationError('Reservation not found.') from None
+        if reservation.user_id != user.id:
+            raise ReservationError('This reservation does not belong to you.')
+        if reservation.status == 'booked':
+            raise ReservationError('A completed reservation cannot be released.')
+        if reservation.status != 'active':
+            return reservation
+        reservation.status = 'cancelled'
+        reservation.save(update_fields=['status', 'updated_at'])
+        ReservedSeat.objects.filter(reservation=reservation).delete()
+        reservation.show.bump_seat_revision()
+        return reservation

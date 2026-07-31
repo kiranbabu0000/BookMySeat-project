@@ -9,3 +9,13 @@ def url_replace(context, **kwargs):
     for key, value in kwargs.items():
         query[key] = value
     return query.urlencode()
+
+
+@register.filter
+def get_item(dictionary, key):
+    if dictionary is None:
+        return None
+    try:
+        return dictionary.get(key)
+    except AttributeError:
+        return None

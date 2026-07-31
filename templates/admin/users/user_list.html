@@ -30,7 +30,7 @@
           <td class="small">{{ u.date_joined|date:"d M Y" }}</td>
           <td>{% if u.is_staff %}<span class="badge-bms-info">Staff</span>{% else %}<span class="badge-bms-secondary">User</span>{% endif %}</td>
           <td>{% if u.is_active %}<span class="badge-bms-success">Active</span>{% else %}<span class="badge-bms-danger">Inactive</span>{% endif %}</td>
-          <td><span class="badge-bms-info">{{ u.booking_set.count }}</span></td>
+          <td><span class="badge-bms-info">{{ u.booking_count }}</span></td>
           <td>
             <a href="{% url 'admin_user_bookings' u.id %}" class="btn btn-sm btn-outline-info" title="View Bookings"><i class="bi bi-ticket"></i></a>
             <a href="{% url 'admin_user_toggle_active' u.id %}" class="btn btn-sm btn-outline-{% if u.is_active %}warning{% else %}success{% endif %}" title="{% if u.is_active %}Deactivate{% else %}Activate{% endif %}">

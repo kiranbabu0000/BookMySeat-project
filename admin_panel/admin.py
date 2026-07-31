@@ -3,6 +3,21 @@ from .models import (
     CastMember, Theatre, Screen, Show, Trailer, MovieImage,
     AdminProfile, AdminPermission, AuditLog, Coupon, Notification, Review, Payment
 )
+from movies.models import Reservation, ReservedSeat
+
+
+@admin.register(Reservation)
+class ReservationAdmin(admin.ModelAdmin):
+    list_display = ['token', 'user', 'show', 'status', 'payment_status', 'created_at', 'expires_at']
+    list_filter = ['status', 'payment_status', 'created_at', 'show']
+    search_fields = ['token', 'user__username', 'show__name']
+    readonly_fields = ['token', 'created_at', 'updated_at']
+
+
+@admin.register(ReservedSeat)
+class ReservedSeatAdmin(admin.ModelAdmin):
+    list_display = ['seat', 'reservation', 'added_at']
+    search_fields = ['seat__seat_number', 'reservation__token']
 
 
 @admin.register(CastMember)

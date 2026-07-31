@@ -48,7 +48,10 @@
         {% if user.is_authenticated %}
         <li class="nav-item"><a class="nav-link" href="{% url 'profile' %}">Profile</a></li>
         <li class="nav-item">
-          <a class="nav-link border-0 bg-transparent" href="{% url 'logout' %}">Logout</a>
+          <form method="post" action="{% url 'logout' %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="nav-link border-0 bg-transparent" style="cursor:pointer; background:none; border:none; width:100%; text-align:left; padding:0.5rem 1rem;">Logout</button>
+          </form>
         </li>
         {% else %}
         <li class="nav-item"><a class="nav-link" href="{% url 'login' %}">Login</a></li>
@@ -108,7 +111,10 @@
                 var a = document.createElement('a');
                 a.href = m.url;
                 a.className = 'search-suggestions__item';
-                a.innerHTML = '<span class="search-suggestions__name">' + m.name + '</span>';
+                var span = document.createElement('span');
+                span.className = 'search-suggestions__name';
+                span.textContent = m.name;
+                a.appendChild(span);
                 suggestions.appendChild(a);
               });
             }

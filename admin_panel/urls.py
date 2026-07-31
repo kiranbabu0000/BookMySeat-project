@@ -7,14 +7,15 @@ urlpatterns = [
     path('dashboard/', views.DashboardView.as_view(), name='admin_dashboard'),
     path('profile/', views.profile_view, name='admin_profile'),
 
-    path('movies/', views.MovieListView.as_view(), name='admin_movie_list'),
-    path('movies/add/', views.MovieCreateView.as_view(), name='admin_movie_add'),
-    path('movies/<int:pk>/edit/', views.MovieUpdateView.as_view(), name='admin_movie_edit'),
-    path('movies/<int:pk>/delete/', views.MovieDeleteView.as_view(), name='admin_movie_delete'),
-    path('movies/<int:pk>/', views.MovieDetailView.as_view(), name='admin_movie_detail'),
-    path('movies/<int:pk>/toggle-status/', views.movie_toggle_status, name='admin_movie_toggle_status'),
-    path('movies/<int:pk>/toggle-homepage/', views.movie_toggle_homepage, name='admin_movie_toggle_homepage'),
-    path('movies/<int:pk>/restore/', views.movie_restore, name='admin_movie_restore'),
+    path('admin-movies/', views.MovieListView.as_view(), name='admin_movie_list'),
+    path('admin-movies/add/', views.MovieCreateView.as_view(), name='admin_movie_add'),
+    path('admin-movies/<int:pk>/edit/', views.MovieUpdateView.as_view(), name='admin_movie_edit'),
+    path('admin-movies/<int:pk>/delete/', views.MovieDeleteView.as_view(), name='admin_movie_delete'),
+    path('admin-movies/<int:pk>/', views.MovieDetailView.as_view(), name='admin_movie_detail'),
+    path('admin-movies/<int:pk>/toggle-status/', views.movie_toggle_status, name='admin_movie_toggle_status'),
+    path('admin-movies/<int:pk>/toggle-homepage/', views.movie_toggle_homepage, name='admin_movie_toggle_homepage'),
+    path('admin-movies/<int:pk>/restore/', views.movie_restore, name='admin_movie_restore'),
+    path('remove-movie/', views.movie_removal_list, name='admin_movie_removal'),
 
     path('genres/', views.GenreListView.as_view(), name='admin_genre_list'),
     path('genres/add/', views.GenreCreateView.as_view(), name='admin_genre_add'),
@@ -51,6 +52,10 @@ urlpatterns = [
     path('shows/<int:pk>/toggle-status/', views.show_toggle_status, name='admin_show_toggle_status'),
     path('shows/bulk-action/', views.show_bulk_action, name='admin_show_bulk_action'),
 
+    path('pricing/', views.pricing_dashboard, name='admin_pricing_dashboard'),
+    path('pricing/show/<int:pk>/', views.pricing_show_edit, name='admin_pricing_show_edit'),
+    path('pricing/config/', views.pricing_config, name='admin_pricing_config'),
+
     path('trailers/', views.TrailerListView.as_view(), name='admin_trailer_list'),
     path('trailers/add/', views.TrailerCreateView.as_view(), name='admin_trailer_add'),
     path('trailers/<int:pk>/edit/', views.TrailerUpdateView.as_view(), name='admin_trailer_edit'),
@@ -69,6 +74,8 @@ urlpatterns = [
     path('bookings/reserve/', views.booking_reserve, name='admin_booking_reserve'),
     path('bookings/<int:pk>/modify/', views.booking_modify, name='admin_booking_modify'),
     path('bookings/<int:pk>/resend/', views.booking_resend_confirmation, name='admin_booking_resend'),
+
+    path('reservations/', views.ReservationListView.as_view(), name='admin_reservation_list'),
 
     path('users/', views.UserListView.as_view(), name='admin_user_list'),
     path('users/<int:pk>/toggle-active/', views.user_toggle_active, name='admin_user_toggle_active'),

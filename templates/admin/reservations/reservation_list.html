@@ -1,0 +1,121 @@
+{% extends 'admin/base_admin.html' %}
+{% load admin_tags %}
+{% block title %}Reservations{% endblock %}
+{% block page_title %}Reservation Monitoring{% endblock %}
+{% block content %}
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span class="text-muted small">
+      <i class="bi bi-hourglass-split me-1"></i>
+      <strong class="text-warning">{{ total_active }}</strong> active reservation(s) currently holding seats
+    </span>
+    <form method="get" class="row g-2 align-items-end justify-content-end">
+      <div class="col-md-2">
+        <label class="small text-muted">Movie</label>
+        <select name="movie" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for m in movies %}
+          <option value="{{ m.id }}" {% if request.GET.movie == m.id|stringformat:'s' %}selected{% endif %}>{{ m.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">Theatre</label>
+        <select name="theatre" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for t in theatre_names %}
+          <option value="{{ t }}" {% if request.GET.theatre == t %}selected{% endif %}>{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">Date</label>
+        <input type="date" name="date" class="form-control form-control-sm" value="{{ request.GET.date|default:'' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">User</label>
+        <input type="text" name="user" class="form-control form-control-sm" value="{{ request.GET.user|default:'' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">Status</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for value, label in status_choices %}
+          <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label|title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">Payment</label>
+        <select name="payment" class="form-select form-select-sm">
+          <option value="">All</option>
+          {% for value, label in payment_choices %}
+          <option value="{{ value }}" {% if request.GET.payment == value %}selected{% endif %}>{{ label|title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
+      </div>
+      <div class="col-auto">
+        <a href="{% url 'admin_reservation_list' %}" class="btn btn-sm btn-bms-outline"><i class="bi bi-arrow-counterclockwise"></i></a>
+      </div>
+    </form>
+  </div>
+  <div class="card-bms-body p-0">
+    <div class="table-responsive">
+      <table class="table table-bms mb-0">
+        <thead>
+          <tr>
+            <th><a href="?{% url_replace sort='token' order='asc' %}" class="text-decoration-none text-reset">Token</a></th>
+            <th><a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User</a></th>
+            <th>Movie / Theatre</th>
+            <th>Seats</th>
+            <th>Expires</th>
+            <th>Status</th>
+            <th>Payment</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in reservations %}
+          <tr>
+            <td class="small text-monospace">{{ r.token|slice:":16" }}</td>
+            <td>{{ r.user.username }}</td>
+            <td>{{ r.show.movie.name|truncatechars:28 }}<br><small class="text-muted">{{ r.show.name|truncatechars:22 }} · {{ r.show.time|date:"g:i A, d M" }}</small></td>
+            <td>
+              {% for rs in r.reserved_seats.all %}<span class="badge bg-light text-dark border">{{ rs.seat.seat_number }}</span> {% endfor %}
+            </td>
+            <td class="small {% if r.status == 'active' and r.expires_at < now %}text-danger fw-bold{% endif %}">{{ r.expires_at|date:"g:i A" }} <small class="text-muted">({{ r.expires_at|timeuntil }} left)</small></td>
+            <td>
+              {% if r.status == 'active' %}
+              <span class="badge-bms-warning">Active</span>
+              {% elif r.status == 'booked' %}
+              <span class="badge-bms-success">Booked</span>
+              {% elif r.status == 'expired' %}
+              <span class="badge-bms-secondary">Expired</span>
+              {% else %}
+              <span class="badge-bms-secondary">Cancelled</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.payment_status == 'completed' %}
+              <span class="badge-bms-success">Completed</span>
+              {% elif r.payment_status == 'failed' %}
+              <span class="badge-bms-warning">Failed</span>
+              {% else %}
+              <span class="badge-bms-secondary">Pending</span>
+              {% endif %}
+            </td>
+            <td class="small">{{ r.created_at|date:"d M Y, g:i A" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="text-center text-muted py-4">No reservations found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
+</div>
+{% endblock %}

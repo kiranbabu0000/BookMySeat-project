@@ -1,19 +1,28 @@
 (function () {
   'use strict';
 
+  function setSidebar(show) {
+    const sidebar = document.getElementById('adminSidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (sidebar) sidebar.classList.toggle('show', show);
+    if (backdrop) backdrop.classList.toggle('show', show);
+  }
+
   function toggleSidebar() {
     const sidebar = document.getElementById('adminSidebar');
     if (sidebar) {
-      sidebar.classList.toggle('show');
+      setSidebar(!sidebar.classList.contains('show'));
     }
   }
 
   function closeSidebar() {
-    const sidebar = document.getElementById('adminSidebar');
-    if (sidebar && window.innerWidth < 992) {
-      sidebar.classList.remove('show');
+    if (window.innerWidth < 992) {
+      setSidebar(false);
     }
   }
+
+  window.toggleSidebar = toggleSidebar;
+  window.closeSidebar = closeSidebar;
 
   function handleClickOutsideSidebar(e) {
     const sidebar = document.getElementById('adminSidebar');
@@ -48,10 +57,7 @@
 
     window.addEventListener('resize', function () {
       if (window.innerWidth >= 992) {
-        const sidebar = document.getElementById('adminSidebar');
-        if (sidebar) {
-          sidebar.classList.remove('show');
-        }
+        setSidebar(false);
       }
     });
   }

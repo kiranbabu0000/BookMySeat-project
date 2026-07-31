@@ -1,7 +1,9 @@
+from decimal import Decimal
+
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from movies.models import Movie, Theater, Seat
-from admin_panel.models import Genre, Language, Theatre, Screen, Show
+from movies.models import Movie, Theater, Seat, SeatCategory, ShowPrice
+from admin_panel.models import Genre, Language, Theatre, Screen, Show, GSTSlab, PricingConfig
 import random
 
 
@@ -47,6 +49,42 @@ class Command(BaseCommand):
         movies = list(Movie.objects.filter(status='now_showing'))
         if not movies:
             movies = list(Movie.objects.all()[:3])
+
+        # --- Seat categories, GST slabs and pricing config ---
+        cat_specs = [
+            ('SILVER', 'A', 'C', Decimal('0.90')),
+            ('GOLD', 'D', 'G', Decimal('1.00')),
+            ('PLATINUM', 'H', 'Z', Decimal('1.20')),
+        ]
+        categories = []
+        for idx, (name, start, end, _mult) in enumerate(cat_specs):
+            cat, _ = SeatCategory.objects.get_or_create(
+                name=name,
+                defaults={'row_start': start, 'row_end': end, 'display_order': idx},
+            )
+            categories.append(cat)
+        self.stdout.write(self.style.SUCCESS(f'Seeded {len(categories)} seat categories'))
+
+        GSTSlab.objects.get_or_create(
+            min_amount=Decimal('0.00'), max_amount=Decimal('100.00'),
+            defaults={'rate': Decimal('12.00'), 'display_order': 1},
+        )
+        GSTSlab.objects.get_or_create(
+            min_amount=Decimal('100.01'), max_amount=None,
+            defaults={'rate': Decimal('18.00'), 'display_order': 2},
+        )
+        self.stdout.write(self.style.SUCCESS(f'Seeded {GSTSlab.objects.count()} GST slabs'))
+
+        pricing_config, cfg_created = PricingConfig.objects.get_or_create(
+            pk=1,
+            defaults={
+                'platform_fee_per_ticket': Decimal('5.00'),
+                'misc_fee_per_booking': Decimal('2.50'),
+            },
+        )
+        self.stdout.write(self.style.SUCCESS(
+            'Pricing config ' + ('created' if cfg_created else 'already present')
+        ))
 
         for config in theatre_configs:
             theatre, t_created = Theatre.objects.get_or_create(
@@ -106,10 +144,12 @@ class Command(BaseCommand):
                     if show_datetime < timezone.now():
                         continue
                     theater_name = config['name']
+                    base_price = Decimal(random.choice([120, 150, 180, 220, 250]))
                     theater_obj, th_created = Theater.objects.get_or_create(
                         name=theater_name,
                         movie=movie,
                         time=show_datetime,
+                        defaults={'ticket_price': base_price},
                     )
                     if th_created:
                         created_theater_count += 1
@@ -126,9 +166,19 @@ class Command(BaseCommand):
                         Seat.objects.bulk_create(seats_to_create, ignore_conflicts=True)
                         created_seat_count += len(seats_to_create)
 
+                    for (name, _start, _end, mult), category in zip(cat_specs, categories):
+                        ShowPrice.objects.get_or_create(
+                            theater=theater_obj,
+                            category=category,
+                            defaults={'price': (base_price * mult).quantize(Decimal('0.01'))},
+                        )
+
         self.stdout.write(self.style.SUCCESS(f'Seeded {created_theatre_count} new theatres'))
         self.stdout.write(self.style.SUCCESS(f'Seeded {created_screen_count} new screens'))
         self.stdout.write(self.style.SUCCESS(f'Seeded {created_show_count} new shows'))
         self.stdout.write(self.style.SUCCESS(f'Seeded {created_theater_count} new Theater entries'))
         self.stdout.write(self.style.SUCCESS(f'Seeded {created_seat_count} new seats'))
+        self.stdout.write(self.style.SUCCESS(
+            f'Seeded {ShowPrice.objects.count()} per-show category prices'
+        ))
         self.stdout.write(self.style.SUCCESS('Seeding complete!'))

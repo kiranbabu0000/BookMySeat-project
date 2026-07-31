@@ -1,9 +1,12 @@
 from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm
 from .forms import UserRegisterForm, UserUpdateForm
 from django.shortcuts import render,redirect
-from django.contrib.auth import login,authenticate
+from django.contrib.auth import login, authenticate
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from movies.models import Movie , Booking
+from django.utils import timezone
+from movies.models import Movie, Booking
+from admin_panel.models import AdminProfile
 
 def home(request):
     movies = Movie.objects.filter(
@@ -31,6 +34,9 @@ def login_view(request):
         form=AuthenticationForm(request,data=request.POST)
         if form.is_valid():
             user=form.get_user()
+            if user.is_staff or user.is_superuser or AdminProfile.objects.filter(user=user, is_active=True).exists():
+                messages.error(request, 'This is an admin account. Please sign in through the admin portal.')
+                return render(request,'users/login.html',{'form':form})
             login(request,user)
             return redirect('/')
     else:
@@ -39,7 +45,12 @@ def login_view(request):
 
 @login_required
 def profile(request):
-    bookings= Booking.objects.filter(user=request.user)
+    bookings = Booking.objects.filter(user=request.user).select_related(
+        'movie', 'theater', 'seat', 'reservation', 'payment'
+    ).order_by('-booked_at')
+    now = timezone.now()
+    for booking in bookings:
+        booking.cancel_allowed = booking.theater.time > now
     if request.method == 'POST':
         u_form = UserUpdateForm(request.POST, instance=request.user)
         if u_form.is_valid():
@@ -48,7 +59,7 @@ def profile(request):
     else:
         u_form = UserUpdateForm(instance=request.user)
 
-    return render(request, 'users/profile.html', {'u_form': u_form,'bookings':bookings})
+    return render(request, 'users/profile.html', {'u_form': u_form, 'bookings': bookings})
 
 @login_required
 def reset_password(request):
@@ -60,3 +71,12 @@ def reset_password(request):
     else:
         form=PasswordChangeForm(user=request.user)
     return render(request,'users/reset_password.html',{'form':form})
+
+def user_logout_view(request):
+    if request.method != 'POST':
+        return render(request, 'users/logout.html')
+    for key in ('_auth_user_id', '_auth_user_backend', '_auth_user_hash'):
+        request.session.pop(key, None)
+    response = redirect('home')
+    response.delete_cookie('csrftoken')
+    return response

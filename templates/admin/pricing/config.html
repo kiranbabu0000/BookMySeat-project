@@ -1,0 +1,155 @@
+{% extends 'admin/base_admin.html' %}
+{% load static admin_tags %}
+{% block title %}Fees &amp; Tax Config{% endblock %}
+{% block page_title %}Fees &amp; Tax Configuration{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card-bms">
+      <div class="card-bms-header">Booking Fees</div>
+      <div class="card-bms-body">
+        <form method="post" action="{% url 'admin_pricing_config' %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save_fees">
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Platform Fee (per ticket)</label>
+            <div class="input-group">
+              <span class="input-group-text">₹</span>
+              <input type="number" step="0.01" min="0" class="form-control" name="platform_fee_per_ticket"
+                     value="{{ config.platform_fee_per_ticket }}" required>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Miscellaneous Fee (per booking)</label>
+            <div class="input-group">
+              <span class="input-group-text">₹</span>
+              <input type="number" step="0.01" min="0" class="form-control" name="misc_fee_per_booking"
+                     value="{{ config.misc_fee_per_booking }}" required>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-bms-primary btn-sm"><i class="bi bi-check-lg"></i> Save Fees</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card-bms mt-3">
+      <div class="card-bms-header">Seat Categories</div>
+      <div class="card-bms-body">
+        <table class="table table-bms mb-3 align-middle">
+          <thead><tr><th>Name</th><th>Rows</th><th class="text-end">Price Slots</th></tr></thead>
+          <tbody>
+            {% for c in categories %}
+            <tr>
+              <td class="fw-semibold">{{ c.name }}</td>
+              <td>{{ c.row_start }} – {{ c.row_end }}</td>
+              <td class="text-end text-muted small">{{ c.prices.count }} show(s)</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="text-center text-muted py-3">No categories. Create one below.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <form method="post" action="{% url 'admin_pricing_config' %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add_category">
+          <div class="row g-2">
+            <div class="col-12">
+              <label class="form-label small text-muted">New Category</label>
+            </div>
+            <div class="col-md-4">
+              <input type="text" class="form-control form-control-sm" name="name" placeholder="e.g. VIP" required>
+            </div>
+            <div class="col-md-3">
+              <input type="text" class="form-control form-control-sm" name="row_start" placeholder="Row start (A)" maxlength="2" required>
+            </div>
+            <div class="col-md-3">
+              <input type="text" class="form-control form-control-sm" name="row_end" placeholder="Row end (J)" maxlength="2" required>
+            </div>
+            <div class="col-md-2 d-grid">
+              <button type="submit" class="btn btn-bms-outline btn-sm"><i class="bi bi-plus-lg"></i> Add</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card-bms">
+      <div class="card-bms-header">
+        <span>GST Slabs</span>
+        <small class="text-muted">First matching slab (by order) is applied to taxable amount.</small>
+      </div>
+      <div class="card-bms-body">
+        <form method="post" action="{% url 'admin_pricing_config' %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save_slabs">
+          <div class="table-responsive">
+            <table class="table table-bms align-middle" id="slab-table">
+              <thead>
+                <tr>
+                  <th style="width:60px;">Order</th>
+                  <th>Min (₹)</th>
+                  <th>Max (₹)</th>
+                  <th>Rate (%)</th>
+                  <th style="width:44px;"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in slabs %}
+                <tr>
+                  <td><input type="number" class="form-control form-control-sm" name="slab_order" value="{{ s.display_order }}" min="0"></td>
+                  <td><input type="number" step="0.01" class="form-control form-control-sm" name="slab_min" value="{{ s.min_amount }}" required></td>
+                  <td><input type="number" step="0.01" class="form-control form-control-sm" name="slab_max" value="{% if s.max_amount is not None %}{{ s.max_amount }}{% endif %}" placeholder="no limit"></td>
+                  <td><input type="number" step="0.01" class="form-control form-control-sm" name="slab_rate" value="{{ s.rate }}" required></td>
+                  <td class="text-center"><button type="button" class="btn btn-sm btn-link text-danger remove-slab"><i class="bi bi-trash"></i></button></td>
+                  <input type="hidden" name="slab_id" value="{{ s.id }}">
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="5" class="text-center text-muted py-3">No slabs configured.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <button type="button" class="btn btn-bms-outline btn-sm" id="add-slab"><i class="bi bi-plus-lg"></i> Add Slab</button>
+            <button type="submit" class="btn btn-bms-primary btn-sm"><i class="bi bi-check-lg"></i> Save Slabs</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var table = document.getElementById('slab-table');
+    var body = table.querySelector('tbody');
+
+    document.getElementById('add-slab').addEventListener('click', function () {
+      var empty = body.querySelector('.text-muted');
+      if (empty) empty.parentElement.remove();
+      var tr = document.createElement('tr');
+      tr.innerHTML = [
+        '<td><input type="number" class="form-control form-control-sm" name="slab_order" value="0" min="0"></td>',
+        '<td><input type="number" step="0.01" class="form-control form-control-sm" name="slab_min" required></td>',
+        '<td><input type="number" step="0.01" class="form-control form-control-sm" name="slab_max" placeholder="no limit"></td>',
+        '<td><input type="number" step="0.01" class="form-control form-control-sm" name="slab_rate" required></td>',
+        '<td class="text-center"><button type="button" class="btn btn-sm btn-link text-danger remove-slab"><i class="bi bi-trash"></i></button></td>',
+        '<input type="hidden" name="slab_id" value="">'
+      ].join('');
+      body.appendChild(tr);
+    });
+
+    body.addEventListener('click', function (e) {
+      if (e.target.closest('.remove-slab')) {
+        e.target.closest('tr').remove();
+      }
+    });
+  });
+</script>
+{% endblock %}

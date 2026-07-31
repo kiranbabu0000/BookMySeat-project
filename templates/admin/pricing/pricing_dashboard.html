@@ -1,0 +1,110 @@
+{% extends 'admin/base_admin.html' %}
+{% load static admin_tags %}
+{% block title %}Pricing{% endblock %}
+{% block page_title %}Dynamic Pricing{% endblock %}
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card-bms h-100">
+      <div class="card-bms-body d-flex align-items-center gap-3">
+        <div class="p-3 rounded" style="background: rgba(220,38,38,0.1);">
+          <i class="bi bi-ticket-perforated fs-4" style="color: var(--accent-primary);"></i>
+        </div>
+        <div>
+          <div class="small text-muted">Platform Fee</div>
+          <div class="fw-bold fs-5">₹{{ config.platform_fee_per_ticket }} <span class="small text-muted fw-normal">/ ticket</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-bms h-100">
+      <div class="card-bms-body d-flex align-items-center gap-3">
+        <div class="p-3 rounded" style="background: rgba(220,38,38,0.1);">
+          <i class="bi bi-receipt fs-4" style="color: var(--accent-primary);"></i>
+        </div>
+        <div>
+          <div class="small text-muted">Miscellaneous Fee</div>
+          <div class="fw-bold fs-5">₹{{ config.misc_fee_per_booking }} <span class="small text-muted fw-normal">/ booking</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-bms h-100">
+      <div class="card-bms-body d-flex align-items-center gap-3">
+        <div class="p-3 rounded" style="background: rgba(220,38,38,0.1);">
+          <i class="bi bi-percent fs-4" style="color: var(--accent-primary);"></i>
+        </div>
+        <div>
+          <div class="small text-muted">GST Slabs</div>
+          <div class="fw-bold">
+            {% for slab in slabs %}<span class="d-block small">₹{{ slab.min_amount }}{% if slab.max_amount is not None %}–{{ slab.max_amount }}{% else %}+{% endif %} → {{ slab.rate }}%</span>{% empty %}No slabs{% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <form method="get" class="d-flex gap-2 flex-wrap align-items-end">
+      <div>
+        <label class="small text-muted">Movie</label>
+        <select name="movie" class="form-select form-select-sm" style="width: auto;">
+          <option value="">All Movies</option>
+          {% for m in movies %}
+          <option value="{{ m.id }}" {% if request.GET.movie == m.id|stringformat:'s' %}selected{% endif %}>{{ m.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="small text-muted">Search</label>
+        <input type="search" name="search" class="form-control form-control-sm" placeholder="Theatre..." value="{{ request.GET.search|default:'' }}" style="width: 180px;">
+      </div>
+      <div>
+        <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> Filter</button>
+      </div>
+    </form>
+    <div class="d-flex gap-2">
+      <a href="{% url 'admin_pricing_config' %}" class="btn btn-bms-outline btn-sm"><i class="bi bi-sliders"></i> Fees &amp; Tax Config</a>
+    </div>
+  </div>
+  <div class="card-bms-body p-0 table-responsive">
+    <table class="table table-bms mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>Movie</th>
+          <th>Theatre / Screen</th>
+          <th>Showtime</th>
+          <th>Seats</th>
+          {% for c in categories %}<th>{{ c.name }}</th>{% endfor %}
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in shows %}
+        <tr>
+          <td>{{ s.movie.name|truncatechars:28 }}</td>
+          <td>{{ s.name|truncatechars:24 }}<br><small class="text-muted">{{ s.screen_name|default:"Main" }}</small></td>
+          <td>{{ s.time|date:"d M Y, g:i A" }}</td>
+          <td>
+            <span class="badge-bms-success">{{ s.available_seats }}</span>
+            <span class="badge-bms-info">{{ s.total_seats }}</span>
+          </td>
+          {% for c in categories %}
+          <td>{% with p=price_map|get_item:s.id|get_item:c.id %}{% if p %}₹{{ p }}{% else %}<span class="text-muted">—</span>{% endif %}{% endwith %}</td>
+          {% endfor %}
+          <td class="text-end">
+            <a href="{% url 'admin_pricing_show_edit' s.id %}" class="btn btn-sm btn-bms-outline"><i class="bi bi-pencil"></i> Edit Prices</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="{{ categories|length|add:6 }}" class="text-center text-muted py-4">No shows found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

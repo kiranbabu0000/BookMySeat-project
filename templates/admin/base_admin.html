@@ -92,6 +92,7 @@
   <div class="admin-wrapper">
     {% if user.is_authenticated and user.is_staff %}
       {% include 'admin/partials/_sidebar.html' %}
+      <div class="admin-sidebar-backdrop" id="sidebarBackdrop"></div>
     {% endif %}
 
     <div class="admin-main" id="adminMain">

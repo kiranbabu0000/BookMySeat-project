@@ -80,11 +80,28 @@
                     </div>
                     <div class="d-flex flex-wrap gap-3 text-muted small mb-2">
                       <span><i class="bi bi-building me-1"></i>{{ booking.theater.name }}</span>
-                      <span><i class="bi bi-calendar-event me-1"></i>{{ booking.booked_at|date:"F d, Y - H:i" }}</span>
+                      <span><i class="bi bi-calendar-event me-1"></i>{{ booking.theater.time|date:"g:i A, D M d" }}</span>
                     </div>
-                    <div class="pt-2 border-top d-flex justify-content-between align-items-center" style="border-color: var(--border-color) !important;">
+                    <div class="d-flex flex-wrap gap-3 text-muted small mb-2">
+                      <span><i class="bi bi-receipt me-1"></i>Ref: {{ booking.booking_ref }}</span>
+                      <span><i class="bi bi-ticket-perforated me-1"></i>₹{{ booking.payment.amount }}</span>
+                    </div>
+                    <div class="pt-2 border-top d-flex justify-content-between align-items-center gap-2 flex-wrap" style="border-color: var(--border-color) !important;">
                       <span class="small text-muted"><i class="bi bi-qr-code-scan me-1"></i>M-Ticket Valid</span>
-                      <span class="badge px-2 py-1" style="background: rgba(34, 197, 94, 0.14); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.28);">Confirmed</span>
+                      <div class="d-flex gap-2">
+                        <a href="{% url 'download_ticket' booking.id %}" class="btn btn-sm btn-bms-outline fw-semibold">
+                          <i class="bi bi-ticket-perforated me-1"></i> Ticket
+                        </a>
+                        {% if booking.cancel_allowed %}
+                        <form method="post" action="{% url 'cancel_booking' booking.id %}"
+                              onsubmit="return confirm('Cancel this booking? Your payment will be refunded.');">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-sm btn-bms-outline-danger fw-semibold">
+                            <i class="bi bi-x-circle me-1"></i> Cancel
+                          </button>
+                        </form>
+                        {% endif %}
+                      </div>
                     </div>
                   </article>
                 {% endfor %}

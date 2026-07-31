@@ -183,6 +183,39 @@ class AuditLog(models.Model):
         return f'{self.action} by {self.user.username if self.user else "Unknown"}'
 
 
+class GSTSlab(models.Model):
+    """Configurable GST slabs keyed on the taxable order value.
+
+    Slab selection: the first slab (by display_order) whose range contains the
+    taxable amount wins. A slab with a blank max_amount means "no upper limit".
+    """
+    min_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    max_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Upper bound (inclusive). Leave empty for no upper limit.")
+    rate = models.DecimalField(max_digits=5, decimal_places=2, help_text="GST percentage for this slab")
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['display_order']
+
+    def __str__(self):
+        upper = self.max_amount if self.max_amount is not None else '\u221e'
+        return f'\u20b9{self.min_amount}-{upper} @ {self.rate}%'
+
+
+class PricingConfig(models.Model):
+    """Singleton holding the platform and miscellaneous fee settings."""
+    platform_fee_per_ticket = models.DecimalField(max_digits=10, decimal_places=2, default=5.00)
+    misc_fee_per_booking = models.DecimalField(max_digits=10, decimal_places=2, default=2.50)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Pricing Configuration'
+        verbose_name_plural = 'Pricing Configurations'
+
+    def __str__(self):
+        return f'Platform \u20b9{self.platform_fee_per_ticket}/ticket, Misc \u20b9{self.misc_fee_per_booking}/booking'
+
+
 class Coupon(models.Model):
     code = models.CharField(max_length=50, unique=True)
     description = models.TextField(blank=True)

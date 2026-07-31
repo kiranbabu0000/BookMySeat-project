@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Booking Confirmed — {{ reservation.show.movie.name }}{% endblock %}
+
+{% block content %}
+<section class="page-section">
+  <div class="container-bms">
+    <div class="row justify-content-center g-4">
+      <div class="col-lg-8">
+        <div class="card border-0 shadow-sm p-4 p-md-5 text-center" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
+          <div class="confirmation-check mb-3">
+            <i class="bi bi-check2-circle"></i>
+          </div>
+          <span class="badge bg-success mb-3 px-3 py-1 rounded-pill">Booking Confirmed</span>
+          <h1 class="h3 fw-bold mb-1" style="color: var(--text-primary);">That's a wrap!</h1>
+          <p class="text-muted mb-4">
+            Your seats for <strong>{{ reservation.show.movie.name }}</strong> are locked in.
+            A confirmation email has been sent to <strong>{{ reservation.user.email }}</strong>.
+          </p>
+
+          <div class="booking-summary mx-auto mb-4" style="max-width: 520px;">
+            <div class="d-flex justify-content-between py-2">
+              <span class="text-muted">Cinema</span>
+              <strong style="color: var(--text-primary);">{{ reservation.show.name }}</strong>
+            </div>
+            <div class="d-flex justify-content-between py-2">
+              <span class="text-muted">Showtime</span>
+              <strong style="color: var(--text-primary);">{{ reservation.show.time|date:"g:i A, D M d Y" }}</strong>
+            </div>
+            <div class="d-flex justify-content-between py-2">
+              <span class="text-muted">Seats</span>
+              <strong style="color: var(--text-primary);">
+                {% for b in bookings %}{{ b.seat.seat_number }}{% if not forloop.last %}, {% endif %}{% endfor %}
+              </strong>
+            </div>
+            <div class="d-flex justify-content-between py-2">
+              <span class="text-muted">Booking Reference</span>
+              <strong style="color: var(--text-primary);">
+                {% for b in bookings %}{{ b.booking_ref }}{% if not forloop.last %}, {% endif %}{% endfor %}
+              </strong>
+            </div>
+            <div class="d-flex justify-content-between py-2">
+              <span class="text-muted">Amount Paid</span>
+              <strong style="color: var(--accent-primary);">₹{{ reservation.total_amount }}</strong>
+            </div>
+            {% if reservation.discount_amount %}
+            <div class="d-flex justify-content-between py-2">
+              <span class="text-muted">Coupon Applied</span>
+              <strong style="color: #4ade80;">{{ reservation.coupon_code }} (− ₹{{ reservation.discount_amount }})</strong>
+            </div>
+            {% endif %}
+          </div>
+
+          <div class="booking-summary mx-auto mb-4" style="max-width: 520px;">
+            <div class="fw-semibold mb-2" style="color: var(--text-primary);">Price Breakdown</div>
+            {% for b in bookings %}
+            <div class="d-flex justify-content-between align-items-center py-1 small">
+              <span class="text-muted">
+                {{ b.seat.seat_number }}
+                {% if b.seat_category %}<span class="badge rounded-pill ms-1" style="background: var(--bg-tertiary); color: var(--text-secondary);">{{ b.seat_category }}</span>{% endif %}
+              </span>
+              <span style="color: var(--text-primary);">₹{{ b.ticket_price }}</span>
+            </div>
+            {% endfor %}
+            <div class="d-flex justify-content-between py-1 small">
+              <span class="text-muted">Platform Fee ({{ bookings|length }} × ₹{{ bookings.0.platform_fee|floatformat:2 }})</span>
+              <span style="color: var(--text-primary);">₹{{ reservation.platform_fee }}</span>
+            </div>
+            <div class="d-flex justify-content-between py-1 small">
+              <span class="text-muted">Miscellaneous Fee</span>
+              <span style="color: var(--text-primary);">₹{{ reservation.misc_fee }}</span>
+            </div>
+            <div class="d-flex justify-content-between py-1 small">
+              <span class="text-muted">GST ({{ reservation.gst_rate }}%)</span>
+              <span style="color: var(--text-primary);">₹{{ reservation.gst_amount }}</span>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 justify-content-center flex-wrap mb-4">
+            <a href="{% url 'download_ticket' bookings.0.id %}" class="btn btn-bms-primary justify-content-center">
+              <i class="bi bi-ticket-perforated me-1"></i> View Ticket
+            </a>
+            <a href="{% url 'profile' %}" class="btn btn-bms-outline justify-content-center">
+              <i class="bi bi-person me-1"></i> Go to Profile
+            </a>
+          </div>
+
+          <p class="text-muted small mb-0">
+            <i class="bi bi-info-circle me-1"></i>
+            Cancellation is available from your profile up to the show start time. Refunds are credited back to the original payment method.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

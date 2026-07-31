@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Payment — {{ reservation.show.movie.name }}{% endblock %}
+
+{% block content %}
+<section class="page-section seat-page">
+  <div class="container-bms">
+    <div class="row justify-content-center g-4">
+      <div class="col-lg-7">
+        <div class="card border-0 shadow-sm p-4 p-md-5" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+            <div>
+              <span class="badge bg-danger mb-2">Secure Checkout</span>
+              <h1 class="h3 fw-bold mb-1" style="color: var(--text-primary);">{{ reservation.show.movie.name }}</h1>
+              <p class="text-muted mb-0">
+                <i class="bi bi-building me-1 text-danger"></i>{{ reservation.show.name }}
+                &nbsp;|&nbsp;<i class="bi bi-clock me-1 text-danger"></i>{{ reservation.show.time|date:"g:i A, D M d" }}
+              </p>
+            </div>
+            <div class="reservation-timer-bar mb-0" style="width: auto;">
+              <div class="reservation-timer-bar__info">
+                <i class="bi bi-hourglass-split me-1"></i>
+                <span>Complete payment in</span>
+                <strong id="reservationTimer">02:00</strong>
+              </div>
+            </div>
+          </div>
+
+          <hr style="border-color: var(--border-color);">
+
+          <div class="d-flex justify-content-between py-2">
+            <span class="text-muted">Reservation</span>
+            <span class="text-muted small">#{{ reservation.token|slice:":12" }}</span>
+          </div>
+          <div class="d-flex justify-content-between py-2">
+            <span class="text-muted">Seats</span>
+            <strong style="color: var(--text-primary);">
+              {% for rs in seats %}{{ rs.seat.seat_number }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            </strong>
+          </div>
+          <div class="d-flex justify-content-between py-2">
+            <span class="text-muted">Tickets</span>
+            <span>{{ seats|length }}</span>
+          </div>
+
+          <hr style="border-color: var(--border-color);">
+
+          <div class="price-breakdown" id="priceBreakdown">
+            <div class="d-flex justify-content-between py-1 small">
+              <span class="text-muted">Subtotal <span class="text-muted-50" id="subtotalNote"></span></span>
+              <span id="subtotalAmt">₹{{ pricing.subtotal }}</span>
+            </div>
+            <div class="d-flex justify-content-between py-1 small">
+              <span class="text-muted">Platform Fee <span id="feeNote"></span></span>
+              <span id="platformFeeAmt">₹{{ pricing.platform_fee }}</span>
+            </div>
+            <div class="d-flex justify-content-between py-1 small">
+              <span class="text-muted">Miscellaneous Fee</span>
+              <span id="miscFeeAmt">₹{{ pricing.misc_fee }}</span>
+            </div>
+            <div class="d-flex justify-content-between py-1 small">
+              <span class="text-muted">GST ({{ pricing.gst_rate }}%)</span>
+              <span id="gstAmt">₹{{ pricing.gst }}</span>
+            </div>
+            <div class="d-flex justify-content-between py-1 small discount-row" id="discountRow" {% if not pricing.discount %}hidden{% endif %}>
+              <span class="text-muted">Coupon Discount <span id="couponCodeBadge" class="badge rounded-pill ms-1"></span></span>
+              <span id="discountAmt" class="text-success">− ₹{{ pricing.discount }}</span>
+            </div>
+            <div class="border-top d-flex justify-content-between align-items-center py-2 mt-2" style="border-color: var(--border-color) !important;">
+              <span class="fw-bold" style="color: var(--text-primary);">Amount to Pay</span>
+              <span class="fw-bold h4 mb-0" id="totalAmt" style="color: var(--accent-primary);">₹{{ pricing.total }}</span>
+            </div>
+          </div>
+
+          <hr style="border-color: var(--border-color);">
+
+          <div class="coupon-box mb-4">
+            <label class="form-label small fw-semibold mb-1" style="color: var(--text-primary);">
+              <i class="bi bi-ticket-perforated me-1 text-danger"></i>Have a coupon?
+            </label>
+            <div class="input-group">
+              <input type="text" class="form-control" id="couponInput" placeholder="e.g. BOOK10" maxlength="32" autocomplete="off">
+              <button class="btn btn-bms-outline" type="button" id="couponApplyBtn">Apply</button>
+            </div>
+            <div id="couponFeedback" class="small mt-2"></div>
+          </div>
+
+          <div class="payment-methods mb-4">
+            <div class="form-check payment-method">
+              <input class="form-check-input" type="radio" name="method" id="methodUpi" checked>
+              <label class="form-check-label w-100" for="methodUpi">
+                <i class="bi bi-phone me-2"></i> UPI
+                <span class="text-muted small">user@upi</span>
+              </label>
+            </div>
+            <div class="form-check payment-method">
+              <input class="form-check-input" type="radio" name="method" id="methodCard">
+              <label class="form-check-label w-100" for="methodCard">
+                <i class="bi bi-credit-card me-2"></i> Credit / Debit Card
+                <span class="text-muted small">•••• •••• •••• 4242</span>
+              </label>
+            </div>
+            <div class="form-check payment-method">
+              <input class="form-check-input" type="radio" name="method" id="methodNet">
+              <label class="form-check-label w-100" for="methodNet">
+                <i class="bi bi-bank me-2"></i> Net Banking
+                <span class="text-muted small">All major banks</span>
+              </label>
+            </div>
+          </div>
+
+          <form method="post" action="{% url 'simulate_payment' reservation.token %}" id="paymentForm">
+            {% csrf_token %}
+            <input type="hidden" name="transaction_id" value="{{ transaction_id }}">
+            <input type="hidden" name="payment_method" id="paymentMethodInput" value="upi">
+            <input type="hidden" name="coupon_code" id="couponCodeInput">
+            <button type="submit" name="action" value="success" class="btn btn-bms-primary w-100 justify-content-center py-3 fw-semibold" id="payBtn">
+              <i class="bi bi-lock-fill me-1"></i> Pay <span id="payBtnAmt">₹{{ pricing.total }}</span> Securely
+            </button>
+          </form>
+
+          <form method="post" action="{% url 'simulate_payment' reservation.token %}" class="mt-2">
+            {% csrf_token %}
+            <button type="submit" name="action" value="fail" class="btn btn-bms-outline w-100 justify-content-center py-2" id="failBtn">
+              <i class="bi bi-x-circle me-1"></i> Simulate Payment Failure
+            </button>
+          </form>
+
+          <p class="text-muted small text-center mt-3 mb-0">
+            <i class="bi bi-shield-lock me-1"></i>Demo checkout via the BookMySeat payment gateway. No real money is charged.
+            Paying more than once from this screen is blocked to prevent duplicate charges.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    var expiresAt = new Date('{{ reservation.expires_at|date:"c" }}');
+    var token = '{{ reservation.token }}';
+    var timerEl = document.getElementById('reservationTimer');
+    var payBtn = document.getElementById('payBtn');
+    var failBtn = document.getElementById('failBtn');
+    var csrf = document.querySelector('#paymentForm input[name=csrfmiddlewaretoken]').value;
+
+    var pricing = {
+      subtotal: '{{ pricing.subtotal }}',
+      platform_fee: '{{ pricing.platform_fee }}',
+      misc_fee: '{{ pricing.misc_fee }}',
+      gst_rate: '{{ pricing.gst_rate }}',
+      gst: '{{ pricing.gst }}',
+      discount: '{{ pricing.discount }}',
+      total: '{{ pricing.total }}'
+    };
+    var ticketCount = {{ seats|length }};
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+
+    function tick() {
+      var remaining = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+      timerEl.textContent = pad(Math.floor(remaining / 60)) + ':' + pad(remaining % 60);
+      if (remaining <= 0) {
+        clearInterval(handle);
+        fetch('/movies/api/reservation/' + token + '/release/', {
+          method: 'POST',
+          headers: { 'X-CSRFToken': csrf },
+          body: '{}'
+        }).catch(function () {});
+        window.location.href = '{{ book_seats_url }}';
+      }
+    }
+
+    var handle = setInterval(tick, 1000);
+    tick();
+
+    var methodInput = document.getElementById('paymentMethodInput');
+    document.querySelectorAll('input[name=method]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        methodInput.value = el.id === 'methodUpi' ? 'upi' : (el.id === 'methodCard' ? 'card' : 'netbanking');
+      });
+    });
+
+    function fmt(amount) {
+      return '\u20b9' + Number(amount).toFixed(2);
+    }
+
+    function setTotal(total, discount) {
+      document.getElementById('totalAmt').textContent = fmt(total);
+      document.getElementById('payBtnAmt').textContent = fmt(total);
+      document.getElementById('discountAmt').textContent = '\u2212 ' + fmt(discount);
+      document.getElementById('discountRow').hidden = Number(discount) <= 0;
+      if (Number(discount) > 0) {
+        document.getElementById('couponCodeBadge').textContent = document.getElementById('couponInput').value.trim().toUpperCase();
+      }
+    }
+
+    var couponApplyBtn = document.getElementById('couponApplyBtn');
+    var couponInput = document.getElementById('couponInput');
+    var couponFeedback = document.getElementById('couponFeedback');
+    var couponCodeInput = document.getElementById('couponCodeInput');
+
+    couponApplyBtn.addEventListener('click', applyCoupon);
+    couponInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); }
+    });
+
+    function applyCoupon() {
+      var code = couponInput.value.trim();
+      if (!code) { couponFeedback.textContent = 'Enter a coupon code.'; couponFeedback.className = 'small mt-2 text-muted'; return; }
+      couponApplyBtn.disabled = true;
+      couponApplyBtn.textContent = 'Checking\u2026';
+      fetch('/movies/api/coupon/validate/?code=' + encodeURIComponent(code) + '&token=' + encodeURIComponent(token), {
+        headers: { 'X-CSRFToken': csrf }
+      }).then(function (r) { return r.json(); }).then(function (data) {
+        if (data.ok) {
+          couponCodeInput.value = data.coupon_code;
+          couponFeedback.textContent = 'Coupon applied! You saved ' + fmt(data.discount) + '.';
+          couponFeedback.className = 'small mt-2 text-success fw-semibold';
+          setTotal(data.total, data.discount);
+        } else {
+          couponCodeInput.value = '';
+          setTotal(pricing.total, 0);
+          couponFeedback.textContent = data.error || 'Invalid coupon.';
+          couponFeedback.className = 'small mt-2 text-danger';
+        }
+      }).catch(function () {
+        couponFeedback.textContent = 'Could not validate the coupon. Try again.';
+        couponFeedback.className = 'small mt-2 text-danger';
+      }).finally(function () {
+        couponApplyBtn.disabled = false;
+        couponApplyBtn.textContent = 'Apply';
+      });
+    }
+
+    function lockCheckout() {
+      payBtn.disabled = true;
+      payBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Processing payment\u2026';
+      failBtn.disabled = true;
+    }
+
+    payBtn.addEventListener('click', function () {
+      if (payBtn.disabled) return;
+      lockCheckout();
+    });
+    failBtn.addEventListener('click', function () {
+      if (failBtn.disabled) return;
+      lockCheckout();
+    });
+
+    var submitted = false;
+    document.getElementById('paymentForm').addEventListener('submit', function (e) {
+      if (submitted) { e.preventDefault(); return; }
+      submitted = true;
+    });
+  })();
+</script>
+{% endblock %}

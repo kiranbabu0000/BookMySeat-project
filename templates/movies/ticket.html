@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Ticket — {{ booking.movie.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .ticket-page { padding: 3rem 0; }
+  .ticket-card {
+    max-width: 620px; margin: 0 auto;
+    background: #fff; color: #111;
+    border-radius: 18px; overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+  }
+  .ticket-strip {
+    height: 8px;
+    background: repeating-linear-gradient(45deg, #e11d48, #e11d48 14px, #be123c 14px, #be123c 28px);
+  }
+  .ticket-body { padding: 1.75rem; }
+  .ticket-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.25rem; }
+  .ticket-movie { font-size: 1.5rem; font-weight: 800; margin: 0; color: #111; }
+  .ticket-ref { font-size: 0.85rem; color: #555; }
+  .ticket-ref strong { font-size: 0.95rem; color: #111; letter-spacing: 0.5px; }
+  .ticket-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1.5rem; margin-bottom: 1.25rem; }
+  .ticket-details .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px; color: #888; margin-bottom: 2px; }
+  .ticket-details .value { font-weight: 700; color: #111; }
+  .ticket-qr {
+    display: flex; align-items: center; justify-content: center; gap: 1.25rem;
+    border-top: 2px dashed #ddd; padding-top: 1.25rem;
+  }
+  .qr-grid {
+    font-family: monospace; font-size: 8px; line-height: 8px;
+    color: #111; letter-spacing: 0; white-space: pre;
+  }
+  .ticket-actions { text-align: center; margin-top: 1.5rem; }
+  @media print {
+    body { background: #fff !important; }
+    header, footer, .offcanvas, .navbar, .skip-link, .ticket-actions { display: none !important; }
+    .ticket-page { padding: 0; }
+    .ticket-card { box-shadow: none; border: 1px solid #ccc; }
+    .qr-grid { font-size: 10px; line-height: 10px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section ticket-page">
+  <div class="container-bms">
+    <div class="ticket-card" id="ticketCard">
+      <div class="ticket-strip"></div>
+      <div class="ticket-body">
+        <div class="ticket-head">
+          <div>
+            <h1 class="ticket-movie">{{ booking.movie.name }}</h1>
+            <div class="ticket-ref">Booking Ref: <strong>{{ booking.booking_ref }}</strong></div>
+          </div>
+          <div class="text-end">
+            <div style="font-weight: 800; color: #e11d48; font-size: 1.1rem;">BookMySeat</div>
+            <div style="font-size: 0.75rem; color: #888;">M-Ticket</div>
+          </div>
+        </div>
+
+        <div class="ticket-details">
+          <div>
+            <div class="label">Cinema</div>
+            <div class="value">{{ booking.theater.name }}</div>
+          </div>
+          <div>
+            <div class="label">Show Time</div>
+            <div class="value">{{ booking.theater.time|date:"g:i A, D M d Y" }}</div>
+          </div>
+          <div>
+            <div class="label">Screen / Seat</div>
+            <div class="value">{{ booking.theater.screen_name|default:"Main" }} · {{ booking.seat.seat_number }}</div>
+          </div>
+          <div>
+            <div class="label">Booked For</div>
+            <div class="value">{{ booking.user.username }}</div>
+          </div>
+        </div>
+
+        <div class="ticket-qr">
+          <div class="qr-grid">{{ qr_pattern }}</div>
+          <div>
+            <div class="label" style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; margin-bottom:2px;">Amount Paid</div>
+            <div style="font-weight:800; font-size:1.15rem; color:#111;">₹{{ booking.payment.amount }}</div>
+            <div class="label" style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; margin-top:6px;">Payment</div>
+            <div style="font-size:0.85rem; color:#111;">{{ booking.payment.payment_method|default:"UPI"|upper }} · Paid</div>
+          </div>
+        </div>
+      </div>
+      <div class="ticket-strip"></div>
+    </div>
+
+    <div class="ticket-actions">
+      <button class="btn btn-bms-primary justify-content-center" onclick="window.print()">
+        <i class="bi bi-printer me-1"></i> Print Ticket
+      </button>
+      <a href="{% url 'profile' %}" class="btn btn-bms-outline justify-content-center">
+        <i class="bi bi-arrow-left me-1"></i> Back to Profile
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %}

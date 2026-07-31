@@ -1,42 +1,56 @@
 from functools import wraps
 from django.shortcuts import redirect
 from django.contrib import messages
-from django.contrib.auth.decorators import user_passes_test
+from django.contrib.auth.mixins import UserPassesTestMixin
 from .models import AdminProfile, AdminPermission
+
+ADMIN_SESSION_KEYS = (
+    'admin_user_id', 'is_admin_authenticated', 'admin_session_id',
+    'admin_login_time', 'admin_ip_address', 'admin_user_agent',
+)
+
+
+def clear_admin_session(request):
+    for key in ADMIN_SESSION_KEYS:
+        request.session.pop(key, None)
+
+
+def _verify_admin_session(request):
+    if not request.session.get('is_admin_authenticated'):
+        return False
+    if not request.session.get('admin_user_id'):
+        return False
+    if not request.user.is_authenticated:
+        return False
+    if not (request.user.is_superuser or AdminProfile.objects.filter(user=request.user, is_active=True).exists()):
+        return False
+    stored_session_id = request.session.get('admin_session_id')
+    if stored_session_id and stored_session_id != request.session.session_key:
+        return False
+    if not request.user.is_active:
+        return False
+    return True
 
 
 def admin_session_required(view_func):
     @wraps(view_func)
     def _wrapped_view(request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return redirect('/admin-login/')
-        if not (request.user.is_staff or request.user.is_superuser):
-            messages.error(request, 'Unauthorized Access.')
-            return redirect('/')
-        if not request.session.get('is_admin_authenticated'):
+        if not _verify_admin_session(request):
+            clear_admin_session(request)
             return redirect('/admin-login/')
         return view_func(request, *args, **kwargs)
     return _wrapped_view
 
 
-class AdminSessionMixin:
+class AdminSessionMixin(UserPassesTestMixin):
     login_url = '/admin-login/'
     redirect_field_name = None
 
     def test_func(self):
-        return (
-            self.request.user.is_authenticated and
-            (self.request.user.is_staff or self.request.user.is_superuser) and
-            self.request.session.get('is_admin_authenticated', False)
-        )
+        return _verify_admin_session(self.request)
 
     def handle_no_permission(self):
-        if self.request.user.is_authenticated:
-            if self.request.user.is_staff or self.request.user.is_superuser:
-                if not self.request.session.get('is_admin_authenticated'):
-                    return redirect('/admin-login/')
-            messages.error(self.request, 'Unauthorized Access.')
-            return redirect('/')
+        clear_admin_session(self.request)
         return redirect(self.login_url)
 
 

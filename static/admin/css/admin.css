@@ -234,6 +234,14 @@ h1, h2, h3, h4, h5, h6 {
   border-color: var(--accent-primary);
 }
 
+.admin-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  z-index: 1030;
+}
+
 .topbar-search {
   position: relative;
   max-width: 320px;
@@ -1083,6 +1091,9 @@ a:focus-visible {
   }
   .admin-sidebar.show {
     transform: translateX(0);
+  }
+  .admin-sidebar-backdrop.show {
+    display: block;
   }
   .admin-main {
     margin-left: 0;

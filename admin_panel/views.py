@@ -1,22 +1,26 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.contrib import messages
-from django.db.models import Count, Sum, Q, Avg, Max
-from django.db.models.functions import TruncMonth, TruncDate
+from django.db import IntegrityError, transaction
+from django.db.models import Count, Sum, Q, Avg, Max, Min, Exists, OuterRef, Subquery, F
+from django.db.models.functions import TruncMonth, TruncDate, Coalesce
 from django.utils import timezone
 from django.utils.text import slugify
 from django.core.paginator import Paginator
+from django.utils.decorators import method_decorator
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View, TemplateView, DetailView
 from django.urls import reverse_lazy, reverse
 from django.http import JsonResponse, HttpResponseRedirect
 import json
 from datetime import datetime, date, timedelta
+from decimal import Decimal, InvalidOperation
 
 import sys
 import django
-from movies.models import Movie, Theater, Seat, Booking
-from .models import Genre, Language, CastMember, Theatre, Screen, Show, Trailer, MovieImage, AdminProfile, AdminPermission, AuditLog, Coupon, Notification, Review, Payment
+import secrets
+from movies.models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, SeatCategory, ShowPrice
+from .models import Genre, Language, CastMember, Theatre, Screen, Show, Trailer, MovieImage, AdminProfile, AdminPermission, AuditLog, Coupon, Notification, Review, Payment, GSTSlab, PricingConfig
 from .forms import (
     AdminLoginForm, MovieForm, GenreForm, LanguageForm, CastMemberForm,
     TheatreForm, ScreenForm, ShowForm, TrailerForm, MovieImageForm,
@@ -24,17 +28,12 @@ from .forms import (
     AdminPermissionForm, CouponForm, NotificationForm, ReviewForm,
     ReserveBookingForm, RefundForm
 )
-from .decorators import admin_session_required, AdminSessionMixin, permission_required
+from .decorators import admin_session_required, AdminSessionMixin, permission_required, clear_admin_session
 
 
 def admin_login_view(request):
-    if request.user.is_authenticated:
-        if request.session.get('is_admin_authenticated') and (request.user.is_staff or request.user.is_superuser):
-            return redirect('admin_dashboard')
-        if request.user.is_staff or request.user.is_superuser:
-            pass
-        elif not request.user.is_staff:
-            return redirect('/')
+    if request.session.get('is_admin_authenticated'):
+        return redirect('admin_dashboard')
 
     if request.method == 'POST':
         form = AdminLoginForm(request.POST)
@@ -43,19 +42,27 @@ def admin_login_view(request):
             password = form.cleaned_data['password']
             user = authenticate(request, username=username, password=password)
             if user is not None:
-                if user.is_staff or user.is_superuser:
-                    login(request, user)
-                    request.session['is_admin_authenticated'] = True
-                    request.session['admin_login_time'] = str(timezone.now())
-                    AuditLog.objects.create(
-                        user=user,
-                        action='Admin Login',
-                        module='Auth',
-                        ip_address=request.META.get('REMOTE_ADDR')
-                    )
-                    return redirect('admin_dashboard')
-                else:
-                    messages.error(request, 'Unauthorized Access')
+                if not user.is_active:
+                    messages.error(request, 'This account has been deactivated.')
+                    return render(request, 'admin/login.html', {'form': form})
+                is_admin = user.is_superuser or AdminProfile.objects.filter(user=user, is_active=True).exists()
+                if not is_admin:
+                    messages.error(request, 'This account is not an admin account. Please use the customer login instead.')
+                    return render(request, 'admin/login.html', {'form': form})
+                clear_admin_session(request)
+                request.session['admin_user_id'] = user.id
+                request.session['is_admin_authenticated'] = True
+                request.session['admin_login_time'] = str(timezone.now())
+                request.session['admin_session_id'] = request.session.session_key
+                request.session['admin_ip_address'] = request.META.get('REMOTE_ADDR')
+                request.session['admin_user_agent'] = request.META.get('HTTP_USER_AGENT', '')
+                AuditLog.objects.create(
+                    user=user,
+                    action='Admin Login',
+                    module='Auth',
+                    ip_address=request.META.get('REMOTE_ADDR')
+                )
+                return redirect('admin_dashboard')
             else:
                 messages.error(request, 'Invalid username or password')
     else:
@@ -64,17 +71,22 @@ def admin_login_view(request):
 
 
 def admin_logout_view(request):
-    user = request.user
-    if 'is_admin_authenticated' in request.session:
-        del request.session['is_admin_authenticated']
-    logout(request)
-    if user.is_authenticated:
-        AuditLog.objects.create(
-            user=user,
-            action='Admin Logout',
-            module='Auth',
-            ip_address=request.META.get('REMOTE_ADDR')
-        )
+    if request.method != 'POST':
+        return redirect('admin_dashboard')
+    admin_user_id = request.session.get('admin_user_id')
+    if admin_user_id:
+        try:
+            user = User.objects.get(pk=admin_user_id)
+        except (User.DoesNotExist, ValueError, TypeError):
+            user = None
+        if user is not None:
+            AuditLog.objects.create(
+                user=user,
+                action='Admin Logout',
+                module='Auth',
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+    clear_admin_session(request)
     return redirect('admin_login')
 
 
@@ -113,6 +125,8 @@ class DashboardView(AdminSessionMixin, TemplateView):
         booked_seats = Seat.objects.filter(is_booked=True).count()
         context['total_available_seats'] = Seat.objects.filter(is_booked=False).count()
         context['total_booked_seats'] = booked_seats
+        context['total_active_reservations'] = Reservation.objects.filter(status='active').count()
+        context['held_seats'] = ReservedSeat.objects.filter(reservation__status='active').count()
         context['occupancy_rate'] = round((booked_seats / total_seats * 100) if total_seats > 0 else 0)
 
         trending = Movie.objects.annotate(booking_count=Count('booking')).order_by('-booking_count').first()
@@ -242,6 +256,11 @@ class MovieUpdateView(AdminSessionMixin, UpdateView):
         return response
 
 
+class AdminDeleteViewMixin:
+    def post(self, request, *args, **kwargs):
+        return self.delete(request, *args, **kwargs)
+
+
 class MovieDeleteView(AdminSessionMixin, DeleteView):
     model = Movie
     template_name = 'admin/movies/movie_confirm_delete.html'
@@ -250,25 +269,56 @@ class MovieDeleteView(AdminSessionMixin, DeleteView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         movie = self.get_object()
-        today = timezone.now().date()
-        context['active_bookings'] = Booking.objects.filter(movie=movie).exclude(seat__isnull=True).count()
+        now = timezone.now()
+        today = now.date()
+        context['active_bookings'] = Booking.objects.filter(movie=movie).count()
+        context['active_reservations'] = Reservation.objects.filter(
+            show__movie=movie, status__in=['active', 'booked']
+        ).count()
         context['future_shows'] = Show.objects.filter(movie=movie, date__gte=today, status='active').count()
         context['past_shows'] = Show.objects.filter(movie=movie, date__lt=today).count()
+        context['future_theaters'] = Theater.objects.filter(movie=movie, time__gte=now).count()
+        context['theater_shows'] = Theater.objects.filter(movie=movie).count()
         context['related_trailers'] = Trailer.objects.filter(movie=movie).count()
         context['related_gallery'] = MovieImage.objects.filter(movie=movie).count()
         context['related_cast'] = CastMember.objects.filter(movie=movie).count()
-        context['has_dependencies'] = any([context['active_bookings'], context['future_shows'], context['past_shows'], context['related_trailers'], context['related_gallery'], context['related_cast']])
-        context['can_hard_delete'] = not any([context['active_bookings'], context['future_shows']])
+        context['running_with_bookings'] = bool(context['active_bookings']) and (
+            context['future_shows'] or context['future_theaters']
+        )
+        context['can_hard_delete'] = not (
+            context['running_with_bookings'] or context['active_reservations']
+        )
         return context
+
+    def post(self, request, *args, **kwargs):
+        return self.delete(request, *args, **kwargs)
 
     def delete(self, request, *args, **kwargs):
         movie = self.get_object()
         action = request.POST.get('action', 'archive')
-        today = timezone.now().date()
-        active_bookings = Booking.objects.filter(movie=movie).exclude(seat__isnull=True).count()
-        future_shows = Show.objects.filter(movie=movie, date__gte=today, status='active').count()
+        now = timezone.now()
+        today = now.date()
+        bookings = Booking.objects.filter(movie=movie).count()
+        reservations = Reservation.objects.filter(
+            show__movie=movie, status__in=['active', 'booked']
+        ).count()
+        running_with_bookings = bool(bookings) and (
+            Theater.objects.filter(movie=movie, time__gte=now).exists()
+            or Show.objects.filter(movie=movie, date__gte=today, status='active').exists()
+        )
+        next_url = request.POST.get('next') or self.success_url
+        if not next_url.startswith('/'):
+            next_url = self.success_url
 
-        if action == 'hard_delete' and not active_bookings and not future_shows:
+        if action == 'hard_delete':
+            if running_with_bookings or reservations:
+                messages.error(
+                    request,
+                    f'"{movie.name}" is still running with {bookings} booking(s). '
+                    'It will become available for permanent deletion after all its shows are over, '
+                    'or you can archive it now.'
+                )
+                return redirect(next_url)
             name = movie.name
             movie.delete()
             AuditLog.objects.create(
@@ -279,8 +329,11 @@ class MovieDeleteView(AdminSessionMixin, DeleteView):
                 details=f'Permanently deleted movie: {name}',
                 ip_address=request.META.get('REMOTE_ADDR')
             )
-            messages.success(request, f'Movie "{name}" has been permanently deleted.')
-            return redirect(self.success_url)
+            messages.success(
+                request,
+                f'Movie "{name}" and all its shows, seats, trailers and images have been permanently deleted.'
+            )
+            return redirect(next_url)
         else:
             movie.is_deleted = True
             movie.show_on_homepage = False
@@ -297,7 +350,93 @@ class MovieDeleteView(AdminSessionMixin, DeleteView):
                 ip_address=request.META.get('REMOTE_ADDR')
             )
             messages.success(request, f'Movie "{movie.name}" has been archived and removed from all public listings.')
-            return redirect(self.success_url)
+            return redirect(next_url)
+
+
+@admin_session_required
+def movie_removal_list(request):
+    now = timezone.now()
+    week_ago = now - timedelta(days=7)
+    blocking_reservations = Reservation.objects.filter(
+        show__movie=OuterRef('pk'), status__in=['active', 'booked']
+    )
+    movie_bookings = Booking.objects.filter(movie=OuterRef('pk'))
+    movies = (
+        Movie.objects.annotate(
+            bookings=Coalesce(
+                Subquery(
+                    movie_bookings.values('movie')
+                    .annotate(c=Count('id'))
+                    .values('c')
+                ),
+                0,
+            ),
+            revenue=Coalesce(
+                Subquery(
+                    movie_bookings.values('movie')
+                    .annotate(t=Sum('total'))
+                    .values('t')
+                ),
+                Decimal('0.00'),
+            ),
+            last7=Coalesce(
+                Subquery(
+                    movie_bookings.filter(booked_at__gte=week_ago)
+                    .values('movie')
+                    .annotate(c=Count('id'))
+                    .values('c')
+                ),
+                0,
+            ),
+            theater_count=Count('theaters', distinct=True),
+            shows_count=Count('shows', distinct=True),
+            seat_capacity=Count('theaters__seats', distinct=True),
+            future_theaters=Count(
+                'theaters', filter=Q(theaters__time__gte=now), distinct=True
+            ),
+            future_shows=Count(
+                'shows',
+                filter=Q(shows__date__gte=now.date(), shows__status='active'),
+                distinct=True,
+            ),
+            has_blocking_res=Exists(blocking_reservations),
+        )
+        .order_by('-id')
+    )
+    rows = []
+    for m in movies:
+        occupancy = round(m.bookings / m.seat_capacity * 100, 1) if m.seat_capacity else 0
+        runs_days = (now.date() - m.release_date).days if m.release_date else None
+        running_with_bookings = bool(m.bookings) and (m.future_theaters or m.future_shows)
+        rows.append({
+            'movie': m,
+            'bookings': m.bookings,
+            'revenue': m.revenue,
+            'last7': m.last7,
+            'theaters': m.theater_count,
+            'shows': m.shows_count,
+            'capacity': m.seat_capacity,
+            'occupancy': occupancy,
+            'runs_days': runs_days,
+            'future_theaters': m.future_theaters,
+            'future_shows': m.future_shows,
+            'running_with_bookings': running_with_bookings,
+            'can_delete': not running_with_bookings and not m.has_blocking_res,
+        })
+
+    total_revenue = sum((r['revenue'] for r in rows), Decimal('0.00'))
+    chart_json = json.dumps({
+        'labels': [r['movie'].name for r in rows],
+        'bookings': [r['bookings'] for r in rows],
+        'last7': [r['last7'] for r in rows],
+    })
+    return render(request, 'admin/movies/movie_removal.html', {
+        'rows': rows,
+        'total_movies': len(rows),
+        'total_bookings': sum(r['bookings'] for r in rows),
+        'total_revenue': total_revenue,
+        'chart_json': chart_json,
+    })
 
 
 class MovieDetailView(AdminSessionMixin, TemplateView):
@@ -377,7 +516,6 @@ def movie_restore(request, pk):
     return redirect('admin_movie_list')
 
 
-@admin_session_required
 def search_suggestions(request):
     q = request.GET.get('q', '').strip()
     if len(q) < 1:
@@ -475,7 +613,12 @@ class GenreCreateView(AdminSessionMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.slug = slugify(form.instance.name)
-        response = super().form_valid(form)
+        try:
+            with transaction.atomic():
+                response = super().form_valid(form)
+        except IntegrityError:
+            messages.error(self.request, 'A genre with a similar name already exists.')
+            return redirect('admin_genre_list')
         messages.success(self.request, 'Genre added successfully.')
         AuditLog.objects.create(
             user=self.request.user,
@@ -496,7 +639,12 @@ class GenreUpdateView(AdminSessionMixin, UpdateView):
 
     def form_valid(self, form):
         form.instance.slug = slugify(form.instance.name)
-        response = super().form_valid(form)
+        try:
+            with transaction.atomic():
+                response = super().form_valid(form)
+        except IntegrityError:
+            messages.error(self.request, 'A genre with a similar name already exists.')
+            return redirect('admin_genre_list')
         messages.success(self.request, 'Genre updated successfully.')
         AuditLog.objects.create(
             user=self.request.user,
@@ -509,7 +657,7 @@ class GenreUpdateView(AdminSessionMixin, UpdateView):
         return response
 
 
-class GenreDeleteView(AdminSessionMixin, DeleteView):
+class GenreDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
     model = Genre
     template_name = 'admin/genres/genre_confirm_delete.html'
     success_url = reverse_lazy('admin_genre_list')
@@ -581,7 +729,12 @@ class LanguageCreateView(AdminSessionMixin, CreateView):
 
     def form_valid(self, form):
         form.instance.code = slugify(form.instance.name).replace('-', '_').upper()[:10]
-        response = super().form_valid(form)
+        try:
+            with transaction.atomic():
+                response = super().form_valid(form)
+        except IntegrityError:
+            messages.error(self.request, 'A language with a similar name already exists.')
+            return redirect('admin_language_list')
         messages.success(self.request, 'Language added successfully.')
         AuditLog.objects.create(
             user=self.request.user,
@@ -602,7 +755,12 @@ class LanguageUpdateView(AdminSessionMixin, UpdateView):
 
     def form_valid(self, form):
         form.instance.code = slugify(form.instance.name).replace('-', '_').upper()[:10]
-        response = super().form_valid(form)
+        try:
+            with transaction.atomic():
+                response = super().form_valid(form)
+        except IntegrityError:
+            messages.error(self.request, 'A language with a similar name already exists.')
+            return redirect('admin_language_list')
         messages.success(self.request, 'Language updated successfully.')
         AuditLog.objects.create(
             user=self.request.user,
@@ -615,7 +773,7 @@ class LanguageUpdateView(AdminSessionMixin, UpdateView):
         return response
 
 
-class LanguageDeleteView(AdminSessionMixin, DeleteView):
+class LanguageDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
     model = Language
     template_name = 'admin/languages/language_confirm_delete.html'
     success_url = reverse_lazy('admin_language_list')
@@ -724,7 +882,7 @@ class CastUpdateView(AdminSessionMixin, UpdateView):
         return response
 
 
-class CastDeleteView(AdminSessionMixin, DeleteView):
+class CastDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
     model = CastMember
     template_name = 'admin/cast/cast_confirm_delete.html'
     success_url = reverse_lazy('admin_cast_list')
@@ -824,7 +982,7 @@ class TheatreUpdateView(AdminSessionMixin, UpdateView):
         return response
 
 
-class TheatreDeleteView(AdminSessionMixin, DeleteView):
+class TheatreDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
     model = Theatre
     template_name = 'admin/theatres/theatre_confirm_delete.html'
     success_url = reverse_lazy('admin_theatre_list')
@@ -965,7 +1123,7 @@ class ScreenUpdateView(AdminSessionMixin, UpdateView):
         return response
 
 
-class ScreenDeleteView(AdminSessionMixin, DeleteView):
+class ScreenDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
     model = Screen
     template_name = 'admin/screens/screen_confirm_delete.html'
     success_url = reverse_lazy('admin_screen_list')
@@ -1075,7 +1233,7 @@ class ShowUpdateView(AdminSessionMixin, UpdateView):
         return response
 
 
-class ShowDeleteView(AdminSessionMixin, DeleteView):
+class ShowDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
     model = Show
     template_name = 'admin/shows/show_confirm_delete.html'
     success_url = reverse_lazy('admin_show_list')
@@ -1217,7 +1375,7 @@ class TrailerUpdateView(AdminSessionMixin, UpdateView):
         return response
 
 
-class TrailerDeleteView(AdminSessionMixin, DeleteView):
+class TrailerDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
     model = Trailer
     template_name = 'admin/trailers/trailer_confirm_delete.html'
     success_url = reverse_lazy('admin_trailer_list')
@@ -1320,7 +1478,7 @@ class MovieImageCreateView(AdminSessionMixin, CreateView):
         return response
 
 
-class MovieImageDeleteView(AdminSessionMixin, DeleteView):
+class MovieImageDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
     model = MovieImage
     template_name = 'admin/images/image_confirm_delete.html'
     success_url = reverse_lazy('admin_image_list')
@@ -1358,8 +1516,15 @@ def seat_management(request):
         if action == 'generate_seats':
             theater_id = request.POST.get('theater_id')
             theater = get_object_or_404(Theater, id=theater_id)
-            rows = int(request.POST.get('rows', 8))
-            seats_per_row = int(request.POST.get('seats_per_row', 12))
+            try:
+                rows = int(request.POST.get('rows', 8))
+                seats_per_row = int(request.POST.get('seats_per_row', 12))
+            except (TypeError, ValueError):
+                rows = 0
+                seats_per_row = 0
+            if rows < 1 or rows > 50 or seats_per_row < 1 or seats_per_row > 50:
+                messages.error(request, 'Rows and seats per row must be whole numbers between 1 and 50.')
+                return redirect(f'{reverse("admin_seat_management")}?theater={theater.id}')
             created_count = 0
             for r in range(1, rows + 1):
                 row_label = chr(64 + r) if r <= 26 else f'R{r}'
@@ -1451,7 +1616,7 @@ class BookingListView(AdminSessionMixin, ListView):
             return 20
 
     def get_queryset(self):
-        qs = Booking.objects.select_related('user', 'movie', 'theater', 'payment').all()
+        qs = Booking.objects.select_related('user', 'movie', 'theater', 'seat', 'payment').all()
         form = BookingSearchForm(self.request.GET)
         if form.is_valid():
             movie = form.cleaned_data.get('movie')
@@ -1503,6 +1668,10 @@ def booking_cancel(request, pk):
     if seat:
         seat.is_booked = False
         seat.save()
+    Payment.objects.filter(booking=booking, status='completed').update(
+        status='refunded', paid_at=timezone.now()
+    )
+    booking.theater.bump_seat_revision()
     AuditLog.objects.create(
         user=request.user,
         action='Booking Cancelled',
@@ -1535,6 +1704,7 @@ def booking_reserve(request):
                 messages.error(request, f'Only {available_seats.count()} seats available, need {seat_count}.')
                 return redirect('admin_booking_list')
             created_count = 0
+            touched_theaters = set()
             for seat in available_seats:
                 Booking.objects.create(
                     user=user,
@@ -1544,7 +1714,12 @@ def booking_reserve(request):
                 )
                 seat.is_booked = True
                 seat.save()
+                touched_theaters.add(seat.theater_id)
                 created_count += 1
+            if touched_theaters:
+                Theater.objects.filter(id__in=touched_theaters).update(
+                    seat_revision=F('seat_revision') + 1
+                )
             AuditLog.objects.create(
                 user=request.user,
                 action='Booking Reserved',
@@ -1570,10 +1745,12 @@ def booking_modify(request, pk):
         if old_seat:
             old_seat.is_booked = False
             old_seat.save()
+            old_seat.theater.bump_seat_revision()
         booking.seat = new_seat
         booking.save()
         new_seat.is_booked = True
         new_seat.save()
+        new_seat.theater.bump_seat_revision()
         AuditLog.objects.create(
             user=request.user,
             action='Booking Modified',
@@ -1593,6 +1770,45 @@ def booking_resend_confirmation(request, pk):
     return redirect('admin_booking_detail', pk=pk)
 
 
+class ReservationListView(AdminSessionMixin, ListView):
+    model = Reservation
+    template_name = 'admin/reservations/reservation_list.html'
+    context_object_name = 'reservations'
+    paginate_by = 20
+
+    def get_queryset(self):
+        qs = Reservation.objects.select_related('user', 'show', 'show__movie').prefetch_related('reserved_seats__seat')
+        movie = self.request.GET.get('movie')
+        theatre = self.request.GET.get('theatre')
+        date_val = self.request.GET.get('date')
+        username = self.request.GET.get('user')
+        status = self.request.GET.get('status')
+        payment = self.request.GET.get('payment')
+        if movie:
+            qs = qs.filter(show__movie_id=movie)
+        if theatre:
+            qs = qs.filter(show__name__icontains=theatre)
+        if date_val:
+            qs = qs.filter(show__time__date=date_val)
+        if username:
+            qs = qs.filter(user__username__icontains=username)
+        if status:
+            qs = qs.filter(status=status)
+        if payment:
+            qs = qs.filter(payment_status=payment)
+        return qs.order_by('-created_at')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['movies'] = Movie.objects.all()
+        context['theatre_names'] = Theater.objects.values_list('name', flat=True).distinct().order_by('name')
+        context['status_choices'] = Reservation.STATUS_CHOICES
+        context['payment_choices'] = Reservation.PAYMENT_STATUS_CHOICES
+        context['total_active'] = Reservation.objects.filter(status='active').count()
+        context['now'] = timezone.now()
+        return context
+
+
 class UserListView(AdminSessionMixin, ListView):
     model = User
     template_name = 'admin/users/user_list.html'
@@ -1606,7 +1822,7 @@ class UserListView(AdminSessionMixin, ListView):
             return 20
 
     def get_queryset(self):
-        qs = User.objects.all()
+        qs = User.objects.annotate(booking_count=Count('booking_set'))
         search = self.request.GET.get('search')
         if search:
             qs = qs.filter(
@@ -1630,8 +1846,22 @@ class UserListView(AdminSessionMixin, ListView):
 
 
 @admin_session_required
+@permission_required('user', 'can_edit')
 def user_toggle_active(request, pk):
     user_obj = get_object_or_404(User, id=pk)
+    if user_obj.id == request.user.id:
+        messages.error(request, 'You cannot deactivate your own account.')
+        return redirect('admin_user_list')
+    actor_profile = AdminProfile.objects.filter(user=request.user).first()
+    is_super_actor = request.user.is_superuser or (
+        actor_profile and actor_profile.role == 'super_admin'
+    )
+    is_super_admin_user = user_obj.is_superuser or AdminProfile.objects.filter(
+        user=user_obj, role='super_admin'
+    ).exists()
+    if user_obj.is_active and is_super_admin_user and not is_super_actor:
+        messages.error(request, 'Only a super admin can deactivate a super admin account.')
+        return redirect('admin_user_list')
     user_obj.is_active = not user_obj.is_active
     user_obj.save()
     status = 'activated' if user_obj.is_active else 'deactivated'
@@ -1648,6 +1878,7 @@ def user_toggle_active(request, pk):
 
 
 @admin_session_required
+@permission_required('user', 'can_view')
 def user_booking_history(request, pk):
     user_obj = get_object_or_404(User, id=pk)
     bookings = Booking.objects.filter(user=user_obj).select_related('movie', 'theater', 'seat').order_by('-booked_at')
@@ -1658,10 +1889,11 @@ def user_booking_history(request, pk):
 
 
 @admin_session_required
+@permission_required('user', 'can_edit')
 def user_reset_password(request, pk):
     if request.method == 'POST':
         user_obj = get_object_or_404(User, id=pk)
-        default_password = 'password123'
+        default_password = secrets.token_urlsafe(9)
         user_obj.set_password(default_password)
         user_obj.save()
         AuditLog.objects.create(
@@ -1708,6 +1940,7 @@ class StaffListView(AdminSessionMixin, ListView):
 
 
 @admin_session_required
+@permission_required('staff', 'can_create')
 def staff_create(request):
     if request.method == 'POST':
         form = StaffCreateForm(request.POST)
@@ -1742,6 +1975,7 @@ def staff_create(request):
 
 
 @admin_session_required
+@permission_required('staff', 'can_edit')
 def staff_edit(request, pk):
     profile = get_object_or_404(AdminProfile, id=pk)
     user = profile.user
@@ -1749,6 +1983,30 @@ def staff_edit(request, pk):
         user_form = StaffUpdateForm(request.POST, instance=user)
         profile_form = AdminProfileForm(request.POST, instance=profile)
         if user_form.is_valid() and profile_form.is_valid():
+            actor_profile = AdminProfile.objects.filter(user=request.user).first()
+            is_super_actor = request.user.is_superuser or (
+                actor_profile and actor_profile.role == 'super_admin'
+            )
+            new_role = profile_form.cleaned_data.get('role')
+            if profile.user_id == request.user.id and new_role != profile.role:
+                messages.error(request, 'You cannot change your own role.')
+                return redirect('admin_staff_list')
+            if new_role == 'super_admin' and not is_super_actor:
+                messages.error(request, 'Only a super admin can grant the super admin role.')
+                return redirect('admin_staff_list')
+            if new_role == 'admin' and not is_super_actor:
+                messages.error(request, 'Only a super admin can grant the admin role.')
+                return redirect('admin_staff_list')
+            if profile.role in ('super_admin', 'admin') and new_role not in ('super_admin', 'admin'):
+                remaining = AdminProfile.objects.filter(
+                    role=profile.role
+                ).exclude(pk=profile.pk).count()
+                if remaining == 0:
+                    messages.error(
+                        request,
+                        f'Cannot demote the last {profile.role} account.',
+                    )
+                    return redirect('admin_staff_list')
             user_form.save()
             profile_form.save()
             AuditLog.objects.create(
@@ -1772,10 +2030,31 @@ def staff_edit(request, pk):
 
 
 @admin_session_required
+@permission_required('staff', 'can_delete')
 def staff_delete(request, pk):
     profile = get_object_or_404(AdminProfile, id=pk)
     user = profile.user
     if request.method == 'POST':
+        actor_profile = AdminProfile.objects.filter(user=request.user).first()
+        is_super_actor = request.user.is_superuser or (
+            actor_profile and actor_profile.role == 'super_admin'
+        )
+        if profile.user_id == request.user.id:
+            messages.error(request, 'You cannot delete your own account.')
+            return redirect('admin_staff_list')
+        if profile.role == 'super_admin' and not is_super_actor:
+            messages.error(request, 'Only a super admin can delete a super admin.')
+            return redirect('admin_staff_list')
+        if profile.role in ('super_admin', 'admin'):
+            remaining = AdminProfile.objects.filter(
+                role=profile.role
+            ).exclude(pk=profile.pk).count()
+            if remaining == 0:
+                messages.error(
+                    request,
+                    f'Cannot delete the last {profile.role} account.',
+                )
+                return redirect('admin_staff_list')
         AuditLog.objects.create(
             user=request.user,
             action='Staff Deleted',
@@ -1793,11 +2072,19 @@ def staff_delete(request, pk):
 
 
 @admin_session_required
+@permission_required('staff', 'can_edit')
 def staff_permissions(request, pk):
     profile = get_object_or_404(AdminProfile, id=pk)
     modules = ['Movie', 'Theatre', 'Screen', 'Show', 'Booking', 'User', 'Staff', 'Coupon', 'Notification', 'Review', 'Genre', 'Language', 'Cast']
 
     if request.method == 'POST':
+        actor_profile = AdminProfile.objects.filter(user=request.user).first()
+        is_super_actor = request.user.is_superuser or (
+            actor_profile and actor_profile.role == 'super_admin'
+        )
+        if profile.user_id == request.user.id and not is_super_actor:
+            messages.error(request, 'You cannot modify your own permissions.')
+            return redirect('admin_staff_list')
         AdminPermission.objects.filter(admin_profile=profile).delete()
         for module in modules:
             can_view = request.POST.get(f'{module}_can_view') == 'on'
@@ -1884,7 +2171,7 @@ class CouponUpdateView(AdminSessionMixin, UpdateView):
         return response
 
 
-class CouponDeleteView(AdminSessionMixin, DeleteView):
+class CouponDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
     model = Coupon
     template_name = 'admin/coupons/coupon_confirm_delete.html'
     success_url = reverse_lazy('admin_coupon_list')
@@ -2180,6 +2467,7 @@ def get_notifications(request):
     return JsonResponse({'unread_count': count})
 
 
+@method_decorator(permission_required('settings', 'can_view'), name='dispatch')
 class SettingsView(AdminSessionMixin, TemplateView):
     template_name = 'admin/settings.html'
 
@@ -2205,7 +2493,7 @@ class SettingsView(AdminSessionMixin, TemplateView):
 def profile_view(request):
     profile, _ = AdminProfile.objects.get_or_create(
         user=request.user,
-        defaults={'role': 'admin'}
+        defaults={'role': 'staff'}
     )
     if request.method == 'POST':
         form = AdminProfileForm(request.POST, instance=profile)
@@ -2218,4 +2506,207 @@ def profile_view(request):
     return render(request, 'admin/profile.html', {
         'form': form,
         'profile': profile,
+    })
+
+
+@admin_session_required
+@permission_required('settings', 'can_view')
+def pricing_dashboard(request):
+    categories = list(SeatCategory.objects.all())
+    shows = (
+        Theater.objects.select_related('movie')
+        .annotate(
+            total_seats=Count('seats'),
+            available_seats=Count('seats', filter=Q(seats__is_booked=False)),
+            booked_seats=Count('seats', filter=Q(seats__is_booked=True)),
+        )
+        .order_by('-time')
+    )
+    movie_id = request.GET.get('movie')
+    search = request.GET.get('search')
+    if movie_id:
+        shows = shows.filter(movie_id=movie_id)
+    if search:
+        shows = shows.filter(Q(name__icontains=search) | Q(movie__name__icontains=search))
+
+    price_map = {}
+    for sp in ShowPrice.objects.filter(theater__in=shows):
+        price_map.setdefault(sp.theater_id, {})[sp.category_id] = sp.price
+
+    config, _ = PricingConfig.objects.get_or_create(pk=1)
+    return render(request, 'admin/pricing/pricing_dashboard.html', {
+        'shows': shows,
+        'categories': categories,
+        'price_map': price_map,
+        'config': config,
+        'slabs': GSTSlab.objects.all().order_by('display_order'),
+        'movies': Movie.objects.all(),
+    })
+
+
+@admin_session_required
+@permission_required('settings', 'can_edit')
+def pricing_show_edit(request, pk):
+    show = get_object_or_404(Theater.objects.select_related('movie'), id=pk)
+    categories = SeatCategory.objects.all()
+
+    if request.method == 'POST':
+        updates = {}
+        valid = True
+        for category in categories:
+            raw = request.POST.get('price_{}'.format(category.id), '').strip()
+            try:
+                value = Decimal(raw)
+            except (TypeError, ValueError, InvalidOperation):
+                messages.error(request, 'Enter a valid price for {}.'.format(category.name))
+                valid = False
+                continue
+            if value < 0:
+                messages.error(request, 'Price for {} cannot be negative.'.format(category.name))
+                valid = False
+                continue
+            updates[category.id] = value
+
+        if valid:
+            if not updates:
+                messages.error(request, 'Enter at least one valid price.')
+                return redirect('admin_pricing_show_edit', pk=show.pk)
+            for category in categories:
+                if category.id in updates:
+                    ShowPrice.objects.update_or_create(
+                        theater=show,
+                        category=category,
+                        defaults={'price': updates[category.id]},
+                    )
+            Theater.objects.filter(pk=show.pk).update(ticket_price=min(updates.values()))
+            AuditLog.objects.create(
+                user=request.user,
+                action='Show Pricing Updated',
+                module='Show',
+                object_id=show.id,
+                details='Updated seat-category pricing for {} at {} ({})'.format(
+                    show.movie.name, show.name, show.time.strftime('%d %b, %I:%M %p')
+                ),
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            messages.success(
+                request,
+                'Pricing saved. Changes apply to new bookings only; existing tickets are unchanged.'
+            )
+            return redirect('admin_pricing_show_edit', pk=show.pk)
+
+    prices = {sp.category_id: sp.price for sp in ShowPrice.objects.filter(theater=show)}
+    return render(request, 'admin/pricing/show_pricing.html', {
+        'show': show,
+        'categories': categories,
+        'prices': prices,
+    })
+
+
+@admin_session_required
+@permission_required('settings', 'can_edit')
+def pricing_config(request):
+    config, _ = PricingConfig.objects.get_or_create(pk=1)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'save_fees':
+            try:
+                platform = Decimal(request.POST.get('platform_fee_per_ticket', ''))
+                misc = Decimal(request.POST.get('misc_fee_per_booking', ''))
+            except (TypeError, ValueError, InvalidOperation):
+                messages.error(request, 'Fees must be valid amounts.')
+            else:
+                if platform < 0 or misc < 0:
+                    messages.error(request, 'Fees cannot be negative.')
+                else:
+                    config.platform_fee_per_ticket = platform
+                    config.misc_fee_per_booking = misc
+                    config.save()
+                    AuditLog.objects.create(
+                        user=request.user,
+                        action='Fees Updated',
+                        module='Pricing',
+                        details='Platform fee \u20b9{}, misc fee \u20b9{}'.format(platform, misc),
+                        ip_address=request.META.get('REMOTE_ADDR')
+                    )
+                    messages.success(request, 'Fee configuration saved.')
+
+        elif action == 'save_slabs':
+            ids = request.POST.getlist('slab_id')
+            mins = request.POST.getlist('slab_min')
+            maxs = request.POST.getlist('slab_max')
+            rates = request.POST.getlist('slab_rate')
+            orders = request.POST.getlist('slab_order')
+            parsed = []
+            ok = True
+            for i in range(min(len(ids), len(mins), len(maxs), len(rates), len(orders))):
+                try:
+                    min_v = Decimal(mins[i])
+                    rate = Decimal(rates[i])
+                    max_raw = (maxs[i] or '').strip()
+                    max_v = Decimal(max_raw) if max_raw else None
+                except (TypeError, ValueError, InvalidOperation):
+                    messages.error(request, 'Each slab needs a valid minimum, maximum, and rate.')
+                    ok = False
+                    break
+                if min_v < 0 or rate < 0 or (max_v is not None and max_v < min_v):
+                    messages.error(request, 'Invalid slab range or rate.')
+                    ok = False
+                    break
+                order = int(orders[i]) if (orders[i] or '').isdigit() else 0
+                parsed.append((ids[i], min_v, max_v, rate, order))
+            if ok:
+                kept_ids = [int(p[0]) for p in parsed if p[0].isdigit()]
+                GSTSlab.objects.exclude(id__in=kept_ids).delete()
+                for raw_id, min_v, max_v, rate, order in parsed:
+                    if raw_id.isdigit():
+                        GSTSlab.objects.filter(id=int(raw_id)).update(
+                            min_amount=min_v, max_amount=max_v, rate=rate, display_order=order
+                        )
+                    else:
+                        GSTSlab.objects.create(
+                            min_amount=min_v, max_amount=max_v, rate=rate, display_order=order
+                        )
+                AuditLog.objects.create(
+                    user=request.user,
+                    action='GST Slabs Updated',
+                    module='Pricing',
+                    details='Saved {} GST slab(s)'.format(len(parsed)),
+                    ip_address=request.META.get('REMOTE_ADDR')
+                )
+                messages.success(request, 'GST slabs saved.')
+
+        elif action == 'add_category':
+            name = request.POST.get('name', '').strip().upper()
+            row_start = request.POST.get('row_start', '').strip().upper()
+            row_end = request.POST.get('row_end', '').strip().upper()
+            if not name or not row_start or not row_end:
+                messages.error(request, 'Category name and row range are required.')
+            else:
+                try:
+                    SeatCategory.objects.create(
+                        name=name,
+                        row_start=row_start,
+                        row_end=row_end,
+                        display_order=SeatCategory.objects.count(),
+                    )
+                    AuditLog.objects.create(
+                        user=request.user,
+                        action='Seat Category Added',
+                        module='Pricing',
+                        details='Added category {} (rows {}-{})'.format(name, row_start, row_end),
+                        ip_address=request.META.get('REMOTE_ADDR')
+                    )
+                    messages.success(request, 'Seat category "{}" added.'.format(name))
+                except IntegrityError:
+                    messages.error(request, 'A category with that name already exists.')
+
+        return redirect('admin_pricing_config')
+
+    return render(request, 'admin/pricing/config.html', {
+        'config': config,
+        'slabs': GSTSlab.objects.all().order_by('display_order'),
+        'categories': SeatCategory.objects.all(),
     })
