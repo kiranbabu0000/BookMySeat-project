@@ -18,6 +18,13 @@
             <h1 class="h2 fw-bold mb-1" style="color: var(--text-primary);">{{ user.username }}</h1>
             <p class="profile-meta mb-3"><i class="bi bi-envelope me-1"></i>{{ user.email }}</p>
             <div class="d-flex gap-2 flex-wrap">
+              <a href="{% url 'wishlist' %}" class="btn btn-sm btn-bms-outline fw-semibold rounded-pill">
+                <i class="bi bi-heart me-1"></i> Wishlist ({{ wishlist_movies|length }})
+              </a>
+              <a href="{% url 'my_notifications' %}" class="btn btn-sm btn-bms-outline fw-semibold rounded-pill">
+                <i class="bi bi-bell me-1"></i> Notifications
+                {% if unread_notifications %}<span class="badge rounded-pill bg-danger ms-1">{{ unread_notifications }}</span>{% endif %}
+              </a>
               <a href="{% url 'password_reset' %}" class="btn btn-sm btn-bms-outline fw-semibold rounded-pill">
                 <i class="bi bi-key me-1"></i> Reset Password
               </a>
@@ -63,9 +70,22 @@
       <!-- Bookings Section -->
       <div class="col-lg-7">
         <div class="card h-100 border-0 shadow-sm" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
-          <div class="card-header bg-transparent border-bottom p-4 d-flex align-items-center justify-content-between" style="border-color: var(--border-color) !important;">
-            <h2 class="h5 fw-bold mb-0"><i class="bi bi-ticket-perforated me-2 text-danger"></i>Your Bookings</h2>
-            <span class="badge rounded-pill" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color);">{{ bookings|length }} Tickets</span>
+          <div class="card-header bg-transparent border-bottom p-4" style="border-color: var(--border-color) !important;">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <h2 class="h5 fw-bold mb-0"><i class="bi bi-ticket-perforated me-2 text-danger"></i>Your Bookings</h2>
+              <span class="badge rounded-pill" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color);">{{ bookings|length }} Tickets</span>
+            </div>
+            <ul class="nav nav-pills gap-2 mt-3" style="--bs-nav-pills-border-radius: var(--radius-full);">
+              <li class="nav-item">
+                <a href="{% url 'profile' %}" class="btn btn-sm {% if not status_filter %}btn-bms-primary{% else %}btn-bms-outline{% endif %} fw-semibold">All</a>
+              </li>
+              <li class="nav-item">
+                <a href="{% url 'profile' %}?filter=upcoming" class="btn btn-sm {% if status_filter == 'upcoming' %}btn-bms-primary{% else %}btn-bms-outline{% endif %} fw-semibold">Upcoming</a>
+              </li>
+              <li class="nav-item">
+                <a href="{% url 'profile' %}?filter=past" class="btn btn-sm {% if status_filter == 'past' %}btn-bms-primary{% else %}btn-bms-outline{% endif %} fw-semibold">Past</a>
+              </li>
+            </ul>
           </div>
           <div class="card-body p-4">
             {% if bookings %}
@@ -112,6 +132,48 @@
                 <h3 class="empty-state__title">No bookings yet</h3>
                 <p class="empty-state__text">Ready for movie night? Explore available showtimes and book your tickets.</p>
                 <a href="{% url 'movie_list' %}" class="btn btn-bms-primary">Browse Movies</a>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Payment History Section -->
+        <div class="card h-100 border-0 shadow-sm mt-4" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
+          <div class="card-header bg-transparent border-bottom p-4" style="border-color: var(--border-color) !important;">
+            <h2 class="h5 fw-bold mb-0"><i class="bi bi-credit-card me-2 text-danger"></i>Payment History</h2>
+          </div>
+          <div class="card-body p-4">
+            {% if transactions %}
+              <div class="d-flex flex-column gap-3">
+                {% for tx in transactions %}
+                  <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                    <div>
+                      <div class="fw-semibold" style="color: var(--text-primary);">
+                        {% if tx.reservation and tx.reservation.show %}{{ tx.reservation.show.movie.name }}{% else %}Booking payment{% endif %}
+                        <span class="small text-muted">· {{ tx.created_at|date:"d M Y, g:i A" }}</span>
+                      </div>
+                      <div class="small text-muted text-monospace">Order: {{ tx.gateway_order_id|default:'—' }}{% if tx.method %} · {{ tx.method|upper }}{% endif %}</div>
+                    </div>
+                    <div class="text-end">
+                      <div class="fw-bold" style="color: var(--text-primary);">₹{{ tx.amount }}</div>
+                      {% if tx.status == 'captured' %}
+                        <span class="badge rounded-pill" style="background: rgba(22,163,74,0.15); color: var(--accent-success);">Paid</span>
+                      {% elif tx.status == 'refunded' %}
+                        <span class="badge rounded-pill" style="background: rgba(220,38,38,0.15); color: var(--accent-primary);">Refunded</span>
+                      {% elif tx.status == 'failed' %}
+                        <span class="badge rounded-pill" style="background: rgba(245,158,11,0.15); color: #d97706;">Failed</span>
+                      {% else %}
+                        <span class="badge rounded-pill" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color);">{{ tx.get_status_display }}</span>
+                      {% endif %}
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="empty-state py-4">
+                <div class="empty-state__icon"><i class="bi bi-credit-card"></i></div>
+                <h3 class="empty-state__title">No payments yet</h3>
+                <p class="empty-state__text">Your transaction history will appear here after your first booking.</p>
               </div>
             {% endif %}
           </div>

@@ -85,6 +85,7 @@
 
             <form method="POST" action="{% url 'login' %}" class="form-bms" id="loginForm" novalidate>
               {% csrf_token %}
+              {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
 
               <!-- Username Input -->
               <div class="mb-3">

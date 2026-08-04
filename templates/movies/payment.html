@@ -11,7 +11,9 @@
         <div class="card border-0 shadow-sm p-4 p-md-5" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
           <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
             <div>
-              <span class="badge bg-danger mb-2">Secure Checkout</span>
+              <span class="badge bg-danger mb-2">
+                {% if demo_checkout %}Secure Checkout (Demo){% else %}Secure Checkout{% endif %}
+              </span>
               <h1 class="h3 fw-bold mb-1" style="color: var(--text-primary);">{{ reservation.show.movie.name }}</h1>
               <p class="text-muted mb-0">
                 <i class="bi bi-building me-1 text-danger"></i>{{ reservation.show.name }}
@@ -48,11 +50,11 @@
 
           <div class="price-breakdown" id="priceBreakdown">
             <div class="d-flex justify-content-between py-1 small">
-              <span class="text-muted">Subtotal <span class="text-muted-50" id="subtotalNote"></span></span>
+              <span class="text-muted">Subtotal</span>
               <span id="subtotalAmt">₹{{ pricing.subtotal }}</span>
             </div>
             <div class="d-flex justify-content-between py-1 small">
-              <span class="text-muted">Platform Fee <span id="feeNote"></span></span>
+              <span class="text-muted">Platform Fee</span>
               <span id="platformFeeAmt">₹{{ pricing.platform_fee }}</span>
             </div>
             <div class="d-flex justify-content-between py-1 small">
@@ -86,51 +88,29 @@
             <div id="couponFeedback" class="small mt-2"></div>
           </div>
 
-          <div class="payment-methods mb-4">
-            <div class="form-check payment-method">
-              <input class="form-check-input" type="radio" name="method" id="methodUpi" checked>
-              <label class="form-check-label w-100" for="methodUpi">
-                <i class="bi bi-phone me-2"></i> UPI
-                <span class="text-muted small">user@upi</span>
-              </label>
-            </div>
-            <div class="form-check payment-method">
-              <input class="form-check-input" type="radio" name="method" id="methodCard">
-              <label class="form-check-label w-100" for="methodCard">
-                <i class="bi bi-credit-card me-2"></i> Credit / Debit Card
-                <span class="text-muted small">•••• •••• •••• 4242</span>
-              </label>
-            </div>
-            <div class="form-check payment-method">
-              <input class="form-check-input" type="radio" name="method" id="methodNet">
-              <label class="form-check-label w-100" for="methodNet">
-                <i class="bi bi-bank me-2"></i> Net Banking
-                <span class="text-muted small">All major banks</span>
-              </label>
-            </div>
-          </div>
+          <input type="hidden" id="csrfToken" value="{{ csrf_token }}">
+          <input type="hidden" id="couponCodeInput">
 
-          <form method="post" action="{% url 'simulate_payment' reservation.token %}" id="paymentForm">
-            {% csrf_token %}
-            <input type="hidden" name="transaction_id" value="{{ transaction_id }}">
-            <input type="hidden" name="payment_method" id="paymentMethodInput" value="upi">
-            <input type="hidden" name="coupon_code" id="couponCodeInput">
-            <button type="submit" name="action" value="success" class="btn btn-bms-primary w-100 justify-content-center py-3 fw-semibold" id="payBtn">
-              <i class="bi bi-lock-fill me-1"></i> Pay <span id="payBtnAmt">₹{{ pricing.total }}</span> Securely
-            </button>
-          </form>
+          <button type="button" class="btn btn-bms-primary w-100 justify-content-center py-3 fw-semibold" id="payBtn">
+            <i class="bi bi-lock-fill me-1"></i> Pay <span id="payBtnAmt">₹{{ pricing.total }}</span> Securely
+          </button>
 
-          <form method="post" action="{% url 'simulate_payment' reservation.token %}" class="mt-2">
-            {% csrf_token %}
-            <button type="submit" name="action" value="fail" class="btn btn-bms-outline w-100 justify-content-center py-2" id="failBtn">
-              <i class="bi bi-x-circle me-1"></i> Simulate Payment Failure
-            </button>
-          </form>
-
+          {% if demo_checkout %}
+          <button type="button" class="btn btn-bms-outline w-100 justify-content-center py-2 mt-2" id="failBtn">
+            <i class="bi bi-x-circle me-1"></i> Simulate Payment Failure
+          </button>
           <p class="text-muted small text-center mt-3 mb-0">
-            <i class="bi bi-shield-lock me-1"></i>Demo checkout via the BookMySeat payment gateway. No real money is charged.
-            Paying more than once from this screen is blocked to prevent duplicate charges.
+            <i class="bi bi-shield-lock me-1"></i>Demo checkout — no real money is charged. The same signature-verified
+            flow used in production runs here, so the experience matches live payments exactly.
           </p>
+          {% else %}
+          <p class="text-muted small text-center mt-3 mb-0">
+            <i class="bi bi-shield-lock me-1"></i>Payments are processed securely by Razorpay. Your card details are
+            never stored on our servers.
+          </p>
+          {% endif %}
+
+          <div id="paymentFeedback" class="small mt-3 text-center"></div>
         </div>
       </div>
     </div>
@@ -139,14 +119,29 @@
 {% endblock %}
 
 {% block extra_js %}
+{% if not demo_checkout %}
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+{% endif %}
 <script>
   (function () {
+    'use strict';
+
     var expiresAt = new Date('{{ reservation.expires_at|date:"c" }}');
+    var serverRemaining = Number('{{ remaining }}');
+    var timeOffsetMs = (expiresAt.getTime() - (isNaN(serverRemaining) ? 0 : serverRemaining) * 1000) - Date.now();
     var token = '{{ reservation.token }}';
     var timerEl = document.getElementById('reservationTimer');
     var payBtn = document.getElementById('payBtn');
     var failBtn = document.getElementById('failBtn');
-    var csrf = document.querySelector('#paymentForm input[name=csrfmiddlewaretoken]').value;
+    var feedbackEl = document.getElementById('paymentFeedback');
+    var csrf = document.getElementById('csrfToken').value;
+    var couponCodeInput = document.getElementById('couponCodeInput');
+    var demoCheckout = {{ demo_checkout|yesno:"true,false" }};
+    var startUrl = '{{ start_payment_url|escapejs }}';
+    var verifyUrl = '{{ verify_payment_url|escapejs }}';
+    var failedUrl = '{{ failed_payment_url|escapejs }}';
+    var bookSeatsUrl = '{{ book_seats_url|escapejs }}';
+    var razorpayKey = '{{ razorpay_key|escapejs }}';
 
     var pricing = {
       subtotal: '{{ pricing.subtotal }}',
@@ -158,11 +153,12 @@
       total: '{{ pricing.total }}'
     };
     var ticketCount = {{ seats|length }};
+    var currentTotal = Number(pricing.total);
 
     function pad(n) { return String(n).padStart(2, '0'); }
 
     function tick() {
-      var remaining = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+      var remaining = Math.max(0, Math.floor((expiresAt.getTime() - timeOffsetMs - Date.now()) / 1000));
       timerEl.textContent = pad(Math.floor(remaining / 60)) + ':' + pad(remaining % 60);
       if (remaining <= 0) {
         clearInterval(handle);
@@ -171,25 +167,19 @@
           headers: { 'X-CSRFToken': csrf },
           body: '{}'
         }).catch(function () {});
-        window.location.href = '{{ book_seats_url }}';
+        window.location.href = bookSeatsUrl;
       }
     }
 
     var handle = setInterval(tick, 1000);
     tick();
 
-    var methodInput = document.getElementById('paymentMethodInput');
-    document.querySelectorAll('input[name=method]').forEach(function (el) {
-      el.addEventListener('change', function () {
-        methodInput.value = el.id === 'methodUpi' ? 'upi' : (el.id === 'methodCard' ? 'card' : 'netbanking');
-      });
-    });
-
     function fmt(amount) {
       return '\u20b9' + Number(amount).toFixed(2);
     }
 
     function setTotal(total, discount) {
+      currentTotal = Number(total);
       document.getElementById('totalAmt').textContent = fmt(total);
       document.getElementById('payBtnAmt').textContent = fmt(total);
       document.getElementById('discountAmt').textContent = '\u2212 ' + fmt(discount);
@@ -202,7 +192,6 @@
     var couponApplyBtn = document.getElementById('couponApplyBtn');
     var couponInput = document.getElementById('couponInput');
     var couponFeedback = document.getElementById('couponFeedback');
-    var couponCodeInput = document.getElementById('couponCodeInput');
 
     couponApplyBtn.addEventListener('click', applyCoupon);
     couponInput.addEventListener('keydown', function (e) {
@@ -237,26 +226,134 @@
       });
     }
 
+    function postJson(url, body) {
+      return fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrf
+        },
+        body: JSON.stringify(body)
+      }).then(function (r) {
+        return r.json().then(function (data) {
+          data._status = r.status;
+          return data;
+        });
+      });
+    }
+
+    function showFeedback(message, ok) {
+      feedbackEl.textContent = message || '';
+      feedbackEl.className = 'small mt-3 text-center ' + (ok ? 'text-success fw-semibold' : 'text-danger');
+    }
+
     function lockCheckout() {
       payBtn.disabled = true;
       payBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Processing payment\u2026';
-      failBtn.disabled = true;
+      if (failBtn) { failBtn.disabled = true; }
+    }
+
+    function enableCheckout() {
+      payBtn.disabled = false;
+      payBtn.innerHTML = '<i class="bi bi-lock-fill me-1"></i> Pay <span id="payBtnAmt">' + fmt(currentTotal) + '</span> Securely';
+      if (failBtn) { failBtn.disabled = false; }
+    }
+
+    function handleFailure(data) {
+      if (data && data.redirect) {
+        window.location.href = data.redirect;
+        return;
+      }
+      showFeedback(data && data.error ? data.error : 'Payment could not be processed. Please try again.', false);
+      enableCheckout();
+    }
+
+    function verify(orderId, paymentId, signature) {
+      postJson(verifyUrl, {
+        razorpay_order_id: orderId,
+        razorpay_payment_id: paymentId,
+        razorpay_signature: signature,
+        payment_method: 'upi',
+        demo: demoCheckout
+      }).then(function (data) {
+        if (data.ok && data.confirmation_url) {
+          window.location.href = data.confirmation_url;
+        } else {
+          handleFailure(data);
+        }
+      }).catch(function () {
+        showFeedback('Could not confirm the payment. Please try again.', false);
+        enableCheckout();
+      });
+    }
+
+    function startCheckout() {
+      lockCheckout();
+      postJson(startUrl, { coupon_code: couponCodeInput.value || '' }).then(function (data) {
+        if (!data.ok) { handleFailure(data); return; }
+        var checkout = data.checkout;
+        if (checkout.demo) {
+          verify(checkout.order_id, 'pay_DEMO_pending', checkout.demo_signature);
+          return;
+        }
+        if (typeof Razorpay !== 'function') {
+          showFeedback('Payment gateway failed to load. Please refresh and try again.', false);
+          enableCheckout();
+          return;
+        }
+        var options = {
+          key: checkout.key || razorpayKey,
+          amount: checkout.amount,
+          currency: checkout.currency || 'INR',
+          order_id: checkout.order_id,
+          name: 'BookMySeat',
+          description: 'Movie tickets',
+          handler: function (response) {
+            verify(response.razorpay_order_id, response.razorpay_payment_id, response.razorpay_signature);
+          },
+          modal: { ondismiss: function () { enableCheckout(); } },
+          theme: { color: '#dc2626' },
+          prefill: { name: '{{ user.get_full_name|escapejs|default:user.username }}', email: '{{ user.email|escapejs }}' }
+        };
+        var rzp = new Razorpay(options);
+        rzp.open();
+      }).catch(function () {
+        showFeedback('Could not reach the payment service. Please try again.', false);
+        enableCheckout();
+      });
     }
 
     payBtn.addEventListener('click', function () {
       if (payBtn.disabled) return;
-      lockCheckout();
-    });
-    failBtn.addEventListener('click', function () {
-      if (failBtn.disabled) return;
-      lockCheckout();
+      startCheckout();
     });
 
-    var submitted = false;
-    document.getElementById('paymentForm').addEventListener('submit', function (e) {
-      if (submitted) { e.preventDefault(); return; }
-      submitted = true;
-    });
+    if (failBtn) {
+      failBtn.addEventListener('click', function () {
+        if (failBtn.disabled) return;
+        lockCheckout();
+        postJson(startUrl, { coupon_code: couponCodeInput.value || '' }).then(function (data) {
+          if (!data.ok) { handleFailure(data); return; }
+          var orderId = data.checkout.order_id;
+          return postJson(failedUrl, {
+            razorpay_order_id: orderId,
+            razorpay_payment_id: 'pay_DEMO_failed',
+            error: 'Simulated payment failure',
+            payment_method: 'upi'
+          });
+        }).then(function (data) {
+          if (data && data.ok) {
+            showFeedback('Payment failed. Your seats are still held — you can retry.', false);
+          } else {
+            handleFailure(data || {});
+          }
+          enableCheckout();
+        }).catch(function () {
+          showFeedback('Could not record the failure. Please try again.', false);
+          enableCheckout();
+        });
+      });
+    }
   })();
 </script>
 {% endblock %}

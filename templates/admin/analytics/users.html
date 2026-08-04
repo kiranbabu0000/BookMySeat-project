@@ -1,0 +1,36 @@
+{% extends 'admin/analytics/analytics_base.html' %}
+{% block analytics_content %}
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Total Users" value=data.total_users icon="bi-people" color="var(--accent-secondary)" stat_key="total_users" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Active Users" value=data.active_users icon="bi-person-check" color="var(--accent-success)" stat_key="active_users" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="New in Period" value=data.new_in_range icon="bi-person-plus" color="var(--accent-primary)" stat_key="new_in_range" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Staff Accounts" value=data.staff_users icon="bi-person-badge" color="var(--accent-gold)" stat_key="staff_users" %}
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-6 col-md-12">
+    {% include 'admin/analytics/partials/_chart_card.html' with title="New User Signups" chart_key="users_trend" %}
+  </div>
+  <div class="col-lg-6 col-md-12">
+    <div class="card-bms h-100">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-people-fill me-2"></i>Top Users</h5></div>
+      <div class="card-bms-body p-0">
+        <div class="table-responsive">
+          <table class="table table-bms mb-0">
+            <thead><tr>{% for col in tables.top_users.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+            <tbody data-table="top_users">
+              {% for row in tables.top_users.rows %}
+              <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+              {% empty %}
+              <tr><td colspan="{{ tables.top_users.columns|length }}" class="text-center text-muted py-4">No user activity in this period.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

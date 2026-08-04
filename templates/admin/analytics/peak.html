@@ -1,0 +1,48 @@
+{% extends 'admin/analytics/analytics_base.html' %}
+{% load admin_tags %}
+{% block analytics_content %}
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Peak Hour" value=data.peak_hour_label icon="bi-clock" color="var(--accent-primary)" stat_key="peak_hour_label" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Peak Hour Bookings" value=data.peak_hour_count icon="bi-graph-up-arrow" color="var(--accent-success)" stat_key="peak_hour_count" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Busiest Day" value=data.peak_weekday icon="bi-calendar-day" color="var(--accent-gold)" stat_key="peak_weekday" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Peak Day Bookings" value=data.peak_weekday_count icon="bi-ticket-perforated" color="var(--accent-secondary)" stat_key="peak_weekday_count" %}
+</div>
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Bookings by Hour of Day" chart_key="peak_hour" %}
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Bookings by Day of Week" chart_key="peak_weekday" %}
+</div>
+
+<div class="row g-4">
+  <div class="col-md-12">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-grid-3x3 me-2"></i>Peak Heatmap (Hour &times; Weekday)</h5></div>
+      <div class="card-bms-body">
+        <div class="table-responsive">
+          <table class="table table-bms mb-0 peak-heatmap">
+            <thead>
+              <tr>
+                <th></th>
+                {% for h in data.hour.labels %}<th class="text-center px-1">{{ h }}</th>{% endfor %}
+              </tr>
+            </thead>
+            <tbody data-heatmap>
+              {% for row in data.matrix.matrix %}
+              <tr>
+                <th class="text-nowrap">{{ data.matrix.weekdays|get_item:forloop.counter0 }}</th>
+                {% for cell in row %}
+                <td class="heat-cell" data-dow="{{ forloop.parentloop.counter0 }}" data-h="{{ forloop.counter0 }}" data-v="{{ cell }}" title=""></td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="text-muted small mb-0 mt-2">Intensity = confirmed bookings placed in that hour/weekday. Rows are Mon&ndash;Sun.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

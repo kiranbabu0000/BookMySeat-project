@@ -1,0 +1,94 @@
+/* Analytics dashboard styles for the BookMySeat admin portal */
+
+.analytics-toolbar {
+  gap: 0.75rem;
+}
+
+.btn-outline-bms {
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+  background: transparent;
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+              background-color var(--transition-fast);
+}
+
+.btn-outline-bms:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+}
+
+.btn-bms {
+  color: #fff;
+  background: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+}
+
+.btn-bms:hover {
+  color: #fff;
+  background: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
+}
+
+.analytics-chart-wrap {
+  position: relative;
+  height: 280px;
+}
+
+.analytics-chart-wrap canvas {
+  max-height: 280px;
+}
+
+/* Heatmap */
+.peak-heatmap {
+  font-size: 0.75rem;
+}
+
+.peak-heatmap th,
+.peak-heatmap td {
+  border: 1px solid var(--border-color);
+}
+
+.heat-cell {
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  text-align: center;
+  background-color: color-mix(in srgb, var(--bg-tertiary) 100%, transparent);
+  transition: transform 0.15s ease;
+  cursor: default;
+}
+
+.heat-cell:hover {
+  transform: scale(1.25);
+  z-index: 2;
+  position: relative;
+}
+
+/* AJAX status pill */
+.ajax-status {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  transition: opacity var(--transition-fast);
+}
+
+.ajax-status.loading {
+  color: var(--accent-secondary);
+}
+
+.ajax-status.updated {
+  color: var(--accent-success);
+}
+
+.ajax-status.error {
+  color: var(--accent-primary);
+}
+
+/* Table value alignment */
+.table-bms td {
+  vertical-align: middle;
+}
+
+[data-theme="dark"] .heat-cell {
+  background-color: var(--bg-tertiary);
+}

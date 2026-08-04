@@ -77,6 +77,10 @@
             <div class="label">Booked For</div>
             <div class="value">{{ booking.user.username }}</div>
           </div>
+          <div>
+            <div class="label">Payment ID</div>
+            <div class="value" style="word-break: break-all;">{{ booking.payment.transaction_id|default:"—" }}</div>
+          </div>
         </div>
 
         <div class="ticket-qr">

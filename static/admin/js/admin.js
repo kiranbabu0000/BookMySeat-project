@@ -86,11 +86,17 @@
     if (!badge) return;
 
     function updateBadge(count) {
+      var badgeEl = badge.querySelector('.badge');
+      if (!badgeEl) {
+        badgeEl = document.createElement('span');
+        badgeEl.className = 'badge rounded-pill bg-danger';
+        badge.appendChild(badgeEl);
+      }
       if (count > 0) {
-        badge.textContent = count > 99 ? '99+' : count;
-        badge.style.display = 'flex';
+        badgeEl.textContent = count > 99 ? '99+' : count;
+        badgeEl.style.display = '';
       } else {
-        badge.style.display = 'none';
+        badgeEl.style.display = 'none';
       }
     }
 

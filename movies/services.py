@@ -13,7 +13,7 @@ from django.db import transaction, IntegrityError
 from django.db.models import Exists, F, OuterRef
 from django.utils import timezone
 
-from admin_panel.models import Coupon, GSTSlab, Payment, PricingConfig
+from admin_panel.models import Coupon, GSTSlab, Payment, PaymentTransaction, PricingConfig
 from .models import (
     RESERVATION_HOLD_SECONDS,
     Booking,
@@ -144,24 +144,21 @@ def discount_for(subtotal, coupon):
     return _round2(subtotal * Decimal(coupon.discount_percent) / 100)
 
 
-def reservation_pricing(reservation, coupon_code=None):
-    """Full price breakdown for a reservation (seats, fees, GST, discount, total)."""
-    entries = list(
-        reservation.reserved_seats.select_related('seat').order_by('seat__seat_number')
-    )
+def _pricing_for_seats(show, seat_objects):
+    """Price breakdown for a set of Seat rows (fees, GST, no coupon)."""
     categories = _load_categories()
-    price_map = _price_map(reservation.show)
+    price_map = _price_map(show)
     seats = []
-    for entry in entries:
-        number = entry.seat.seat_number
+    for seat in sorted(seat_objects, key=lambda s: s.seat_number):
+        number = seat.seat_number
         category = category_for_seat(number, categories)
         category_name = category.name if category else ''
         seats.append({
-            'seat_id': entry.seat_id,
+            'seat_id': seat.id,
             'seat_number': number,
             'tier': category_name,
             'category': category_name,
-            'price': seat_price(reservation.show, number, categories, price_map),
+            'price': seat_price(show, number, categories, price_map),
         })
     subtotal = sum((s['price'] for s in seats), Decimal('0.00'))
     config = get_pricing_config()
@@ -171,9 +168,6 @@ def reservation_pricing(reservation, coupon_code=None):
     taxable = subtotal + platform_fee + misc_fee
     gst_rate = gst_rate_for(taxable)
     gst = _round2(taxable * gst_rate / 100)
-    coupon = validate_coupon(coupon_code, subtotal)
-    discount = discount_for(subtotal, coupon) if coupon else Decimal('0.00')
-    total = subtotal + platform_fee + misc_fee + gst - discount
     return {
         'seats': seats,
         'subtotal': _round2(subtotal),
@@ -182,10 +176,29 @@ def reservation_pricing(reservation, coupon_code=None):
         'convenience_fee': convenience_fee,
         'gst_rate': gst_rate,
         'gst': gst,
-        'discount': discount,
-        'total': _round2(total),
-        'coupon': coupon,
+        'discount': Decimal('0.00'),
+        'total': _round2(subtotal + platform_fee + misc_fee + gst),
+        'coupon': None,
     }
+
+
+def pricing_for_seats(show, seat_objects):
+    """Public price breakdown for a set of seats (used by walk-in bookings)."""
+    return _pricing_for_seats(show, seat_objects)
+
+
+def reservation_pricing(reservation, coupon_code=None):
+    """Full price breakdown for a reservation (seats, fees, GST, discount, total)."""
+    entries = list(
+        reservation.reserved_seats.select_related('seat').order_by('seat__seat_number')
+    )
+    pricing = _pricing_for_seats(reservation.show, [e.seat for e in entries])
+    coupon = validate_coupon(coupon_code, pricing['subtotal'])
+    discount = discount_for(pricing['subtotal'], coupon) if coupon else Decimal('0.00')
+    pricing['discount'] = discount
+    pricing['coupon'] = coupon
+    pricing['total'] = _round2(pricing['total'] - discount)
+    return pricing
 
 
 class ReservationError(Exception):
@@ -450,6 +463,11 @@ def _generate_booking_ref():
             return ref
 
 
+def generate_booking_ref():
+    """Public helper returning a unique booking reference."""
+    return _generate_booking_ref()
+
+
 def confirm_booking(user, token, transaction_id=None, payment_method='upi', coupon_code=None):
     """Mark an active reservation as paid and convert seats into bookings."""
     now = timezone.now()
@@ -569,6 +587,84 @@ def confirm_booking(user, token, transaction_id=None, payment_method='upi', coup
         return reservation, bookings
 
 
+def create_walkin_bookings(user, movie, show, seat_count, payment_method='manual'):
+    """Book seats directly (walk-in) without an online reservation.
+
+    Follows the same pricing rules and seat-safety rules as the online flow:
+    stale holds are released, seats currently held by an active customer
+    reservation are never taken, and fee/GST shares are recorded per booking.
+    """
+    now = timezone.now()
+    with transaction.atomic():
+        show = Theater.objects.select_for_update().get(pk=show.pk)
+        if show.movie_id != movie.id:
+            raise ReservationError('The selected show is not screening this movie.')
+        if show.time <= now:
+            raise ReservationError(
+                'Cannot reserve seats for a show that has already started.'
+            )
+        _expire_stale_reservations(show, now)
+        held = ReservedSeat.objects.filter(
+            reservation__show=show,
+            reservation__status='active',
+            reservation__expires_at__gt=now,
+        ).values('seat_id')
+        seats = list(
+            Seat.objects.select_for_update()
+            .filter(theater=show, is_booked=False)
+            .exclude(pk__in=held)
+            .order_by('seat_number')[:seat_count]
+        )
+        if len(seats) < seat_count:
+            raise ReservationError(
+                f'Only {len(seats)} seats are available, need {seat_count}.'
+            )
+
+        pricing = _pricing_for_seats(show, seats)
+        count = len(seats)
+        platform_share = _round2(pricing['platform_fee'] / count)
+        misc_share = _round2(pricing['misc_fee'] / count)
+        gst_share = _round2(pricing['gst'] / count)
+        charged = [
+            _round2(entry['price'] + platform_share + misc_share + gst_share)
+            for entry in pricing['seats']
+        ]
+        if len(charged) > 1:
+            charged[-1] = _round2(
+                pricing['total'] - sum(charged[:-1], Decimal('0.00'))
+            )
+
+        bookings = []
+        for idx, entry in enumerate(pricing['seats']):
+            seat = Seat.objects.get(pk=entry['seat_id'])
+            booking = Booking.objects.create(
+                user=user,
+                seat=seat,
+                movie=movie,
+                theater=show,
+                booking_ref=_generate_booking_ref(),
+                seat_category=entry['category'],
+                ticket_price=entry['price'],
+                gst_rate=pricing['gst_rate'],
+                gst_amount=gst_share,
+                platform_fee=platform_share,
+                misc_fee=misc_share,
+                discount=Decimal('0.00'),
+                total=charged[idx],
+            )
+            Seat.objects.filter(pk=seat.pk).update(is_booked=True)
+            Payment.objects.create(
+                booking=booking,
+                amount=charged[idx],
+                payment_method=payment_method,
+                transaction_id='',
+                status='completed',
+            )
+            bookings.append(booking)
+        show.bump_seat_revision()
+        return bookings
+
+
 def cancel_booking(user, booking_id):
     """Cancel a booking before showtime and issue a refund."""
     now = timezone.now()
@@ -590,9 +686,15 @@ def cancel_booking(user, booking_id):
         Payment.objects.filter(booking=booking, status='completed').update(
             status='refunded'
         )
+        try:
+            from .payments import refund_reservation_transactions
+            refund_reservation_transactions(booking.reservation)
+        except Exception:
+            pass
         Seat.objects.filter(pk=booking.seat_id).update(is_booked=False)
         booking.theater.bump_seat_revision()
-        booking.delete()
+        booking.status = 'cancelled'
+        booking.save(update_fields=['status'])
     return True
 
 

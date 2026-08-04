@@ -1,0 +1,142 @@
+{% extends 'admin/base_admin.html' %}
+{% load admin_tags %}
+{% block title %}Payments{% endblock %}
+{% block page_title %}Payment Management{% endblock %}
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="stat-card" style="border-left: 4px solid var(--accent-success);">
+      <p class="stat-label">Captured Payments</p>
+      <h3 class="stat-value">{{ total_captured }}</h3>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="border-left: 4px solid var(--accent-gold);">
+      <p class="stat-label">Total Revenue (Completed)</p>
+      <h3 class="stat-value"><i class="bi bi-currency-rupee"></i>{{ total_revenue|floatformat:2 }}</h3>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="border-left: 4px solid var(--accent-secondary);">
+      <p class="stat-label">Failed Attempts</p>
+      <h3 class="stat-value">{{ total_failed }}</h3>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="border-left: 4px solid var(--accent-primary);">
+      <p class="stat-label">Refunds</p>
+      <h3 class="stat-value">{{ total_refunds }}</h3>
+    </div>
+  </div>
+</div>
+
+<div class="card-bms">
+  <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span class="text-muted small">
+      <i class="bi bi-credit-card me-1"></i>
+      Gateway-level payment audit trail (one row per checkout attempt)
+    </span>
+    <form method="get" class="row g-2 align-items-end justify-content-end">
+      <div class="col-md-2">
+        <label class="small text-muted">Status</label>
+        <select name="status" class="form-select form-select-sm">
+          {% for value, label in status_choices %}
+          <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label|title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">User</label>
+        <input type="text" name="user" class="form-control form-control-sm" value="{{ request.GET.user|default:'' }}" placeholder="Username">
+      </div>
+      <div class="col-md-3">
+        <label class="small text-muted">Order / Payment ID</label>
+        <input type="text" name="gateway_order_id" class="form-control form-control-sm" value="{{ request.GET.gateway_order_id|default:'' }}" placeholder="Search gateway reference">
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">From</label>
+        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ request.GET.date_from|default:'' }}">
+      </div>
+      <div class="col-md-2">
+        <label class="small text-muted">To</label>
+        <input type="date" name="date_to" class="form-control form-control-sm" value="{{ request.GET.date_to|default:'' }}">
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-search"></i></button>
+      </div>
+      <div class="col-auto">
+        <a href="{% url 'admin_payment_list' %}" class="btn btn-sm btn-bms-outline"><i class="bi bi-arrow-counterclockwise"></i></a>
+      </div>
+      <div class="col-auto">
+        <select name="per_page" class="form-select form-select-sm" style="width: auto;" data-auto-submit>
+          <option value="10" {% if request.GET.per_page == '10' %}selected{% endif %}>10</option>
+          <option value="20" {% if request.GET.per_page == '20' or not request.GET.per_page %}selected{% endif %}>20</option>
+          <option value="50" {% if request.GET.per_page == '50' %}selected{% endif %}>50</option>
+          <option value="100" {% if request.GET.per_page == '100' %}selected{% endif %}>100</option>
+        </select>
+      </div>
+    </form>
+  </div>
+  <div class="card-bms-body p-0">
+    <div class="table-responsive">
+      <table class="table table-bms mb-0">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>User</th>
+            <th>Movie</th>
+            <th>Amount</th>
+            <th>Gateway Order ID</th>
+            <th>Payment ID</th>
+            <th>Status</th>
+            <th>Method</th>
+            <th>Date</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tx in transactions %}
+          <tr>
+            <td>{{ tx.id }}</td>
+            <td>{{ tx.user.username }}</td>
+            <td>
+              {% if tx.reservation and tx.reservation.show %}
+                {{ tx.reservation.show.movie.name|truncatechars:28 }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td><i class="bi bi-currency-rupee"></i>{{ tx.amount }}</td>
+            <td class="small text-monospace">{{ tx.gateway_order_id|default:'—' }}</td>
+            <td class="small text-monospace">{{ tx.gateway_payment_id|default:'—'|truncatechars:20 }}</td>
+            <td>
+              {% if tx.status == 'captured' %}
+              <span class="badge-bms-success">Captured</span>
+              {% elif tx.status == 'failed' %}
+              <span class="badge-bms-warning">Failed</span>
+              {% elif tx.status == 'refunded' %}
+              <span class="badge-bms-secondary">Refunded</span>
+              {% elif tx.status == 'refund_requested' %}
+              <span class="badge-bms-warning">Refund Requested</span>
+              {% elif tx.status == 'cancelled' %}
+              <span class="badge-bms-secondary">Cancelled</span>
+              {% else %}
+              <span class="badge-bms-secondary">Created</span>
+              {% endif %}
+            </td>
+            <td class="small">{{ tx.method|default:'—'|upper }}</td>
+            <td class="small">{{ tx.created_at|date:"d M Y, g:i A" }}</td>
+            <td>
+              <a href="{% url 'admin_payment_detail' tx.id %}" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="10" class="text-center text-muted py-4">No payments found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
+</div>
+{% endblock %}

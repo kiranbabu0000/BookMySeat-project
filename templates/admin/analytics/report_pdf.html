@@ -1,0 +1,55 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ area_title }} — {{ range.label }} | BookMySeat Admin</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'admin/css/report.css' %}?v=202607">
+</head>
+<body>
+  <div class="report">
+    <header class="report-header">
+      <div>
+        <h1>BookMySeat &middot; {{ area_title }}</h1>
+        <p class="report-meta">Period: {{ range.label }} &middot; {{ range.start_date|date:"d M Y" }} &rarr; {{ range.end_date|date:"d M Y" }}</p>
+      </div>
+      <div class="report-meta right">Generated: {{ generated_at|date:"d M Y, g:i A" }}</div>
+    </header>
+
+    {% for title, headers, rows in sections %}
+    <section class="report-section">
+      <h2>{{ title }}</h2>
+      <table>
+        <thead>
+          <tr>
+            {% for h in headers %}<th>{{ h }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            {% for cell in row %}<td>{{ cell }}</td>{% endfor %}
+          </tr>
+          {% empty %}
+          <tr><td colspan="{{ headers|length }}" class="empty">No data for this period.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endfor %}
+
+    <footer class="report-footer">
+      <p>BookMySeat Admin Analytics &mdash; Confidential report. To save as PDF, use your browser&rsquo;s "Print &rarr; Save as PDF".</p>
+    </footer>
+  </div>
+
+  <script>
+    window.addEventListener('load', function () {
+      setTimeout(function () { window.print(); }, 300);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+<div class="col-md-3">
+  <div class="stat-card" style="border-left: 4px solid {{ color }};">
+    <div class="d-flex justify-content-between align-items-center">
+      <div>
+        <p class="stat-label">{{ label }}</p>
+        <h3 class="stat-value" {% if stat_key %}data-stat="{{ stat_key }}"{% endif %}>{{ value }}</h3>
+      </div>
+      <div class="stat-icon" style="background: color-mix(in srgb, {{ color }} 12%, transparent); color: {{ color }};">
+        <i class="bi {{ icon }}"></i>
+      </div>
+    </div>
+    {% if change is not None %}
+    <span class="stat-change {% if change >= 0 %}up{% else %}down{% endif %}" data-change="{% if change_key %}{{ change_key }}{% else %}{{ stat_key }}_change{% endif %}">
+      {% if change >= 0 %}<i class="bi bi-arrow-up-right"></i>{% else %}<i class="bi bi-arrow-down-right"></i>{% endif %}{{ change|floatformat:1 }}% vs prev period
+    </span>
+    {% endif %}
+  </div>
+</div>

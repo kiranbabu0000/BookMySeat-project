@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import register, login_view, profile, reset_password, home, user_logout_view
+from .views import register, login_view, profile, reset_password, home, user_logout_view, toggle_wishlist, wishlist, my_notifications, mark_notification_read
 from django.contrib.auth import views as auth_views
 
 urlpatterns = [
@@ -7,6 +7,10 @@ urlpatterns = [
     path('register/', register, name='register'),
     path('login/', login_view, name='login'),
     path('profile/', profile, name='profile'),
+    path('wishlist/', wishlist, name='wishlist'),
+    path('wishlist/toggle/<int:movie_id>/', toggle_wishlist, name='toggle_wishlist'),
+    path('notifications/', my_notifications, name='my_notifications'),
+    path('notifications/<int:pk>/read/', mark_notification_read, name='mark_notification_read'),
     path('reset-password/', reset_password, name='reset-password'),
     path('logout/', user_logout_view, name='logout'),
     path('password-reset/',

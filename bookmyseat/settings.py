@@ -13,6 +13,9 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 import dj_database_url
+from dotenv import load_dotenv
+# Load .env file (gitignored) for local secrets like email SMTP credentials.
+load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -20,14 +23,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY',
-    'django-insecure-dev-only-7k9p2m4x8q1w6z3y5v0n7b2c4f6h8j0l',
-)
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'django-insecure-dev-only-7k9p2m4x8q1w6z3y5v0n7b2c4f6h8j0l'
+    else:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured(
+            'DJANGO_SECRET_KEY must be set when DEBUG is False.'
+        )
 
 ALLOWED_HOSTS = os.environ.get(
     'DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost,.vercel.app'
@@ -60,7 +68,25 @@ MIDDLEWARE = [
 ]
 
 AUTH_USER_MODEL='auth.User'
-EMAIL_BACKEND='django.core.mail.backends.console.EmailBackend'
+
+# Email delivery. Configure EMAIL_HOST etc. (or the .env / environment
+# variables) to send real confirmation emails; otherwise emails are printed
+# to the console for development.
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.smtp.EmailBackend'
+    if os.environ.get('EMAIL_HOST')
+    else 'django.core.mail.backends.console.EmailBackend',
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587') or '587')
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False') == 'True'
+DEFAULT_FROM_EMAIL = os.environ.get(
+    'DEFAULT_FROM_EMAIL', 'BookMySeat <no-reply@bookmyseat.com>'
+)
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -75,10 +101,17 @@ SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
-SESSION_COOKIE_SECURE = False
+COOKIE_SECURE = os.environ.get(
+    'COOKIE_SECURE', 'False' if DEBUG else 'True'
+) == 'True'
+SESSION_COOKIE_SECURE = os.environ.get(
+    'SESSION_COOKIE_SECURE', str(COOKIE_SECURE).lower()
+) == 'True'
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = os.environ.get(
+    'CSRF_COOKIE_SECURE', str(COOKIE_SECURE).lower()
+) == 'True'
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_NAME = 'bms_sessionid'
 TEMPLATES = [
@@ -92,6 +125,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'admin_panel.context_processors.admin_notifications',
             ],
         },
     },
@@ -114,6 +148,16 @@ else:
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+
+# Razorpay payment gateway
+# https://razorpay.com/docs/payments/payment-gateway/
+RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', '')
+RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', '')
+RAZORPAY_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', '')
+
+# When True the checkout page renders a demo/sandbox pay button that mimics a
+# successful Razorpay callback so the whole flow can be exercised without keys.
+RAZORPAY_DEMO_MODE = os.environ.get('RAZORPAY_DEMO_MODE', 'True') == 'True'
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators

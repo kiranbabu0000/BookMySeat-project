@@ -1,6 +1,9 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth import password_validation
+from django.core.exceptions import ValidationError
 from django.contrib import messages
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Sum, Q, Avg, Max, Min, Exists, OuterRef, Subquery, F
@@ -20,15 +23,18 @@ import sys
 import django
 import secrets
 from movies.models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, SeatCategory, ShowPrice
-from .models import Genre, Language, CastMember, Theatre, Screen, Show, Trailer, MovieImage, AdminProfile, AdminPermission, AuditLog, Coupon, Notification, Review, Payment, GSTSlab, PricingConfig
+from movies.services import ReservationError, create_walkin_bookings, pricing_for_seats
+from .models import Genre, Language, CastMember, Theatre, Screen, Show, Trailer, MovieImage, AdminProfile, AdminPermission, AuditLog, Coupon, Notification, Review, Payment, PaymentTransaction, GSTSlab, PricingConfig
 from .forms import (
     AdminLoginForm, MovieForm, GenreForm, LanguageForm, CastMemberForm,
     TheatreForm, ScreenForm, ShowForm, TrailerForm, MovieImageForm,
-    BookingSearchForm, StaffCreateForm, StaffUpdateForm, AdminProfileForm,
+    BookingSearchForm, PaymentSearchForm, StaffCreateForm, StaffUpdateForm, AdminProfileForm,
     AdminPermissionForm, CouponForm, NotificationForm, ReviewForm,
-    ReserveBookingForm, RefundForm
+    ReserveBookingForm, RefundForm, AdminProfileSelfEditForm, AdminUserSelfEditForm
 )
 from .decorators import admin_session_required, AdminSessionMixin, permission_required, clear_admin_session
+from bookmyseat.ratelimit import is_locked_out, login_failed, login_succeeded, remaining_attempts
+from .services import hide_theater_for_show, sync_theater_from_show
 
 
 def admin_login_view(request):
@@ -40,6 +46,12 @@ def admin_login_view(request):
         if form.is_valid():
             username = form.cleaned_data['username']
             password = form.cleaned_data['password']
+            if is_locked_out('admin', request, username):
+                messages.error(
+                    request,
+                    'Too many failed attempts. Please wait a few minutes and try again.',
+                )
+                return render(request, 'admin/login.html', {'form': form})
             user = authenticate(request, username=username, password=password)
             if user is not None:
                 if not user.is_active:
@@ -49,6 +61,7 @@ def admin_login_view(request):
                 if not is_admin:
                     messages.error(request, 'This account is not an admin account. Please use the customer login instead.')
                     return render(request, 'admin/login.html', {'form': form})
+                login_succeeded('admin', request, username)
                 clear_admin_session(request)
                 request.session['admin_user_id'] = user.id
                 request.session['is_admin_authenticated'] = True
@@ -64,7 +77,18 @@ def admin_login_view(request):
                 )
                 return redirect('admin_dashboard')
             else:
-                messages.error(request, 'Invalid username or password')
+                login_failed('admin', request, username)
+                remaining = remaining_attempts('admin', request, username)
+                if remaining:
+                    messages.error(
+                        request,
+                        'Invalid username or password. {} attempt(s) remaining.'.format(remaining),
+                    )
+                else:
+                    messages.error(
+                        request,
+                        'Too many failed attempts. Please wait a few minutes and try again.',
+                    )
     else:
         form = AdminLoginForm()
     return render(request, 'admin/login.html', {'form': form})
@@ -105,22 +129,33 @@ class DashboardView(AdminSessionMixin, TemplateView):
         weekly_bookings = Booking.objects.filter(booked_at__date__gte=week_start)
         monthly_bookings = Booking.objects.filter(booked_at__date__gte=month_start)
 
-        avg_price = 10
+        completed_payments = Payment.objects.filter(status='completed')
+        revenue = lambda qs: qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        today_revenue = revenue(completed_payments.filter(paid_at__date=today))
+        yesterday_revenue = revenue(completed_payments.filter(paid_at__date=yesterday))
+        weekly_revenue = revenue(completed_payments.filter(paid_at__date__gte=week_start))
+        monthly_revenue = revenue(completed_payments.filter(paid_at__date__gte=month_start))
+
         context['today_bookings'] = today_bookings.count()
-        context['today_revenue'] = today_bookings.count() * avg_price
-        context['yesterday_revenue'] = yesterday_bookings.count() * avg_price
-        context['weekly_revenue'] = weekly_bookings.count() * avg_price
-        context['monthly_revenue'] = monthly_bookings.count() * avg_price
+        context['today_revenue'] = today_revenue
+        context['yesterday_revenue'] = yesterday_revenue
+        context['weekly_revenue'] = weekly_revenue
+        context['monthly_revenue'] = monthly_revenue
         context['total_movies'] = Movie.objects.count()
         context['total_bookings'] = Booking.objects.count()
         context['total_users'] = User.objects.count()
         context['total_staff'] = AdminProfile.objects.count()
         context['total_theatres'] = Theater.objects.values('name').distinct().count()
-        context['total_screens'] = Theater.objects.count()
+        context['total_screens'] = Screen.objects.count()
         context['total_shows'] = Theater.objects.count()
         context['active_movies'] = Movie.objects.filter(status='now_showing').count()
         context['upcoming_movies'] = Movie.objects.filter(status='coming_soon').count()
-        context['pending_refunds'] = Booking.objects.filter(booked_at__date__gte=today - timedelta(days=7)).count()
+        context['pending_refunds'] = PaymentTransaction.objects.filter(
+            status='refund_requested'
+        ).count()
+        context['total_payments'] = Payment.objects.count()
+        context['total_transactions'] = PaymentTransaction.objects.count()
+        context['total_revenue'] = revenue(completed_payments)
         total_seats = Seat.objects.count()
         booked_seats = Seat.objects.filter(is_booked=True).count()
         context['total_available_seats'] = Seat.objects.filter(is_booked=False).count()
@@ -146,11 +181,10 @@ class DashboardView(AdminSessionMixin, TemplateView):
 
         context['total_reviews'] = Review.objects.count()
         context['total_coupons'] = Coupon.objects.count()
-        context['total_payments'] = Payment.objects.count()
 
         context['quick_stats'] = json.dumps([
             {'label': 'Today Bookings', 'value': context['today_bookings']},
-            {'label': 'Today Revenue', 'value': context['today_revenue']},
+            {'label': 'Today Revenue', 'value': str(context['today_revenue'])},
             {'label': 'Active Movies', 'value': context['active_movies']},
             {'label': 'Occupancy', 'value': f"{context['occupancy_rate']}%"},
         ])
@@ -272,6 +306,9 @@ class MovieDeleteView(AdminSessionMixin, DeleteView):
         now = timezone.now()
         today = now.date()
         context['active_bookings'] = Booking.objects.filter(movie=movie).count()
+        context['running_bookings'] = Booking.objects.filter(
+            movie=movie, theater__time__gte=now
+        ).count()
         context['active_reservations'] = Reservation.objects.filter(
             show__movie=movie, status__in=['active', 'booked']
         ).count()
@@ -282,12 +319,8 @@ class MovieDeleteView(AdminSessionMixin, DeleteView):
         context['related_trailers'] = Trailer.objects.filter(movie=movie).count()
         context['related_gallery'] = MovieImage.objects.filter(movie=movie).count()
         context['related_cast'] = CastMember.objects.filter(movie=movie).count()
-        context['running_with_bookings'] = bool(context['active_bookings']) and (
-            context['future_shows'] or context['future_theaters']
-        )
-        context['can_hard_delete'] = not (
-            context['running_with_bookings'] or context['active_reservations']
-        )
+        context['running_with_bookings'] = bool(context['running_bookings'])
+        context['can_hard_delete'] = not context['running_with_bookings']
         return context
 
     def post(self, request, *args, **kwargs):
@@ -297,26 +330,19 @@ class MovieDeleteView(AdminSessionMixin, DeleteView):
         movie = self.get_object()
         action = request.POST.get('action', 'archive')
         now = timezone.now()
-        today = now.date()
-        bookings = Booking.objects.filter(movie=movie).count()
-        reservations = Reservation.objects.filter(
-            show__movie=movie, status__in=['active', 'booked']
-        ).count()
-        running_with_bookings = bool(bookings) and (
-            Theater.objects.filter(movie=movie, time__gte=now).exists()
-            or Show.objects.filter(movie=movie, date__gte=today, status='active').exists()
-        )
+        running_bookings = Booking.objects.filter(
+            movie=movie, theater__time__gte=now
+        ).exists()
         next_url = request.POST.get('next') or self.success_url
         if not next_url.startswith('/'):
             next_url = self.success_url
 
         if action == 'hard_delete':
-            if running_with_bookings or reservations:
+            if running_bookings:
                 messages.error(
                     request,
-                    f'"{movie.name}" is still running with {bookings} booking(s). '
-                    'It will become available for permanent deletion after all its shows are over, '
-                    'or you can archive it now.'
+                    f'"{movie.name}" still has booked tickets on shows that are running or upcoming. '
+                    'It will become available for permanent deletion after all its shows are over.'
                 )
                 return redirect(next_url)
             name = movie.name
@@ -339,7 +365,7 @@ class MovieDeleteView(AdminSessionMixin, DeleteView):
             movie.show_on_homepage = False
             movie.status = 'archived'
             # Cancel all future shows for this movie
-            Show.objects.filter(movie=movie, date__gte=today, status='active').update(status='cancelled')
+            Show.objects.filter(movie=movie, date__gte=now.date(), status='active').update(status='cancelled')
             movie.save()
             AuditLog.objects.create(
                 user=request.user,
@@ -357,8 +383,8 @@ class MovieDeleteView(AdminSessionMixin, DeleteView):
 def movie_removal_list(request):
     now = timezone.now()
     week_ago = now - timedelta(days=7)
-    blocking_reservations = Reservation.objects.filter(
-        show__movie=OuterRef('pk'), status__in=['active', 'booked']
+    running_movie_bookings = Booking.objects.filter(
+        movie=OuterRef('pk'), theater__time__gte=now
     )
     movie_bookings = Booking.objects.filter(movie=OuterRef('pk'))
     movies = (
@@ -399,7 +425,7 @@ def movie_removal_list(request):
                 filter=Q(shows__date__gte=now.date(), shows__status='active'),
                 distinct=True,
             ),
-            has_blocking_res=Exists(blocking_reservations),
+            has_running_bookings=Exists(running_movie_bookings),
         )
         .order_by('-id')
     )
@@ -407,7 +433,7 @@ def movie_removal_list(request):
     for m in movies:
         occupancy = round(m.bookings / m.seat_capacity * 100, 1) if m.seat_capacity else 0
         runs_days = (now.date() - m.release_date).days if m.release_date else None
-        running_with_bookings = bool(m.bookings) and (m.future_theaters or m.future_shows)
+        running_with_bookings = m.has_running_bookings
         rows.append({
             'movie': m,
             'bookings': m.bookings,
@@ -421,15 +447,15 @@ def movie_removal_list(request):
             'future_theaters': m.future_theaters,
             'future_shows': m.future_shows,
             'running_with_bookings': running_with_bookings,
-            'can_delete': not running_with_bookings and not m.has_blocking_res,
+            'can_delete': not running_with_bookings,
         })
 
     total_revenue = sum((r['revenue'] for r in rows), Decimal('0.00'))
-    chart_json = json.dumps({
+    chart_json = {
         'labels': [r['movie'].name for r in rows],
         'bookings': [r['bookings'] for r in rows],
         'last7': [r['last7'] for r in rows],
-    })
+    }
     return render(request, 'admin/movies/movie_removal.html', {
         'rows': rows,
         'total_movies': len(rows),
@@ -1201,6 +1227,7 @@ class ShowCreateView(AdminSessionMixin, CreateView):
 
     def form_valid(self, form):
         response = super().form_valid(form)
+        sync_theater_from_show(self.object)
         messages.success(self.request, 'Show added successfully.')
         AuditLog.objects.create(
             user=self.request.user,
@@ -1221,6 +1248,7 @@ class ShowUpdateView(AdminSessionMixin, UpdateView):
 
     def form_valid(self, form):
         response = super().form_valid(form)
+        sync_theater_from_show(self.object)
         messages.success(self.request, 'Show updated successfully.')
         AuditLog.objects.create(
             user=self.request.user,
@@ -1240,6 +1268,22 @@ class ShowDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
 
     def delete(self, request, *args, **kwargs):
         obj = self.get_object()
+        theater = None
+        if obj.theater_id is not None:
+            theater = Theater.objects.get(pk=obj.theater_id)
+            has_bookings = (
+                Booking.objects.filter(theater=theater).exists()
+                or Reservation.objects.filter(show=theater).exists()
+            )
+            if has_bookings:
+                Theater.objects.filter(pk=theater.pk).update(status='cancelled')
+                messages.warning(
+                    request,
+                    'Show has existing bookings, so the linked show was kept and marked cancelled '
+                    'to preserve booking history.'
+                )
+            else:
+                theater.delete()
         AuditLog.objects.create(
             user=request.user,
             action='Show Deleted',
@@ -1259,6 +1303,7 @@ def show_toggle_status(request, pk):
     old_status = show.status
     show.status = status_cycle.get(show.status, 'active')
     show.save()
+    hide_theater_for_show(show, status=show.status)
     AuditLog.objects.create(
         user=request.user,
         action='Show Status Toggled',
@@ -1284,7 +1329,10 @@ def show_bulk_action(request):
             shows = shows.filter(theatre_id=theatre_id)
         if date_val:
             shows = shows.filter(date=date_val)
+        theater_ids = list(shows.exclude(theater=None).values_list('theater_id', flat=True))
         count = shows.update(status='cancelled')
+        if theater_ids:
+            Theater.objects.filter(id__in=theater_ids).update(status='cancelled')
         AuditLog.objects.create(
             user=request.user,
             action='Bulk Cancel Shows',
@@ -1552,6 +1600,7 @@ def seat_management(request):
             seat = get_object_or_404(Seat, id=seat_id)
             seat.is_booked = True
             seat.save()
+            seat.theater.bump_seat_revision()
             AuditLog.objects.create(
                 user=request.user,
                 action='Seat Blocked',
@@ -1567,6 +1616,7 @@ def seat_management(request):
             seat = get_object_or_404(Seat, id=seat_id)
             seat.is_booked = False
             seat.save()
+            seat.theater.bump_seat_revision()
             AuditLog.objects.create(
                 user=request.user,
                 action='Seat Unblocked',
@@ -1582,6 +1632,7 @@ def seat_management(request):
             seat = get_object_or_404(Seat, id=seat_id)
             seat.is_booked = not seat.is_booked
             seat.save()
+            seat.theater.bump_seat_revision()
             AuditLog.objects.create(
                 user=request.user,
                 action='Seat Maintenance Toggle',
@@ -1662,30 +1713,48 @@ def booking_detail(request, pk):
 
 
 @admin_session_required
+@permission_required('booking', 'can_edit')
 def booking_cancel(request, pk):
-    booking = get_object_or_404(Booking, id=pk)
-    seat = booking.seat
-    if seat:
-        seat.is_booked = False
-        seat.save()
-    Payment.objects.filter(booking=booking, status='completed').update(
-        status='refunded', paid_at=timezone.now()
-    )
-    booking.theater.bump_seat_revision()
+    with transaction.atomic():
+        booking = get_object_or_404(
+            Booking.objects.select_for_update().select_related('seat', 'theater', 'reservation'),
+            id=pk,
+        )
+        if booking.status == 'cancelled':
+            messages.warning(request, 'This booking has already been cancelled.')
+            return redirect('admin_booking_list')
+        if booking.theater.time <= timezone.now():
+            messages.error(
+                request,
+                'Cancellation is not allowed once the show has started.',
+            )
+            return redirect('admin_booking_detail', pk=pk)
+        try:
+            from movies.payments import refund_reservation_transactions
+            refund_reservation_transactions(booking.reservation)
+        except Exception:
+            pass
+        Payment.objects.filter(booking=booking, status='completed').update(
+            status='refunded'
+        )
+        Seat.objects.filter(pk=booking.seat_id).update(is_booked=False)
+        booking.theater.bump_seat_revision()
+        booking.status = 'cancelled'
+        booking.save(update_fields=['status'])
     AuditLog.objects.create(
         user=request.user,
         action='Booking Cancelled',
         module='Booking',
         object_id=booking.id,
-        details=f'Cancelled booking {booking.id} for {booking.movie.name}',
+        details=f'Cancelled booking {booking.booking_ref or booking.id} for {booking.movie.name}',
         ip_address=request.META.get('REMOTE_ADDR')
     )
-    booking.delete()
-    messages.success(request, 'Booking cancelled successfully.')
+    messages.success(request, 'Booking cancelled and payment refunded.')
     return redirect('admin_booking_list')
 
 
 @admin_session_required
+@permission_required('booking', 'can_create')
 def booking_reserve(request):
     form = ReserveBookingForm()
     if request.method == 'POST':
@@ -1695,78 +1764,109 @@ def booking_reserve(request):
             movie = form.cleaned_data['movie']
             show = form.cleaned_data['show']
             seat_count = form.cleaned_data['seat_count']
-            movie_theatres = Theater.objects.filter(movie=movie)
-            available_seats = Seat.objects.filter(
-                theater__in=movie_theatres,
-                is_booked=False
-            )[:seat_count]
-            if available_seats.count() < seat_count:
-                messages.error(request, f'Only {available_seats.count()} seats available, need {seat_count}.')
+            try:
+                bookings = create_walkin_bookings(user, movie, show, seat_count)
+            except ReservationError as exc:
+                messages.error(request, str(exc))
                 return redirect('admin_booking_list')
-            created_count = 0
-            touched_theaters = set()
-            for seat in available_seats:
-                Booking.objects.create(
-                    user=user,
-                    seat=seat,
-                    movie=movie,
-                    theater=seat.theater
-                )
-                seat.is_booked = True
-                seat.save()
-                touched_theaters.add(seat.theater_id)
-                created_count += 1
-            if touched_theaters:
-                Theater.objects.filter(id__in=touched_theaters).update(
-                    seat_revision=F('seat_revision') + 1
-                )
             AuditLog.objects.create(
                 user=request.user,
                 action='Booking Reserved',
                 module='Booking',
-                details=f'Reserved {created_count} seat(s) for {user.username} - {movie.name}',
+                details=f'Reserved {len(bookings)} seat(s) for {user.username} - {movie.name}',
                 ip_address=request.META.get('REMOTE_ADDR')
             )
-            messages.success(request, f'{created_count} seat(s) reserved successfully for {user.username}.')
+            try:
+                from movies.notifications import send_manual_booking_confirmation
+                send_manual_booking_confirmation(user, bookings)
+            except Exception:
+                pass
+            messages.success(request, f'{len(bookings)} seat(s) reserved successfully for {user.username}.')
             return redirect('admin_booking_list')
-    return render(request, 'admin/bookings/booking_reserve.html', {'form': form})
+    return render(request, 'admin/bookings/booking_reserve.html', {
+        'form': form,
+        'users': User.objects.filter(is_active=True),
+        'movies': Movie.objects.all(),
+        'shows': Theater.objects.filter(time__gte=timezone.now()).select_related('movie'),
+    })
 
 
 @admin_session_required
+@permission_required('booking', 'can_edit')
 def booking_modify(request, pk):
-    booking = get_object_or_404(Booking, id=pk)
-    if request.method == 'POST':
-        new_seat_id = request.POST.get('new_seat')
-        new_seat = get_object_or_404(Seat, id=new_seat_id)
+    if request.method != 'POST':
+        return redirect('admin_booking_detail', pk=pk)
+    new_seat_id = request.POST.get('new_seat')
+    with transaction.atomic():
+        booking = get_object_or_404(
+            Booking.objects.select_for_update().select_related('seat', 'theater'),
+            id=pk,
+        )
+        if booking.status == 'cancelled':
+            messages.error(request, 'A cancelled booking cannot be moved to another seat.')
+            return redirect('admin_booking_detail', pk=pk)
+        if booking.theater.time <= timezone.now():
+            messages.error(request, 'Seats cannot be changed once the show has started.')
+            return redirect('admin_booking_detail', pk=pk)
+        show = Theater.objects.select_for_update().get(pk=booking.theater_id)
+        try:
+            new_seat = Seat.objects.select_for_update().get(
+                pk=new_seat_id, theater=show
+            )
+        except Seat.DoesNotExist:
+            messages.error(request, 'The selected seat is not part of this show.')
+            return redirect('admin_booking_detail', pk=pk)
+        if new_seat.pk == booking.seat_id:
+            messages.info(request, 'The selected seat is already assigned to this booking.')
+            return redirect('admin_booking_detail', pk=pk)
         if new_seat.is_booked:
             messages.error(request, 'Selected seat is already booked.')
             return redirect('admin_booking_detail', pk=pk)
         old_seat = booking.seat
-        if old_seat:
-            old_seat.is_booked = False
-            old_seat.save()
-            old_seat.theater.bump_seat_revision()
+        pricing = pricing_for_seats(show, [new_seat])
+        entry = pricing['seats'][0]
         booking.seat = new_seat
+        booking.seat_category = entry['category']
+        booking.ticket_price = entry['price']
+        booking.gst_rate = pricing['gst_rate']
+        booking.gst_amount = pricing['gst']
+        booking.platform_fee = pricing['platform_fee']
+        booking.misc_fee = pricing['misc_fee']
+        booking.discount = Decimal('0.00')
+        booking.total = pricing['total']
         booking.save()
-        new_seat.is_booked = True
-        new_seat.save()
-        new_seat.theater.bump_seat_revision()
-        AuditLog.objects.create(
-            user=request.user,
-            action='Booking Modified',
-            module='Booking',
-            object_id=booking.id,
-            details=f'Changed seat from {old_seat.seat_number if old_seat else "None"} to {new_seat.seat_number}',
-            ip_address=request.META.get('REMOTE_ADDR')
+        Payment.objects.filter(booking=booking, status='completed').update(
+            amount=pricing['total']
         )
-        messages.success(request, 'Booking modified successfully.')
+        if old_seat:
+            Seat.objects.filter(pk=old_seat.pk).update(is_booked=False)
+        Seat.objects.filter(pk=new_seat.pk).update(is_booked=True)
+        show.bump_seat_revision()
+    AuditLog.objects.create(
+        user=request.user,
+        action='Booking Modified',
+        module='Booking',
+        object_id=booking.id,
+        details=f'Changed seat from {old_seat.seat_number if old_seat else "None"} to {new_seat.seat_number}',
+        ip_address=request.META.get('REMOTE_ADDR')
+    )
+    messages.success(request, 'Booking moved and re-priced for the new seat.')
     return redirect('admin_booking_detail', pk=pk)
 
 
 @admin_session_required
+@permission_required('booking', 'can_edit')
 def booking_resend_confirmation(request, pk):
     booking = get_object_or_404(Booking, id=pk)
-    messages.success(request, f'Confirmation resent for booking #{booking.id}.')
+    if booking.status == 'cancelled':
+        messages.error(request, 'A cancelled booking has no confirmation to resend.')
+        return redirect('admin_booking_detail', pk=pk)
+    try:
+        from movies.notifications import send_manual_booking_confirmation
+        send_manual_booking_confirmation(booking.user, [booking])
+        messages.success(request, f'Confirmation email sent for booking #{booking.booking_ref or booking.id}.')
+    except Exception:
+        messages.error(request, 'Could not send the confirmation email.')
     return redirect('admin_booking_detail', pk=pk)
 
 
@@ -1807,6 +1907,137 @@ class ReservationListView(AdminSessionMixin, ListView):
         context['total_active'] = Reservation.objects.filter(status='active').count()
         context['now'] = timezone.now()
         return context
+
+
+class PaymentTransactionListView(AdminSessionMixin, ListView):
+    model = PaymentTransaction
+    template_name = 'admin/payments/payment_list.html'
+    context_object_name = 'transactions'
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
+
+    def get_queryset(self):
+        qs = PaymentTransaction.objects.select_related(
+            'user', 'reservation', 'reservation__show', 'reservation__show__movie'
+        )
+        form = PaymentSearchForm(self.request.GET)
+        if form.is_valid():
+            user = form.cleaned_data.get('user')
+            status = form.cleaned_data.get('status')
+            gateway_order_id = form.cleaned_data.get('gateway_order_id')
+            date_from = form.cleaned_data.get('date_from')
+            date_to = form.cleaned_data.get('date_to')
+            if user:
+                qs = qs.filter(user__username__icontains=user)
+            if status:
+                qs = qs.filter(status=status)
+            if gateway_order_id:
+                qs = qs.filter(
+                    Q(gateway_order_id__icontains=gateway_order_id)
+                    | Q(gateway_payment_id__icontains=gateway_order_id)
+                )
+            if date_from:
+                qs = qs.filter(created_at__date__gte=date_from)
+            if date_to:
+                qs = qs.filter(created_at__date__lte=date_to)
+        sort = self.request.GET.get('sort', 'created_at')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = [
+            'created_at', 'id', 'user__username', 'amount', 'status',
+            'gateway_order_id', 'reservation__show__movie__name',
+        ]
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-created_at')
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['search_form'] = PaymentSearchForm(self.request.GET)
+        context['status_choices'] = PaymentTransaction.STATUS_CHOICES
+        context['total_captured'] = PaymentTransaction.objects.filter(status='captured').count()
+        context['total_failed'] = PaymentTransaction.objects.filter(status='failed').count()
+        context['total_refunds'] = PaymentTransaction.objects.filter(
+            status__in=['refund_requested', 'refunded']
+        ).count()
+        context['total_revenue'] = Payment.objects.filter(status='completed').aggregate(
+            total=Sum('amount')
+        )['total'] or Decimal('0.00')
+        return context
+
+
+@admin_session_required
+def payment_transaction_detail(request, pk):
+    tx = get_object_or_404(
+        PaymentTransaction.objects.select_related(
+            'user', 'reservation', 'reservation__show', 'reservation__show__movie'
+        ),
+        id=pk,
+    )
+    bookings = (
+        tx.reservation.bookings.select_related('seat', 'payment')
+        if tx.reservation_id else PaymentTransaction.objects.none()
+    )
+    return render(request, 'admin/payments/payment_detail.html', {
+        'tx': tx,
+        'bookings': bookings,
+    })
+
+
+@admin_session_required
+@permission_required('payment', 'can_edit')
+def payment_transaction_refund(request, pk):
+    if request.method != 'POST':
+        return redirect('admin_payment_detail', pk=pk)
+    with transaction.atomic():
+        tx = get_object_or_404(
+            PaymentTransaction.objects.select_for_update(), id=pk
+        )
+        if tx.status != 'captured':
+            messages.error(
+                request,
+                'Only captured payments can be refunded (current status: {}).'.format(
+                    tx.get_status_display()
+                ),
+            )
+            return redirect('admin_payment_detail', pk=pk)
+        try:
+            from movies.payments import refund_transaction
+
+            refunded = refund_transaction(tx, reason='Refunded by admin')
+        except Exception as exc:
+            messages.error(request, 'Refund failed: {}'.format(exc))
+            return redirect('admin_payment_detail', pk=pk)
+
+        if refunded.status not in ('refunded', 'refund_requested'):
+            messages.warning(request, 'The refund request could not be completed.')
+            return redirect('admin_payment_detail', pk=pk)
+
+        Payment.objects.filter(
+            booking__reservation=tx.reservation,
+            status='completed',
+            transaction_id=tx.gateway_payment_id,
+        ).update(status='refunded')
+        AuditLog.objects.create(
+            user=request.user,
+            action='Payment Refunded',
+            module='Payment',
+            object_id=tx.id,
+            details='Refunded {} for order {}'.format(tx.amount, tx.gateway_order_id),
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+    messages.success(request, 'Refund initiated successfully.')
+    return redirect('admin_payment_detail', pk=pk)
 
 
 class UserListView(AdminSessionMixin, ListView):
@@ -1891,20 +2122,105 @@ def user_booking_history(request, pk):
 @admin_session_required
 @permission_required('user', 'can_edit')
 def user_reset_password(request, pk):
-    if request.method == 'POST':
-        user_obj = get_object_or_404(User, id=pk)
-        default_password = secrets.token_urlsafe(9)
-        user_obj.set_password(default_password)
+    if request.method != 'POST':
+        return redirect('admin_user_list')
+    user_obj = get_object_or_404(User, id=pk)
+    current_password = request.POST.get('current_password', '')
+    new_password = request.POST.get('new_password', '')
+    confirm_password = request.POST.get('confirm_password', '')
+
+    if current_password:
+        if user_obj.id != request.user.id:
+            messages.error(request, 'You may only change your own password this way.')
+            return redirect('admin_user_list')
+        if not user_obj.check_password(current_password):
+            messages.error(request, 'Your current password is incorrect.')
+            return redirect('admin_profile')
+        if not new_password:
+            messages.error(request, 'Please enter a new password.')
+            return redirect('admin_profile')
+        if new_password != confirm_password:
+            messages.error(request, 'New password and confirmation do not match.')
+            return redirect('admin_profile')
+        try:
+            password_validation.validate_password(new_password, user_obj)
+        except ValidationError as exc:
+            messages.error(request, ' '.join(exc.messages))
+            return redirect('admin_profile')
+        user_obj.set_password(new_password)
         user_obj.save()
+        update_session_auth_hash(request, user_obj)
         AuditLog.objects.create(
             user=request.user,
-            action='Password Reset',
+            action='Password Changed',
             module='User',
             object_id=user_obj.id,
-            details=f'Password reset for {user_obj.username}',
+            details=f'Password changed for {user_obj.username}',
             ip_address=request.META.get('REMOTE_ADDR')
         )
-        messages.success(request, f'Password for {user_obj.username} reset to: {default_password}')
+        messages.success(request, 'Your password has been changed successfully.')
+        return redirect('admin_profile')
+
+    actor_profile = AdminProfile.objects.filter(user=request.user, is_active=True).first()
+    is_super_actor = request.user.is_superuser or (
+        actor_profile and actor_profile.role in ('super_admin', 'admin')
+    )
+    if not is_super_actor:
+        messages.error(request, 'You do not have permission to reset passwords.')
+        return redirect('admin_user_list')
+    target_is_super = user_obj.is_superuser or AdminProfile.objects.filter(
+        user=user_obj, role='super_admin'
+    ).exists()
+    can_manage_super = request.user.is_superuser or (
+        actor_profile and actor_profile.role == 'super_admin'
+    )
+    if target_is_super and not can_manage_super:
+        messages.error(request, 'Only a super admin can reset a super admin password.')
+        return redirect('admin_user_list')
+    if not user_obj.email:
+        messages.error(
+            request,
+            'This user has no email address, so the password cannot be reset.',
+        )
+        return redirect('admin_user_list')
+
+    temp_password = secrets.token_urlsafe(9)
+    try:
+        from django.core.mail import send_mail
+        from django.conf import settings
+        send_mail(
+            'Your temporary BookMySeat password',
+            'Hi {},\n\nA temporary password has been set for your account: {}\n\n'
+            'Please log in and change it immediately.\n\n— BookMySeat'.format(
+                user_obj.username, temp_password
+            ),
+            getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@bookmyseat.com'),
+            [user_obj.email],
+            fail_silently=False,
+        )
+    except Exception:
+        messages.error(
+            request,
+            'The temporary password could not be emailed, so no changes were made.',
+        )
+        return redirect('admin_user_list')
+
+    user_obj.set_password(temp_password)
+    user_obj.save()
+    AuditLog.objects.create(
+        user=request.user,
+        action='Password Reset',
+        module='User',
+        object_id=user_obj.id,
+        details=f'Password reset for {user_obj.username}',
+        ip_address=request.META.get('REMOTE_ADDR')
+    )
+    messages.success(
+        request,
+        'A temporary password has been set for {}. It has been emailed to the user.'.format(
+            user_obj.username
+        ),
+    )
     return redirect('admin_user_list')
 
 
@@ -2075,7 +2391,7 @@ def staff_delete(request, pk):
 @permission_required('staff', 'can_edit')
 def staff_permissions(request, pk):
     profile = get_object_or_404(AdminProfile, id=pk)
-    modules = ['Movie', 'Theatre', 'Screen', 'Show', 'Booking', 'User', 'Staff', 'Coupon', 'Notification', 'Review', 'Genre', 'Language', 'Cast']
+    modules = ['Movie', 'Theatre', 'Screen', 'Show', 'Booking', 'Payment', 'User', 'Staff', 'Coupon', 'Notification', 'Review', 'Genre', 'Language', 'Cast', 'Settings', 'Analytics']
 
     if request.method == 'POST':
         actor_profile = AdminProfile.objects.filter(user=request.user).first()
@@ -2462,9 +2778,10 @@ class AuditLogListView(AdminSessionMixin, ListView):
 
 
 @admin_session_required
+@admin_session_required
 def get_notifications(request):
     count = Notification.objects.filter(is_read=False).count()
-    return JsonResponse({'unread_count': count})
+    return JsonResponse({'count': count})
 
 
 @method_decorator(permission_required('settings', 'can_view'), name='dispatch')
@@ -2476,7 +2793,7 @@ class SettingsView(AdminSessionMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context['total_movies'] = Movie.objects.count()
         context['total_theatres'] = Theater.objects.values('name').distinct().count()
-        context['total_screens'] = Theater.objects.count()
+        context['total_screens'] = Screen.objects.count()
         context['total_staff'] = AdminProfile.objects.count()
         context['django_version'] = django.get_version()
         context['python_version'] = sys.version
@@ -2496,15 +2813,20 @@ def profile_view(request):
         defaults={'role': 'staff'}
     )
     if request.method == 'POST':
-        form = AdminProfileForm(request.POST, instance=profile)
-        if form.is_valid():
-            form.save()
+        user_form = AdminUserSelfEditForm(request.POST, instance=request.user)
+        profile_form = AdminProfileSelfEditForm(request.POST, instance=profile)
+        if user_form.is_valid() and profile_form.is_valid():
+            user_form.save()
+            profile_form.save()
             messages.success(request, 'Profile updated successfully.')
             return redirect('admin_profile')
+        form = profile_form
     else:
-        form = AdminProfileForm(instance=profile)
+        user_form = AdminUserSelfEditForm(instance=request.user)
+        form = AdminProfileSelfEditForm(instance=profile)
     return render(request, 'admin/profile.html', {
         'form': form,
+        'user_form': user_form,
         'profile': profile,
     })
 

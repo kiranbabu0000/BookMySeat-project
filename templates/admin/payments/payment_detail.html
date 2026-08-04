@@ -1,0 +1,189 @@
+{% extends 'admin/base_admin.html' %}
+{% block title %}Payment #{{ tx.id }}{% endblock %}
+{% block page_title %}Payment Transaction #{{ tx.id }}{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-md-8">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-credit-card me-2"></i>Transaction Details</h5></div>
+      <div class="card-bms-body">
+        <div class="row g-4">
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">User</span>
+              <h5 class="mb-0">{{ tx.user.username }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Movie</span>
+              <h5 class="mb-0">
+                {% if tx.reservation and tx.reservation.show %}{{ tx.reservation.show.movie.name }}{% else %}—{% endif %}
+              </h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Gateway</span>
+              <h5 class="mb-0">{{ tx.gateway|upper }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Amount</span>
+              <h5 class="mb-0 text-success"><i class="bi bi-currency-rupee"></i>{{ tx.amount }} {{ tx.currency }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Order ID</span>
+              <h5 class="mb-0 small text-monospace">{{ tx.gateway_order_id|default:'—' }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Payment ID</span>
+              <h5 class="mb-0 small text-monospace">{{ tx.gateway_payment_id|default:'—' }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Status</span>
+              <h5 class="mb-0">
+                {% if tx.status == 'captured' %}
+                <span class="badge-bms-success">Captured</span>
+                {% elif tx.status == 'failed' %}
+                <span class="badge-bms-warning">Failed</span>
+                {% elif tx.status == 'refunded' %}
+                <span class="badge-bms-danger">Refunded</span>
+                {% elif tx.status == 'refund_requested' %}
+                <span class="badge-bms-warning">Refund Requested</span>
+                {% elif tx.status == 'cancelled' %}
+                <span class="badge-bms-secondary">Cancelled</span>
+                {% else %}
+                <span class="badge-bms-info">Created</span>
+                {% endif %}
+              </h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Payment Method</span>
+              <h5 class="mb-0">{{ tx.method|default:'—'|upper }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Coupon Applied</span>
+              <h5 class="mb-0">{{ tx.coupon_code|default:'—' }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Mode</span>
+              <h5 class="mb-0">{% if tx.is_demo %}<span class="badge-bms-warning">Demo</span>{% else %}Live{% endif %}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Created</span>
+              <h5 class="mb-0">{{ tx.created_at|date:"d M Y, g:i A" }}</h5>
+            </div>
+          </div>
+          {% if tx.captured_at %}
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Captured</span>
+              <h5 class="mb-0">{{ tx.captured_at|date:"d M Y, g:i A" }}</h5>
+            </div>
+          </div>
+          {% endif %}
+          {% if tx.refund_id %}
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Refund ID</span>
+              <h5 class="mb-0 small text-monospace">{{ tx.refund_id }}</h5>
+            </div>
+          </div>
+          {% endif %}
+          {% if tx.failure_reason %}
+          <div class="col-md-12">
+            <div class="detail-item">
+              <span class="text-muted small">Failure Reason</span>
+              <p class="mb-0 text-danger">{{ tx.failure_reason }}</p>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card-bms mt-4">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-receipt me-2"></i>Bookings for this Reservation</h5></div>
+      <div class="card-bms-body p-0">
+        <div class="table-responsive">
+          <table class="table table-bms mb-0">
+            <thead><tr><th>Ref</th><th>Seat</th><th>Movie</th><th>Amount</th><th>Payment Status</th></tr></thead>
+            <tbody>
+              {% for booking in bookings %}
+              <tr>
+                <td>{{ booking.booking_ref }}</td>
+                <td>{{ booking.seat.seat_number }}</td>
+                <td>{{ booking.movie.name|truncatechars:30 }}</td>
+                <td><i class="bi bi-currency-rupee"></i>{{ booking.total }}</td>
+                <td>
+                  {% if booking.payment %}
+                  {% if booking.payment.status == 'completed' %}
+                  <span class="badge-bms-success">Completed</span>
+                  {% elif booking.payment.status == 'refunded' %}
+                  <span class="badge-bms-danger">Refunded</span>
+                  {% else %}
+                  <span class="badge-bms-info">{{ booking.payment.status }}</span>
+                  {% endif %}
+                  {% else %}
+                  <span class="badge-bms-secondary">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="5" class="text-center text-muted py-4">No bookings for this reservation.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    {% if tx.payload %}
+    <div class="card-bms mt-4">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-file-code me-2"></i>Gateway Payload</h5></div>
+      <div class="card-bms-body">
+        <pre class="mb-0" style="max-height: 320px; overflow: auto; background: var(--bg-tertiary); padding: 1rem; border-radius: 0.5rem; font-size: 0.8rem;"><code>{{ tx.payload }}</code></pre>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-md-4">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-gear me-2"></i>Actions</h5></div>
+      <div class="card-bms-body">
+        <div class="d-grid gap-2">
+          {% if tx.status == 'captured' %}
+          <form method="post" action="{% url 'admin_payment_refund' tx.id %}"
+                onsubmit="return confirm('Refund this payment of \u20b9{{ tx.amount }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger w-100">
+              <i class="bi bi-arrow-counterclockwise me-2"></i>Refund Payment
+            </button>
+          </form>
+          {% endif %}
+          <a href="{% url 'admin_payment_list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>Back to Payments
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

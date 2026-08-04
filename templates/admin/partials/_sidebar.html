@@ -50,6 +50,9 @@
     <a href="{% url 'admin_reservation_list' %}" class="sidebar-link {% if 'reservation' in request.resolver_match.url_name %}active{% endif %}">
       <i class="bi bi-hourglass-split"></i><span>Reservations</span>
     </a>
+    <a href="{% url 'admin_payment_list' %}" class="sidebar-link {% if 'payment' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-credit-card"></i><span>Payments</span>
+    </a>
     <a href="{% url 'admin_user_list' %}" class="sidebar-link {% if 'user' in request.resolver_match.url_name and 'staff' not in request.resolver_match.url_name %}active{% endif %}">
       <i class="bi bi-people-fill"></i><span>Users</span>
     </a>
@@ -68,6 +71,39 @@
     <a href="{% url 'admin_audit_logs' %}" class="sidebar-link {% if 'audit' in request.resolver_match.url_name or 'log' in request.resolver_match.url_name %}active{% endif %}">
       <i class="bi bi-journal-text"></i><span>Audit Logs</span>
     </a>
+    <hr class="my-2" style="border-color: rgba(255,255,255,0.08); opacity: 0.5;">
+    <div class="sidebar-heading">Analytics</div>
+    <a href="{% url 'admin_analytics_overview' %}" class="sidebar-link {% if 'analytics' in request.resolver_match.url_name and 'overview' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-speedometer"></i><span>Overview</span>
+    </a>
+    <a href="{% url 'admin_analytics_revenue' %}" class="sidebar-link {% if 'analytics' in request.resolver_match.url_name and 'revenue' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-currency-rupee"></i><span>Revenue</span>
+    </a>
+    <a href="{% url 'admin_analytics_bookings' %}" class="sidebar-link {% if 'analytics' in request.resolver_match.url_name and 'bookings' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-ticket-perforated"></i><span>Bookings</span>
+    </a>
+    <a href="{% url 'admin_analytics_occupancy' %}" class="sidebar-link {% if 'analytics' in request.resolver_match.url_name and 'occupancy' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-grid-3x3-gap"></i><span>Occupancy</span>
+    </a>
+    <a href="{% url 'admin_analytics_movies' %}" class="sidebar-link {% if 'analytics' in request.resolver_match.url_name and 'movies' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-film"></i><span>Movies</span>
+    </a>
+    <a href="{% url 'admin_analytics_theaters' %}" class="sidebar-link {% if 'analytics' in request.resolver_match.url_name and 'theaters' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-building"></i><span>Theaters</span>
+    </a>
+    <a href="{% url 'admin_analytics_peak' %}" class="sidebar-link {% if 'analytics' in request.resolver_match.url_name and 'peak' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-clock-history"></i><span>Peak Hours</span>
+    </a>
+    <a href="{% url 'admin_analytics_payments' %}" class="sidebar-link {% if 'analytics' in request.resolver_match.url_name and 'payments' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-credit-card"></i><span>Payments</span>
+    </a>
+    <a href="{% url 'admin_analytics_refunds' %}" class="sidebar-link {% if 'analytics' in request.resolver_match.url_name and 'refunds' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-arrow-counterclockwise"></i><span>Refunds</span>
+    </a>
+    <a href="{% url 'admin_analytics_users' %}" class="sidebar-link {% if 'analytics' in request.resolver_match.url_name and 'users' in request.resolver_match.url_name %}active{% endif %}">
+      <i class="bi bi-people"></i><span>Users</span>
+    </a>
+    <hr class="my-2" style="border-color: rgba(255,255,255,0.08); opacity: 0.5;">
     <a href="{% url 'admin_settings' %}" class="sidebar-link {% if 'setting' in request.resolver_match.url_name %}active{% endif %}">
       <i class="bi bi-gear"></i><span>Settings</span>
     </a>

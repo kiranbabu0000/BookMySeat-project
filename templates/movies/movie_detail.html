@@ -105,6 +105,15 @@
                   <i class="bi bi-ticket-perforated"></i> Book Now
                 </a>
                 {% endif %}
+                {% if user.is_authenticated %}
+                <form method="post" action="{% url 'toggle_wishlist' movie.id %}" style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-bms btn-lg {% if in_wishlist %}btn-bms-wishlist{% endif %}" id="wishlist-toggle-btn">
+                    <i class="bi {% if in_wishlist %}bi-heart-fill{% else %}bi-heart{% endif %}"></i>
+                    {% if in_wishlist %}In Wishlist{% else %}Add to Wishlist{% endif %}
+                  </button>
+                </form>
+                {% endif %}
                 {% if movie.trailer_url %}
                 <a href="{{ movie.trailer_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-bms btn-lg">
                   <i class="bi bi-play-circle"></i> Watch Trailer
@@ -175,9 +184,11 @@
         {% for trailer in trailers %}
         <div class="trailer-card">
           <div class="trailer-card__embed">
-            {% if trailer.url %}
-            <iframe src="{{ trailer.url|youtube_embed }}" title="{{ trailer.title|default:'Trailer' }}" frameborder="0" allowfullscreen loading="lazy"></iframe>
+            {% with embed=trailer.url|youtube_embed %}
+            {% if embed %}
+            <iframe src="{{ embed }}" title="{{ trailer.title|default:'Trailer' }}" frameborder="0" allowfullscreen loading="lazy"></iframe>
             {% endif %}
+            {% endwith %}
           </div>
           {% if trailer.title %}
           <div class="trailer-card__info">
@@ -204,7 +215,29 @@
         </a>
       </div>
 
-      {% if shows %}
+      {% if theaters %}
+      <div class="row">
+        {% for theater in theaters %}
+        <div class="col-md-6 col-lg-4 mb-3">
+          <div class="showtime-card">
+            <div class="showtime-card__header">
+              <h3 class="showtime-card__name">{{ theater.name }}</h3>
+              <span class="badge-bms-outline">{{ theater.time|date:"D, M d" }}</span>
+            </div>
+            <div class="showtime-card__body">
+              <span class="showtime-card__time">{{ theater.time|date:"g:i A" }}</span>
+              {% if theater.screen_name %}
+              <small class="text-muted d-block">{{ theater.screen_name }}</small>
+              {% endif %}
+            </div>
+            <div class="showtime-card__footer">
+              <a href="{% url 'book_seats' theater.id %}" class="btn btn-bms-primary btn-sm w-100">Book Seats</a>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% elif shows %}
       {% regroup shows by theatre as theatre_list %}
       {% for theatre_group in theatre_list %}
       <div class="card mb-3" style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-lg);">
@@ -232,25 +265,6 @@
         </div>
       </div>
       {% endfor %}
-      {% elif theaters %}
-      <div class="row">
-        {% for theater in theaters %}
-        <div class="col-md-6 col-lg-4 mb-3">
-          <div class="showtime-card">
-            <div class="showtime-card__header">
-              <h3 class="showtime-card__name">{{ theater.name }}</h3>
-              <span class="badge-bms-outline">{{ theater.time|date:"D, M d" }}</span>
-            </div>
-            <div class="showtime-card__body">
-              <span class="showtime-card__time">{{ theater.time|date:"g:i A" }}</span>
-            </div>
-            <div class="showtime-card__footer">
-              <a href="{% url 'book_seats' theater.id %}" class="btn btn-bms-primary btn-sm w-100">Book Seats</a>
-            </div>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
       {% endif %}
     </section>
     {% endif %}
@@ -414,9 +428,13 @@
             {% endif %}
             <div class="review-card__actions mt-2">
               {% if user.is_authenticated and review.user != user %}
-              <a href="{% url 'report_review' review.id %}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Report this review as inappropriate?')">
-                <i class="bi bi-flag"></i> Report
-              </a>
+              <form method="POST" action="{% url 'report_review' review.id %}" class="d-inline"
+                    onsubmit="return confirm('Report this review as inappropriate?')">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                  <i class="bi bi-flag"></i> Report
+                </button>
+              </form>
               {% endif %}
             </div>
           </div>

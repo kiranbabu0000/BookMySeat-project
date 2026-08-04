@@ -24,6 +24,7 @@
     held: new Set(),
     reservation: null,
     expiresAt: null,
+    timeOffsetMs: 0,
     mode: 'select',
   };
   var timerHandle = null;
@@ -111,6 +112,7 @@
       state.mode = 'hold';
       state.held = new Set(savedRes.seats.map(String));
       state.expiresAt = new Date(savedRes.expires_at);
+      syncClockOffset(savedRes);
       syncPrices(savedRes);
     }
 
@@ -173,6 +175,13 @@
       Object.keys(res.prices).forEach(function (id) {
         prices[String(id)] = Number(res.prices[id]);
       });
+    }
+  }
+
+  function syncClockOffset(res) {
+    var serverNow = new Date(res.expires_at).getTime() - (Number(res.remaining) || 0) * 1000;
+    if (!isNaN(serverNow)) {
+      state.timeOffsetMs = serverNow - Date.now();
     }
   }
 
@@ -357,6 +366,7 @@
     state.selected.clear();
     state.held = new Set(res.seats.map(String));
     state.expiresAt = new Date(res.expires_at);
+    syncClockOffset(res);
     syncPrices(res);
     renderSeats();
     updateSummary();
@@ -368,6 +378,7 @@
     state.reservation = res;
     state.held = new Set(res.seats.map(String));
     state.expiresAt = new Date(res.expires_at);
+    syncClockOffset(res);
     syncPrices(res);
     renderSeats();
     updateSummary();
@@ -399,7 +410,7 @@
 
   function tick() {
     if (!state.reservation) return;
-    var remaining = Math.max(0, Math.floor((state.expiresAt.getTime() - Date.now()) / 1000));
+    var remaining = Math.max(0, Math.floor((state.expiresAt.getTime() - state.timeOffsetMs - Date.now()) / 1000));
     els.timer.textContent = pad2(Math.floor(remaining / 60)) + ':' + pad2(remaining % 60);
     els.timerBar.classList.toggle('reservation-timer-bar--urgent', remaining <= 30);
     if (remaining <= 0) onReservationExpired();

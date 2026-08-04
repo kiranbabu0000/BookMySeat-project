@@ -7,7 +7,12 @@ from django.utils import timezone
 from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse, HttpResponseNotModified
 from django.urls import reverse
-from .models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, RESERVATION_HOLD_SECONDS
+from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from .models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, Wishlist, RESERVATION_HOLD_SECONDS
+from . import gateway, payments
+from .payments import PaymentError
 from .services import (
     ReservationError,
     cancel_booking,
@@ -24,11 +29,10 @@ from .services import (
     seat_states_for_show,
 )
 from .notifications import send_booking_confirmation
-from admin_panel.models import CastMember, Trailer, MovieImage, Review, Genre, Language, Show, Theatre, Screen
+from admin_panel.models import CastMember, Trailer, MovieImage, Review, Genre, Language, Show, Theatre, Screen, PaymentTransaction
 import json
 import hashlib
 import secrets
-import time
 
 
 def movie_list(request):
@@ -92,8 +96,15 @@ def movie_detail(request, movie_id):
     similar_movies = Movie.objects.filter(genres__in=movie.genres.all(), **visible_filter).exclude(id=movie.id).exclude(status__in=['archived', 'hidden']).distinct()[:6]
     trending_movies = Movie.objects.filter(**visible_filter).exclude(status__in=['archived', 'hidden']).annotate(booking_count=Count('booking')).exclude(id=movie.id).order_by('-booking_count')[:6]
     recently_released = Movie.objects.filter(status='now_showing', **visible_filter).exclude(id=movie.id).order_by('-release_date')[:6]
-    theaters = Theater.objects.filter(movie=movie).order_by('time')
+    theaters = Theater.objects.filter(movie=movie, status='active').order_by('time')
     shows = Show.objects.filter(movie=movie, status='active').select_related('theatre', 'screen').order_by('date', 'time')
+    recent_ids = request.session.get('recently_viewed', [])
+    recent_ids = [mid for mid in recent_ids if str(mid) != str(movie.id)]
+    recent_ids.insert(0, movie.id)
+    request.session['recently_viewed'] = recent_ids[:8]
+    in_wishlist = request.user.is_authenticated and Wishlist.objects.filter(
+        user=request.user, movie=movie
+    ).exists()
     return render(request, 'movies/movie_detail.html', {
         'movie': movie,
         'cast_members': cast_members,
@@ -110,6 +121,7 @@ def movie_detail(request, movie_id):
         'recently_released': recently_released,
         'theaters': theaters,
         'shows': shows,
+        'in_wishlist': in_wishlist,
     })
 
 
@@ -118,7 +130,7 @@ def theater_list(request, movie_id):
     if movie.status in ['archived', 'hidden']:
         from django.http import Http404
         raise Http404("Movie not available")
-    theater = Theater.objects.filter(movie=movie)
+    theater = Theater.objects.filter(movie=movie, status='active')
     return render(request, 'movies/theater_list.html', {'movie': movie, 'theaters': theater})
 
 
@@ -175,7 +187,7 @@ def _parse_request_params(request):
 
 @login_required(login_url='/login/')
 def book_seats(request, theater_id):
-    show = get_object_or_404(Theater.objects.select_related('movie'), id=theater_id)
+    show = get_object_or_404(Theater.objects.select_related('movie'), id=theater_id, status='active')
     seat_data = seat_data_for_show(show)
     config = get_pricing_config()
     reservation = None
@@ -193,7 +205,7 @@ def book_seats(request, theater_id):
         'theaters': show,
         'seat_data': seat_data,
         'tier_prices': tier_prices,
-        'show_json': json.dumps({
+        'show_data': {
             'id': show.id,
             'name': show.name,
             'movie': show.movie.name,
@@ -204,14 +216,14 @@ def book_seats(request, theater_id):
             'platform_fee': str(config['platform_fee_per_ticket']),
             'misc_fee': str(config['misc_fee_per_booking']),
             'gst_slabs': gst_slabs(),
-        }),
-        'reservation_json': json.dumps(active_reservation),
+        },
+        'reservation_data': active_reservation,
     })
 
 
 @login_required(login_url='/login/')
 def seat_status(request, theater_id):
-    show = get_object_or_404(Theater, id=theater_id)
+    show = get_object_or_404(Theater, id=theater_id, status='active')
     expire_stale_for_show(show)
     revision = Theater.objects.get(pk=show.pk).seat_revision
     etag = f'"rev-{revision}"'
@@ -312,11 +324,120 @@ def payment_page(request, token):
             reservation.token[:10].upper(), secrets.token_hex(4).upper()
         ),
         'book_seats_url': reverse('book_seats', args=[reservation.show_id]),
+        'razorpay_key': settings.RAZORPAY_KEY_ID,
+        'demo_checkout': gateway.demo_mode(),
+        'remaining': max(0, int((reservation.expires_at - timezone.now()).total_seconds())),
+        'start_payment_url': reverse('payment_start', args=[token]),
+        'verify_payment_url': reverse('payment_verify', args=[token]),
+        'failed_payment_url': reverse('payment_failed', args=[token]),
     })
+
+
+def _payment_failure_redirect(token):
+    """Best-effort target for an unbookable reservation: reselect or profile."""
+    show = Reservation.objects.filter(token=token).only('show_id').first()
+    if show is not None:
+        return reverse('book_seats', args=[show.show_id])
+    return reverse('profile')
+
+
+@login_required(login_url='/login/')
+def payment_start_api(request, token):
+    """Create (or reuse) the payment order for an active reservation."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required.'}, status=405)
+    param, _ = _parse_request_params(request)
+    try:
+        _tx, checkout = payments.start_checkout(
+            request.user, token, coupon_code=param('coupon_code', '')
+        )
+        return JsonResponse({'ok': True, 'checkout': checkout})
+    except ReservationError as exc:
+        return JsonResponse({
+            'ok': False,
+            'error': str(exc),
+            'redirect': _payment_failure_redirect(token),
+        }, status=409)
+    except PaymentError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=502)
+
+
+@login_required(login_url='/login/')
+def payment_verify_api(request, token):
+    """Verify a checkout callback server-side and confirm the booking."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required.'}, status=405)
+    param, _ = _parse_request_params(request)
+    try:
+        _reservation, _bookings = payments.verify_and_confirm(
+            request.user,
+            token,
+            gateway_order_id=param('razorpay_order_id', ''),
+            gateway_payment_id=param('razorpay_payment_id', ''),
+            gateway_signature=param('razorpay_signature', ''),
+            method=param('payment_method', 'upi'),
+            demo=str(param('demo', 'false')).lower() == 'true',
+        )
+        return JsonResponse({
+            'ok': True,
+            'confirmation_url': reverse('booking_confirmation', args=[token]),
+        })
+    except ReservationError as exc:
+        return JsonResponse({
+            'ok': False,
+            'error': str(exc),
+            'redirect': _payment_failure_redirect(token),
+        }, status=409)
+    except PaymentError as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+
+@login_required(login_url='/login/')
+def payment_failed_api(request, token):
+    """Record a failed checkout attempt (seats stay held for a retry)."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required.'}, status=405)
+    param, _ = _parse_request_params(request)
+    try:
+        payments.record_failure(
+            request.user,
+            token,
+            gateway_order_id=param('razorpay_order_id', ''),
+            gateway_payment_id=param('razorpay_payment_id', ''),
+            failure_reason=param('error', ''),
+            method=param('payment_method', ''),
+        )
+        return JsonResponse({'ok': True})
+    except (ReservationError, PaymentError) as exc:
+        return JsonResponse({'ok': False, 'error': str(exc)}, status=409)
+
+
+@csrf_exempt
+def payment_webhook(request):
+    """Razorpay webhook endpoint (signature verified, no CSRF)."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required.'}, status=405)
+    signature = request.headers.get('X-Razorpay-Signature', '')
+    try:
+        payments.handle_webhook(request.body, signature)
+        return HttpResponse('ok', status=200)
+    except PaymentError:
+        return HttpResponse('invalid signature', status=400)
+    except Exception:
+        return HttpResponse('error', status=500)
 
 
 @login_required(login_url='/login/')
 def simulate_payment_view(request, token):
+    """Demo checkout path, active only while the gateway is not configured.
+
+    Runs the exact same signature-verified confirmation flow the Razorpay
+    checkout uses, so the demo behaves like production. Never enabled when
+    real gateway keys are present.
+    """
+    if not gateway.demo_mode():
+        messages.error(request, 'Online payments are enabled — use the checkout.')
+        return redirect('payment_page', token=token)
     if request.method != 'POST':
         return redirect('payment_page', token=token)
     reservation = get_object_or_404(
@@ -327,31 +448,46 @@ def simulate_payment_view(request, token):
         return redirect('profile')
     if reservation.status == 'booked':
         return redirect('booking_confirmation', token=reservation.token)
+    try:
+        tx, _checkout = payments.start_checkout(
+            request.user, token, coupon_code=request.POST.get('coupon_code')
+        )
+    except ReservationError as exc:
+        messages.error(request, str(exc))
+        return redirect(_payment_failure_redirect(token))
+    except PaymentError as exc:
+        messages.error(request, str(exc))
+        return redirect('payment_page', token=token)
+
     action = request.POST.get('action', 'success')
     if action == 'fail':
-        Reservation.objects.filter(pk=reservation.pk).update(
-            payment_status='failed', updated_at=timezone.now()
+        payments.record_failure(
+            request.user,
+            token,
+            gateway_order_id=tx.gateway_order_id,
+            gateway_payment_id='pay_DEMO_failed',
+            failure_reason='Simulated payment failure',
+            method=request.POST.get('payment_method') or 'upi',
         )
         messages.error(
             request,
             'Payment failed. Your seats are still held — you can retry below.',
         )
         return redirect('payment_page', token=token)
-    transaction_id = (request.POST.get('transaction_id') or '').strip()
-    if not transaction_id:
-        messages.error(
-            request,
-            'Payment could not be verified — a transaction reference is required.',
-        )
-        return redirect('payment_page', token=token)
-    time.sleep(1)
+
+    gateway_payment_id = 'pay_DEMO{}'.format(secrets.token_hex(8).upper())
+    gateway_signature = gateway.demo_signature(
+        tx.gateway_order_id, gateway_payment_id
+    )
     try:
-        reservation, bookings = confirm_booking(
+        reservation, bookings = payments.verify_and_confirm(
             request.user,
             token,
-            transaction_id=transaction_id,
-            payment_method=request.POST.get('payment_method') or 'upi',
-            coupon_code=request.POST.get('coupon_code'),
+            gateway_order_id=tx.gateway_order_id,
+            gateway_payment_id=gateway_payment_id,
+            gateway_signature=gateway_signature,
+            method=request.POST.get('payment_method') or 'upi',
+            demo=True,
         )
         send_booking_confirmation(request.user, reservation, bookings)
         messages.success(
@@ -360,7 +496,10 @@ def simulate_payment_view(request, token):
         return redirect('booking_confirmation', token=reservation.token)
     except ReservationError as exc:
         messages.error(request, str(exc))
-        return redirect('book_seats', theater_id=reservation.show_id)
+        return redirect(_payment_failure_redirect(token))
+    except PaymentError as exc:
+        messages.error(request, str(exc))
+        return redirect('payment_page', token=token)
 
 
 @login_required(login_url='/login/')
@@ -378,9 +517,15 @@ def booking_confirmation(request, token):
     bookings = list(
         reservation.bookings.select_related('seat', 'payment').order_by('seat__seat_number')
     )
+    payment_tx = (
+        PaymentTransaction.objects.filter(reservation=reservation, status='captured')
+        .order_by('-captured_at')
+        .first()
+    )
     return render(request, 'movies/booking_confirmation.html', {
         'reservation': reservation,
         'bookings': bookings,
+        'payment_tx': payment_tx,
     })
 
 
@@ -454,10 +599,15 @@ def cleanup_expired_reservations_view(request):
 
 
 @login_required(login_url='/login/')
+@require_POST
 def report_review(request, review_id):
     review = get_object_or_404(Review, id=review_id)
-    review.is_reported = True
-    review.save()
+    if review.user_id == request.user.id:
+        messages.error(request, 'You cannot report your own review.')
+        return redirect('movie_detail', movie_id=review.movie.id)
+    if not review.is_reported:
+        review.is_reported = True
+        review.save(update_fields=['is_reported'])
     messages.success(request, 'Review has been reported for moderation.')
     return redirect('movie_detail', movie_id=review.movie.id)
 

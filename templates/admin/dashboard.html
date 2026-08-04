@@ -124,6 +124,65 @@
 
 <div class="row g-4 mb-4">
   <div class="col-md-3">
+    <div class="stat-card" style="border-left: 4px solid var(--accent-success);">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <p class="stat-label">Total Payments</p>
+          <h3 class="stat-value">{{ total_payments }}</h3>
+        </div>
+        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-success) 12%, transparent); color: var(--accent-success);">
+          <i class="bi bi-credit-card"></i>
+        </div>
+      </div>
+      <a href="{% url 'admin_payment_list' %}" class="stat-link">View Payments <i class="bi bi-arrow-right"></i></a>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="border-left: 4px solid var(--accent-gold);">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <p class="stat-label">Total Revenue</p>
+          <h3 class="stat-value"><i class="bi bi-currency-rupee"></i>{{ total_revenue|floatformat:0 }}</h3>
+        </div>
+        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-gold) 12%, transparent); color: var(--accent-gold);">
+          <i class="bi bi-graph-up-arrow"></i>
+        </div>
+      </div>
+      <a href="{% url 'admin_payment_list' %}" class="stat-link">View Revenue <i class="bi bi-arrow-right"></i></a>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="border-left: 4px solid var(--accent-secondary);">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <p class="stat-label">Gateway Transactions</p>
+          <h3 class="stat-value">{{ total_transactions }}</h3>
+        </div>
+        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-secondary) 12%, transparent); color: var(--accent-secondary);">
+          <i class="bi bi-arrow-repeat"></i>
+        </div>
+      </div>
+      <a href="{% url 'admin_payment_list' %}" class="stat-link">View Transactions <i class="bi bi-arrow-right"></i></a>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="stat-card" style="border-left: 4px solid var(--accent-primary);">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <p class="stat-label">Pending Refunds</p>
+          <h3 class="stat-value">{{ pending_refunds }}</h3>
+        </div>
+        <div class="stat-icon" style="background: rgba(220,38,38,0.1); color: var(--accent-primary);">
+          <i class="bi bi-arrow-counterclockwise"></i>
+        </div>
+      </div>
+      <a href="{% url 'admin_payment_list' %}?status=refund_requested" class="stat-link">View Refunds <i class="bi bi-arrow-right"></i></a>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-3">
     <div class="stat-card" style="border-left: 4px solid var(--accent-gold);">
       <div class="d-flex justify-content-between align-items-center">
         <div>
@@ -257,7 +316,7 @@
         </div>
         <div class="d-flex justify-content-between">
           <span class="text-muted small">Pending Refunds</span>
-          <strong>{{ pending_refunds }}</strong>
+          <strong><a href="{% url 'admin_payment_list' %}?status=refund_requested" class="text-reset">{{ pending_refunds }}</a></strong>
         </div>
       </div>
     </div>

@@ -1,9 +1,11 @@
 from datetime import date
+from urllib.parse import urlparse
 
 from django import forms
 from django.contrib.auth.models import User
+from django.utils import timezone
 from movies.models import Movie, Theater, Seat, Booking
-from .models import Genre, Language, CastMember, Theatre, Screen, Show, Trailer, MovieImage, AdminProfile, AdminPermission, Coupon, Notification, Review
+from .models import Genre, Language, CastMember, Theatre, Screen, Show, Trailer, MovieImage, AdminProfile, AdminPermission, Coupon, Notification, Review, PaymentTransaction
 
 
 class AdminLoginForm(forms.Form):
@@ -17,6 +19,12 @@ class AdminLoginForm(forms.Form):
 
 
 class MovieForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            self.fields['status'].initial = 'now_showing'
+            self.fields['show_on_homepage'].initial = True
+
     genres = forms.ModelMultipleChoiceField(
         queryset=Genre.objects.all(),
         required=False,
@@ -220,8 +228,10 @@ class TrailerForm(forms.ModelForm):
 
     def clean_url(self):
         url = self.cleaned_data.get('url', '')
-        if url and 'youtube.com' not in url and 'youtu.be' not in url:
-            raise forms.ValidationError('Only YouTube URLs are allowed.')
+        if url:
+            host = urlparse(url).netloc.lower()
+            if host not in ('youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'):
+                raise forms.ValidationError('Only YouTube URLs are allowed.')
         return url
 
 
@@ -277,6 +287,33 @@ class BookingSearchForm(forms.Form):
         self.fields['theatre'].choices = [('', 'All Theatres')] + [(t, t) for t in theatres]
 
 
+class PaymentSearchForm(forms.Form):
+    user = forms.CharField(
+        max_length=150, required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Username'})
+    )
+    status = forms.ChoiceField(
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    gateway_order_id = forms.CharField(
+        max_length=255, required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Order / Payment ID'})
+    )
+    date_from = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+    )
+    date_to = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['status'].choices = [('', 'All Statuses')] + list(PaymentTransaction.STATUS_CHOICES)
+
+
 class StaffCreateForm(forms.ModelForm):
     class Meta:
         model = User
@@ -315,6 +352,35 @@ class AdminProfileForm(forms.ModelForm):
             'department': forms.TextInput(attrs={'class': 'form-control'}),
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+
+class AdminProfileSelfEditForm(forms.ModelForm):
+    """Profile fields a user may edit about themselves.
+
+    Role and activation status are deliberately excluded so a user can never
+    promote or deactivate their own account.
+    """
+
+    class Meta:
+        model = AdminProfile
+        fields = ['department', 'phone']
+        widgets = {
+            'department': forms.TextInput(attrs={'class': 'form-control'}),
+            'phone': forms.TextInput(attrs={'class': 'form-control'}),
+        }
+
+
+class AdminUserSelfEditForm(forms.ModelForm):
+    """Basic identity fields a logged-in admin may update for themselves."""
+
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'email']
+        widgets = {
+            'first_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'last_name': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
         }
 
 
@@ -386,7 +452,7 @@ class ReserveBookingForm(forms.Form):
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     show = forms.ModelChoiceField(
-        queryset=Show.objects.all(),
+        queryset=Theater.objects.filter(time__gte=timezone.now()).select_related('movie'),
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     seat_count = forms.IntegerField(

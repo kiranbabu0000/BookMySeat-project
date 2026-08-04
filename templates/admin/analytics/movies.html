@@ -1,0 +1,57 @@
+{% extends 'admin/analytics/analytics_base.html' %}
+{% block analytics_content %}
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Movies with Bookings" value=data.movies_with_bookings icon="bi-film" color="var(--accent-secondary)" stat_key="movies_with_bookings" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Now Showing" value=data.active_movies icon="bi-play-circle" color="var(--accent-success)" stat_key="active_movies" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Coming Soon" value=data.upcoming_movies icon="bi-clock" color="var(--accent-gold)" stat_key="upcoming_movies" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Total Revenue" value=data.total_revenue|floatformat:2 icon="bi-currency-rupee" color="var(--accent-primary)" stat_key="total_revenue_fmt" %}
+</div>
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Top Movies by Revenue" chart_key="movies_by_revenue" %}
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Top Movies by Bookings" chart_key="movies_by_bookings" %}
+</div>
+
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-graph-up-arrow me-2"></i>Top by Revenue</h5></div>
+      <div class="card-bms-body p-0">
+        <div class="table-responsive">
+          <table class="table table-bms mb-0">
+            <thead><tr>{% for col in tables.top_by_revenue.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+            <tbody data-table="top_by_revenue">
+              {% for row in tables.top_by_revenue.rows %}
+              <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+              {% empty %}
+              <tr><td colspan="{{ tables.top_by_revenue.columns|length }}" class="text-center text-muted py-4">No data in this period.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-ticket-perforated me-2"></i>Top by Bookings</h5></div>
+      <div class="card-bms-body p-0">
+        <div class="table-responsive">
+          <table class="table table-bms mb-0">
+            <thead><tr>{% for col in tables.top_by_bookings.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+            <tbody data-table="top_by_bookings">
+              {% for row in tables.top_by_bookings.rows %}
+              <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+              {% empty %}
+              <tr><td colspan="{{ tables.top_by_bookings.columns|length }}" class="text-center text-muted py-4">No data in this period.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

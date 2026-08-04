@@ -1,0 +1,48 @@
+{% extends 'admin/analytics/analytics_base.html' %}
+{% block analytics_content %}
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Shows in Period" value=data.total_shows icon="bi-calendar-event" color="var(--accent-secondary)" stat_key="total_shows" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Distinct Theaters" value=data.total_theaters icon="bi-building" color="var(--accent-gold)" stat_key="total_theaters" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Cancelled Shows" value=data.cancelled_shows icon="bi-x-octagon" color="var(--accent-primary)" stat_key="cancelled_shows" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Avg Revenue / Show" value=data.avg_revenue_show|floatformat:2 icon="bi-graph-up-arrow" color="var(--accent-success)" stat_key="avg_revenue_show_fmt" %}
+</div>
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Top Theaters by Revenue" chart_key="theaters_by_revenue" %}
+  <div class="col-lg-6 col-md-12">
+    <div class="card-bms h-100">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Notes</h5></div>
+      <div class="card-bms-body">
+        <p class="text-muted small mb-0">
+          Theater rankings reflect confirmed bookings and their snapshotted totals in the selected period.
+          Shows are the screening slots (movies.Theater) on the customer side.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-12">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-building me-2"></i>Theater Rankings</h5></div>
+      <div class="card-bms-body p-0">
+        <div class="table-responsive">
+          <table class="table table-bms mb-0">
+            <thead><tr>{% for col in tables.theaters.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+            <tbody data-table="theaters">
+              {% for row in tables.theaters.rows %}
+              <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+              {% empty %}
+              <tr><td colspan="{{ tables.theaters.columns|length }}" class="text-center text-muted py-4">No shows in this period.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

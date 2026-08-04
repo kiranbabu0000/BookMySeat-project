@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .analytics import views as analytics_views
 
 urlpatterns = [
     path('admin-login/', views.admin_login_view, name='admin_login'),
@@ -77,6 +78,10 @@ urlpatterns = [
 
     path('reservations/', views.ReservationListView.as_view(), name='admin_reservation_list'),
 
+    path('payments/', views.PaymentTransactionListView.as_view(), name='admin_payment_list'),
+    path('payments/<int:pk>/', views.payment_transaction_detail, name='admin_payment_detail'),
+    path('payments/<int:pk>/refund/', views.payment_transaction_refund, name='admin_payment_refund'),
+
     path('users/', views.UserListView.as_view(), name='admin_user_list'),
     path('users/<int:pk>/toggle-active/', views.user_toggle_active, name='admin_user_toggle_active'),
     path('users/<int:pk>/bookings/', views.user_booking_history, name='admin_user_bookings'),
@@ -109,4 +114,17 @@ urlpatterns = [
 
     path('settings/', views.SettingsView.as_view(), name='admin_settings'),
     path('search-suggestions/', views.search_suggestions, name='search_suggestions'),
+
+    path('analytics/', analytics_views.OverviewView.as_view(), name='admin_analytics_overview'),
+    path('analytics/revenue/', analytics_views.RevenueView.as_view(), name='admin_analytics_revenue'),
+    path('analytics/bookings/', analytics_views.BookingsView.as_view(), name='admin_analytics_bookings'),
+    path('analytics/occupancy/', analytics_views.OccupancyView.as_view(), name='admin_analytics_occupancy'),
+    path('analytics/movies/', analytics_views.MoviesView.as_view(), name='admin_analytics_movies'),
+    path('analytics/theaters/', analytics_views.TheatersView.as_view(), name='admin_analytics_theaters'),
+    path('analytics/peak/', analytics_views.PeakView.as_view(), name='admin_analytics_peak'),
+    path('analytics/payments/', analytics_views.PaymentsView.as_view(), name='admin_analytics_payments'),
+    path('analytics/refunds/', analytics_views.RefundsView.as_view(), name='admin_analytics_refunds'),
+    path('analytics/users/', analytics_views.UsersView.as_view(), name='admin_analytics_users'),
+    path('analytics/data/<str:area>/', analytics_views.analytics_data_json, name='admin_analytics_data'),
+    path('analytics/export/<str:area>/', analytics_views.analytics_export, name='admin_analytics_export'),
 ]

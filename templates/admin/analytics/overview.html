@@ -1,0 +1,53 @@
+{% extends 'admin/analytics/analytics_base.html' %}
+{% block analytics_content %}
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Total Revenue" value=data.summary.revenue_fmt icon="bi-currency-rupee" color="var(--accent-gold)" stat_key="summary.revenue_fmt" change=data.summary.revenue_change change_key="summary.revenue_change" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Total Bookings" value=data.summary.bookings icon="bi-ticket-perforated" color="var(--accent-secondary)" stat_key="summary.bookings" change=data.summary.bookings_change %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Avg Order Value" value=data.summary.aov_fmt icon="bi-graph-up-arrow" color="var(--accent-success)" stat_key="summary.aov_fmt" change=data.summary.aov_change change_key="summary.aov_change" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="New Users" value=data.summary.new_users icon="bi-person-plus" color="var(--accent-primary)" stat_key="summary.new_users" change=data.summary.new_users_change %}
+</div>
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Cancelled Bookings" value=data.summary.cancelled icon="bi-x-octagon" color="var(--accent-primary)" stat_key="summary.cancelled" change=data.summary.cancelled_change %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Confirmed Tickets" value=data.summary.confirmed icon="bi-check2-circle" color="var(--accent-success)" stat_key="summary.confirmed" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Refunds" value=data.summary.refunds icon="bi-arrow-counterclockwise" color="var(--accent-secondary)" stat_key="summary.refunds" change=data.summary.refund_change change_key="summary.refund_change" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Refund Amount" value=data.summary.refund_amount_fmt icon="bi-cash-stack" color="var(--accent-gold)" stat_key="summary.refund_amount_fmt" %}
+</div>
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Revenue Trend" chart_key="revenue_trend" %}
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Bookings Trend" chart_key="bookings_trend" %}
+</div>
+
+<div class="row g-4">
+  <div class="col-md-12">
+    <div class="card-bms">
+      <div class="card-bms-header">
+        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Bookings</h5>
+      </div>
+      <div class="card-bms-body p-0">
+        <div class="table-responsive">
+          <table class="table table-bms mb-0">
+            <thead>
+              <tr>
+                {% for col in tables.recent_bookings.columns %}<th>{{ col }}</th>{% endfor %}
+              </tr>
+            </thead>
+            <tbody data-table="recent_bookings">
+              {% for row in tables.recent_bookings.rows %}
+              <tr>
+                {% for cell in row %}<td>{{ cell }}</td>{% endfor %}
+              </tr>
+              {% empty %}
+              <tr><td colspan="{{ tables.recent_bookings.columns|length }}" class="text-center text-muted py-4">No bookings in this period.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

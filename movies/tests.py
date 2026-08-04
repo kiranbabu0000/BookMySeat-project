@@ -10,7 +10,9 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import timedelta
 
-from .models import Movie, Theater, Seat, SeatCategory, ShowPrice, Reservation, ReservedSeat, Booking
+from admin_panel.models import Notification
+
+from .models import Movie, Theater, Seat, SeatCategory, ShowPrice, Reservation, ReservedSeat, Booking, Wishlist
 from .services import (
     ReservationError,
     cancel_booking,
@@ -401,11 +403,12 @@ class ReservationServiceTests(TestCase):
         )
         booking = bookings[0]
         cancel_booking(self.user, booking.id)
-        self.assertFalse(Booking.objects.filter(pk=booking.id).exists())
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, 'cancelled')
         self.seats[0].refresh_from_db()
         self.assertFalse(self.seats[0].is_booked)
         self.assertEqual(
-            Payment.objects.filter(booking_id=booking.id, status='refunded').count(), 0
+            Payment.objects.filter(booking_id=booking.id, status='refunded').count(), 1
         )
         self.assertEqual(seat_states_for_show(self.show)[str(self.seats[0].id)], 'available')
 
@@ -569,15 +572,20 @@ class ReservationApiTests(TestCase):
         self.seats[0].refresh_from_db()
         self.assertTrue(self.seats[0].is_booked)
 
-    def test_simulate_payment_requires_transaction_reference(self):
+    def test_payment_verify_rejects_unverified_callback(self):
         from admin_panel.models import Payment
 
         reservation = self._reserve(self.seats[0].id).json()['reservation']
         response = self.client.post(
-            reverse('simulate_payment', args=[reservation['token']]),
-            data={'action': 'success'},
+            reverse('payment_verify', args=[reservation['token']]),
+            data={
+                'razorpay_order_id': 'order_FAKE',
+                'razorpay_payment_id': 'pay_FAKE',
+                'razorpay_signature': 'deadbeef',
+            },
+            content_type='application/json',
         )
-        self.assertRedirects(response, reverse('payment_page', args=[reservation['token']]))
+        self.assertEqual(response.status_code, 400)
         self.seats[0].refresh_from_db()
         self.assertFalse(self.seats[0].is_booked)
         self.assertFalse(Payment.objects.filter(booking__reservation__token=reservation['token']).exists())
@@ -618,7 +626,8 @@ class ReservationApiTests(TestCase):
         booking = Booking.objects.get(reservation__token=reservation['token'])
         response = self.client.post(reverse('cancel_booking', args=[booking.id]))
         self.assertRedirects(response, reverse('profile'))
-        self.assertFalse(Booking.objects.filter(pk=booking.id).exists())
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, 'cancelled')
         self.seats[0].refresh_from_db()
         self.assertFalse(self.seats[0].is_booked)
 
@@ -746,3 +755,94 @@ class MovieRestoreVisibilityTests(TestCase):
         self.assertTrue(movie.show_on_homepage)
         self.assertNotIn(movie.status, ['archived', 'hidden'])
         self.assertRedirects(response, reverse('admin_movie_list'))
+
+
+class WishlistAndNotificationsTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user('customer', 'customer@example.com', 'password123')
+        self.movie = Movie.objects.create(
+            name='Wishlist Test Movie', rating=8.0, cast='Actor',
+            status='now_showing', show_on_homepage=True,
+        )
+
+    def _login(self):
+        self.client.force_login(self.user)
+
+    def test_toggle_wishlist_adds_and_removes(self):
+        self._login()
+        url = reverse('toggle_wishlist', args=[self.movie.pk])
+        self.client.post(url)
+        self.assertTrue(Wishlist.objects.filter(user=self.user, movie=self.movie).exists())
+        self.client.post(url)
+        self.assertFalse(Wishlist.objects.filter(user=self.user, movie=self.movie).exists())
+
+    def test_toggle_wishlist_requires_login(self):
+        response = self.client.post(reverse('toggle_wishlist', args=[self.movie.pk]))
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_wishlist_page_lists_saved_movies(self):
+        self._login()
+        Wishlist.objects.create(user=self.user, movie=self.movie)
+        response = self.client.get(reverse('wishlist'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.movie.name)
+
+    def test_toggle_twice_returns_to_removed(self):
+        self._login()
+        Wishlist.objects.create(user=self.user, movie=self.movie)
+        url = reverse('toggle_wishlist', args=[self.movie.pk])
+        self.client.post(url)
+        self.assertEqual(Wishlist.objects.filter(user=self.user, movie=self.movie).count(), 0)
+        self.client.post(url)
+        self.assertEqual(Wishlist.objects.filter(user=self.user, movie=self.movie).count(), 1)
+
+    def test_movie_detail_shows_wishlist_state(self):
+        self._login()
+        self.client.post(reverse('toggle_wishlist', args=[self.movie.pk]))
+        response = self.client.get(reverse('movie_detail', args=[self.movie.pk]))
+        self.assertContains(response, 'In Wishlist')
+
+    def test_notifications_page_and_mark_all_read(self):
+        self._login()
+        Notification.objects.create(
+            user=self.user, title='Hello', message='Test message',
+            notification_type='info', is_read=False,
+        )
+        response = self.client.get(reverse('my_notifications'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Hello')
+        self.client.post(reverse('my_notifications'))
+        self.assertTrue(
+            Notification.objects.filter(user=self.user, is_read=True).exists()
+        )
+
+    def test_mark_single_notification_read(self):
+        self._login()
+        notification = Notification.objects.create(
+            user=self.user, title='Single', message='Msg',
+            notification_type='info', is_read=False,
+        )
+        self.client.post(reverse('mark_notification_read', args=[notification.pk]))
+        notification.refresh_from_db()
+        self.assertTrue(notification.is_read)
+
+    def test_other_users_cannot_mark_my_notification_read(self):
+        self._login()
+        other = User.objects.create_user('other', 'other@example.com', 'password123')
+        notification = Notification.objects.create(
+            user=other, title='Secret', message='Msg',
+            notification_type='info', is_read=False,
+        )
+        response = self.client.post(reverse('mark_notification_read', args=[notification.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_recently_viewed_tracks_movie(self):
+        self.client.get(reverse('movie_detail', args=[self.movie.pk]))
+        session = self.client.session
+        self.assertIn(self.movie.pk, session.get('recently_viewed', []))
+
+    def test_home_shows_recently_viewed(self):
+        self.client.get(reverse('movie_detail', args=[self.movie.pk]))
+        response = self.client.get(reverse('home'))
+        self.assertContains(response, 'Recently Viewed')
+        self.assertContains(response, self.movie.name)

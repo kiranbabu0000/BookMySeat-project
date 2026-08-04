@@ -89,6 +89,7 @@ class Show(models.Model):
     movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='shows')
     theatre = models.ForeignKey(Theatre, on_delete=models.CASCADE, related_name='shows')
     screen = models.ForeignKey(Screen, on_delete=models.CASCADE, related_name='shows')
+    theater = models.OneToOneField('movies.Theater', on_delete=models.SET_NULL, null=True, blank=True, related_name='admin_show', help_text="Linked booking-flow show (movies.Theater) kept in sync with this Show")
     date = models.DateField()
     time = models.TimeField()
     ticket_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -290,11 +291,74 @@ class Payment(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_method = models.CharField(max_length=50, default='online')
     transaction_id = models.CharField(max_length=255, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='completed')
-    paid_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='completed', db_index=True)
+    paid_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
         ordering = ['-paid_at']
+        indexes = [
+            models.Index(fields=['status', 'paid_at']),
+            models.Index(fields=['booking', 'status']),
+            models.Index(fields=['payment_method']),
+        ]
 
     def __str__(self):
         return f'Payment {self.transaction_id or self.id} - {self.status}'
+
+
+class PaymentTransaction(models.Model):
+    """Gateway-level payment record (one per checkout attempt).
+
+    Tracks the full lifecycle of a Razorpay order: created -> captured/failed/
+    cancelled -> refunded. The user-facing Payment rows are created once a
+    booking is confirmed; this model keeps the gateway audit trail.
+    """
+    STATUS_CHOICES = [
+        ('created', 'Created'),
+        ('captured', 'Captured'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+        ('refund_requested', 'Refund Requested'),
+        ('refunded', 'Refunded'),
+    ]
+
+    reservation = models.ForeignKey(
+        'movies.Reservation', on_delete=models.CASCADE, related_name='transactions'
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='payment_transactions'
+    )
+    gateway = models.CharField(max_length=20, default='razorpay')
+    gateway_order_id = models.CharField(max_length=255, blank=True, db_index=True)
+    gateway_payment_id = models.CharField(max_length=255, blank=True, db_index=True)
+    gateway_signature = models.CharField(max_length=1024, blank=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    currency = models.CharField(max_length=8, default='INR')
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='created', db_index=True
+    )
+    method = models.CharField(max_length=50, blank=True, default='',
+                              help_text="Payment method reported by the gateway")
+    failure_reason = models.CharField(max_length=255, blank=True, default='')
+    coupon_code = models.CharField(max_length=50, blank=True, default='')
+    payload = models.JSONField(blank=True, default=dict,
+                               help_text="Raw gateway response for auditing")
+    is_demo = models.BooleanField(default=False,
+                                  help_text="True for demo/sandbox checkouts")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    captured_at = models.DateTimeField(null=True, blank=True)
+    refund_id = models.CharField(max_length=255, blank=True, default='')
+    refunded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['reservation', 'status']),
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f'PaymentTransaction {self.gateway_order_id or self.id} - {self.status}'

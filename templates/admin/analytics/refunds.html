@@ -1,0 +1,38 @@
+{% extends 'admin/analytics/analytics_base.html' %}
+{% block analytics_content %}
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Refunds" value=data.count icon="bi-arrow-counterclockwise" color="var(--accent-primary)" stat_key="count" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Refund Amount" value=data.amount_fmt icon="bi-cash-stack" color="var(--accent-gold)" stat_key="amount_fmt" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Refund Rate" value=data.rate|floatformat:2|add:"%" icon="bi-percent" color="var(--accent-secondary)" stat_key="rate_fmt" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Avg Refund" value=data.avg_fmt icon="bi-calculator" color="var(--accent-success)" stat_key="avg_fmt" %}
+</div>
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Refund Amount Trend" chart_key="refund_trend" %}
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Refunds by Status" chart_key="refund_by_status" %}
+</div>
+
+<div class="row g-4">
+  <div class="col-md-12">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-receipt me-2"></i>Refund Transactions</h5></div>
+      <div class="card-bms-body p-0">
+        <div class="table-responsive">
+          <table class="table table-bms mb-0">
+            <thead><tr>{% for col in tables.refund_details.columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+            <tbody data-table="refund_details">
+              {% for row in tables.refund_details.rows %}
+              <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+              {% empty %}
+              <tr><td colspan="{{ tables.refund_details.columns|length }}" class="text-center text-muted py-4">No refunds in this period.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

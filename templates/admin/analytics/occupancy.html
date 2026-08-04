@@ -1,0 +1,54 @@
+{% extends 'admin/analytics/analytics_base.html' %}
+{% block analytics_content %}
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Shows in Period" value=data.shows icon="bi-calendar-event" color="var(--accent-secondary)" stat_key="shows" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Total Seats" value=data.total_seats icon="bi-grid-3x3-gap" color="var(--accent-gold)" stat_key="total_seats" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Booked Seats" value=data.booked_seats icon="bi-check2-circle" color="var(--accent-success)" stat_key="booked_seats" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Occupancy Rate" value=data.occupancy_rate|floatformat:1|add:"%" icon="bi-speedometer2" color="var(--accent-primary)" stat_key="occupancy_rate_fmt" %}
+</div>
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Occupancy by Theater" chart_key="occupancy_by_theater" %}
+  <div class="col-lg-6 col-md-12">
+    <div class="card-bms h-100">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>About Occupancy</h5></div>
+      <div class="card-bms-body">
+        <p class="text-muted small mb-0">
+          Occupancy is measured across every show screening in the selected period. It is the share of
+          seats sold (confirmed bookings) out of the total seats available for those shows.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-12">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-building me-2"></i>Occupancy by Theater</h5></div>
+      <div class="card-bms-body p-0">
+        <div class="table-responsive">
+          <table class="table table-bms mb-0">
+            <thead>
+              <tr>
+                {% for col in tables.per_theater.columns %}<th>{{ col }}</th>{% endfor %}
+              </tr>
+            </thead>
+            <tbody data-table="per_theater">
+              {% for row in tables.per_theater.rows %}
+              <tr>
+                {% for cell in row %}<td>{{ cell }}</td>{% endfor %}
+              </tr>
+              {% empty %}
+              <tr><td colspan="{{ tables.per_theater.columns|length }}" class="text-center text-muted py-4">No shows in this period.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

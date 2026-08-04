@@ -18,7 +18,7 @@ def youtube_embed(url):
         if match:
             video_id = match.group(1)
             return f'https://www.youtube.com/embed/{video_id}'
-    return url
+    return ''
 
 
 @register.filter

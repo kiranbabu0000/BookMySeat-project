@@ -10,9 +10,11 @@
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
 
-  function applyTheme(theme) {
+  function applyTheme(theme, persist) {
     root.setAttribute('data-theme', theme);
-    localStorage.setItem(STORAGE_KEY, theme);
+    if (persist !== false) {
+      localStorage.setItem(STORAGE_KEY, theme);
+    }
     updateToggleIcons(theme);
   }
 
@@ -29,23 +31,66 @@
     if (themeIcon) themeIcon.className = iconClass;
   }
 
-  window.toggleTheme = function () {
+  window.toggleTheme = function (btn) {
     var current = root.getAttribute('data-theme') || getPreferredTheme();
-    applyTheme(current === 'dark' ? 'light' : 'dark');
+    var next = current === 'dark' ? 'light' : 'dark';
+    animateThemeChange(next, btn);
   };
 
-  applyTheme(getPreferredTheme());
+  function pulseIcon(btn) {
+    var icon = btn.querySelector('i');
+    if (!icon) return;
+    icon.classList.remove('theme-icon--spin');
+    void icon.offsetWidth; /* restart the animation */
+    icon.classList.add('theme-icon--spin');
+  }
 
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
-    if (!localStorage.getItem(STORAGE_KEY)) {
-      applyTheme(e.matches ? 'dark' : 'light');
+  function animateThemeChange(next, btn) {
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (document.startViewTransition && !reduced) {
+      root.classList.add('theme-switching');
+      try {
+        var t = document.startViewTransition(function () {
+          applyTheme(next);
+        });
+        var finish = function () { root.classList.remove('theme-switching'); };
+        if (t && t.finished) {
+          t.finished.then(finish).catch(finish);
+        } else {
+          finish();
+        }
+      } catch (err) {
+        root.classList.remove('theme-switching');
+        applyTheme(next);
+      }
+    } else {
+      applyTheme(next);
     }
-  });
+    if (btn) pulseIcon(btn);
+  }
+
+  applyTheme(getPreferredTheme(), false);
+
+  var mq = window.matchMedia('(prefers-color-scheme: dark)');
+  var onSystemChange = function (e) {
+    if (!localStorage.getItem(STORAGE_KEY)) {
+      applyTheme(e.matches ? 'dark' : 'light', false);
+    }
+  };
+  if (mq.addEventListener) {
+    mq.addEventListener('change', onSystemChange);
+  } else if (mq.addListener) {
+    mq.addListener(onSystemChange);
+  }
 
   document.addEventListener('DOMContentLoaded', function () {
     updateToggleIcons(root.getAttribute('data-theme') || getPreferredTheme());
     document.querySelectorAll('[data-theme-toggle]').forEach(function (btn) {
-      btn.addEventListener('click', window.toggleTheme);
+      btn.addEventListener('click', function (e) {
+        root.style.setProperty('--wave-x', e.clientX + 'px');
+        root.style.setProperty('--wave-y', e.clientY + 'px');
+        window.toggleTheme(btn);
+      });
     });
   });
 })();

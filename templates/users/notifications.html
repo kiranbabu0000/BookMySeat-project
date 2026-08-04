@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ user.username }} — Notifications{% endblock %}
+
+{% block content %}
+<section class="page-section">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <h1 class="section-title">Notifications</h1>
+        <p class="section-subtitle text-muted mb-0">Updates on your bookings and account</p>
+      </div>
+      {% if notifications %}
+      <form method="post" action="{% url 'my_notifications' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-bms-outline btn-sm">
+          <i class="bi bi-check2-all me-1"></i> Mark All as Read
+        </button>
+      </form>
+      {% endif %}
+    </div>
+
+    {% if notifications %}
+    <div class="card border-0 shadow-sm" style="background: var(--bg-card); border: 1px solid var(--border-color) !important; border-radius: var(--radius-xl);">
+      <ul class="list-group list-group-flush">
+        {% for notification in notifications %}
+        <li class="list-group-item d-flex align-items-start gap-3 px-4 py-3 {% if not notification.is_read %}fw-semibold{% endif %}"
+            style="background: transparent; border-color: var(--border-color);">
+          <i class="bi bi-{% if notification.notification_type == 'success' %}check-circle{% elif notification.notification_type == 'warning' %}exclamation-triangle{% elif notification.notification_type == 'danger' %}x-circle{% else %}info-circle{% endif %} fs-4 mt-1"
+             style="color: {% if notification.notification_type == 'success' %}var(--success){% elif notification.notification_type == 'warning' %}var(--warning){% elif notification.notification_type == 'danger' %}var(--danger){% else %}var(--primary){% endif %};"></i>
+          <div class="flex-grow-1">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <h3 class="h6 mb-1" style="color: var(--text-primary);">{{ notification.title }}</h3>
+              <small class="text-muted">{{ notification.created_at|date:"d M Y, g:i A" }}</small>
+            </div>
+            <p class="mb-1 small" style="color: var(--text-secondary);">{{ notification.message }}</p>
+            {% if notification.link %}
+            <a href="{{ notification.link }}" class="small">View details <i class="bi bi-arrow-right"></i></a>
+            {% endif %}
+          </div>
+          {% if not notification.is_read %}
+          <form method="post" action="{% url 'mark_notification_read' notification.id %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-bms-outline" aria-label="Mark as read">
+              <i class="bi bi-check-lg"></i>
+            </button>
+          </form>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state__icon"><i class="bi bi-bell"></i></div>
+      <h3 class="empty-state__title">No notifications yet</h3>
+      <p class="empty-state__text">We will let you know when something happens on your account.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

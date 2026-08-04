@@ -46,6 +46,10 @@
               <input type="email" name="email" class="form-control" value="{{ user.email|default:'' }}">
             </div>
             <div class="col-md-6">
+              <label class="form-label fw-semibold small">Department</label>
+              <input type="text" name="department" class="form-control" value="{{ profile.department|default:'' }}">
+            </div>
+            <div class="col-md-6">
               <label class="form-label fw-semibold small">Phone</label>
               <input type="text" name="phone" class="form-control" value="{{ profile.phone|default:'' }}">
             </div>

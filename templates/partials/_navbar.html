@@ -16,6 +16,8 @@
     <!-- Mobile right: login/register on the right only on mobile -->
     <div class="d-flex align-items-center d-lg-none ms-auto">
       {% if user.is_authenticated %}
+      <a class="nav-link" href="{% url 'wishlist' %}"><i class="bi bi-heart" aria-hidden="true"></i></a>
+      <a class="nav-link" href="{% url 'my_notifications' %}"><i class="bi bi-bell" aria-hidden="true"></i></a>
       <a class="nav-link" href="{% url 'profile' %}">Profile</a>
       {% else %}
       <a class="nav-link me-2" href="{% url 'login' %}">Login</a>
@@ -46,6 +48,16 @@
         </li>
 
         {% if user.is_authenticated %}
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'wishlist' %}">
+            <i class="bi bi-heart me-1" aria-hidden="true"></i>Wishlist
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'my_notifications' %}">
+            <i class="bi bi-bell me-1" aria-hidden="true"></i>Notifications
+          </a>
+        </li>
         <li class="nav-item">
           <a class="nav-link" href="{% url 'profile' %}">
             <i class="bi bi-person-circle me-1" aria-hidden="true"></i>Profile

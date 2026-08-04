@@ -69,11 +69,19 @@ class ShowPrice(models.Model):
 
 
 class Theater(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('cancelled', 'Cancelled'),
+        ('completed', 'Completed'),
+        ('sold_out', 'Sold Out'),
+        ('paused', 'Paused'),
+    ]
     name = models.CharField(max_length=255)
     movie = models.ForeignKey(Movie,on_delete=models.CASCADE,related_name='theaters')
     time= models.DateTimeField()
     screen_name = models.CharField(max_length=100, blank=True, default='Main', help_text="Screen shown for this show (e.g. Screen 1)")
     ticket_price = models.DecimalField(max_digits=10, decimal_places=2, default=250)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active', help_text="Public booking visibility status, kept in sync with the admin Show")
     seat_revision = models.PositiveIntegerField(default=0, help_text="Incremented whenever any seat state changes for this show")
 
     def bump_seat_revision(self):
@@ -96,13 +104,18 @@ class Seat(models.Model):
         return f'{self.seat_number} in {self.theater.name}'
 
 class Booking(models.Model):
+    STATUS_CHOICES = [
+        ('confirmed', 'Confirmed'),
+        ('cancelled', 'Cancelled'),
+    ]
     user=models.ForeignKey(User,on_delete=models.CASCADE)
     seat=models.OneToOneField(Seat,on_delete=models.CASCADE)
     movie=models.ForeignKey(Movie,on_delete=models.CASCADE)
     theater=models.ForeignKey(Theater,on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='confirmed', help_text="Booking lifecycle status")
     reservation = models.ForeignKey('Reservation', on_delete=models.SET_NULL, null=True, blank=True, related_name='bookings')
     booking_ref = models.CharField(max_length=20, unique=True, blank=True, editable=False)
-    booked_at=models.DateTimeField(auto_now_add=True)
+    booked_at=models.DateTimeField(auto_now_add=True, db_index=True)
     seat_category = models.CharField(max_length=50, blank=True, default='', help_text="Snapshotted seat category at booking time")
     ticket_price = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Snapshotted per-seat ticket price")
     gst_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text="Snapshotted GST percentage")
@@ -111,6 +124,15 @@ class Booking(models.Model):
     misc_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Snapshotted miscellaneous fee share")
     discount = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Snapshotted coupon discount share")
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Snapshotted amount charged for this seat")
+
+    class Meta:
+        ordering = ['-booked_at', '-id']
+        indexes = [
+            models.Index(fields=['status', 'booked_at']),
+            models.Index(fields=['user', 'booked_at']),
+            models.Index(fields=['movie', 'booked_at']),
+            models.Index(fields=['theater', 'booked_at']),
+        ]
 
     def __str__(self):
         return f'Booking by{self.user.username} for {self.seat.seat_number} at {self.theater.name}'
@@ -177,3 +199,16 @@ class ReservedSeat(models.Model):
 
     def __str__(self):
         return f'{self.seat.seat_number} in {self.reservation.token[:8]}'
+
+
+class Wishlist(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='wishlist')
+    movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='wishlisted_by')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = ['user', 'movie']
+
+    def __str__(self):
+        return f'{self.user.username} -> {self.movie.name}'

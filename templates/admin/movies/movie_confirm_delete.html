@@ -9,14 +9,10 @@
       <h4 class="mt-3">Delete "{{ object.name }}"?</h4>
     </div>
 
-    {% if running_with_bookings or active_reservations %}
+    {% if running_with_bookings %}
     <div class="alert alert-warning">
       <i class="bi bi-exclamation-circle me-1"></i>
-      {% if running_with_bookings %}
-      This movie is still running with {{ active_bookings }} booking(s). It will become available for permanent deletion after all its shows are over.
-      {% else %}
-      There is an active reservation in progress. Please try again shortly.
-      {% endif %}
+      This movie still has {{ running_bookings }} booked ticket(s) on shows that are running or upcoming. It will become available for permanent deletion after all its shows are over.
     </div>
     {% endif %}
 
@@ -96,7 +92,7 @@
         </button>
       </form>
       {% else %}
-      <button type="button" class="btn btn-danger" disabled title="Permanent deletion is available once the movie is no longer running with bookings, or after all its shows are over.">
+      <button type="button" class="btn btn-danger" disabled title="Permanent deletion is available once the movie no longer has booked tickets on running or upcoming shows.">
         <i class="bi bi-trash me-1"></i> Permanently Delete
       </button>
       {% endif %}

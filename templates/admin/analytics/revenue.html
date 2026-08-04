@@ -1,0 +1,84 @@
+{% extends 'admin/analytics/analytics_base.html' %}
+{% block analytics_content %}
+
+<div class="row g-4 mb-4">
+  <div class="col-md-4">
+    <div class="card-bms h-100">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-currency-rupee me-2"></i>Total Revenue</h5></div>
+      <div class="card-bms-body text-center">
+        <h2 class="stat-value" data-stat="summary.revenue_fmt" style="font-size:2rem;">{{ data.summary.revenue_fmt }}</h2>
+        <span class="text-muted small">Completed payments in period</span>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-bms h-100">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-ticket-perforated me-2"></i>Confirmed Bookings</h5></div>
+      <div class="card-bms-body text-center">
+        <h2 class="stat-value" data-stat="summary.confirmed" style="font-size:2rem;">{{ data.summary.confirmed }}</h2>
+        <span class="text-muted small">Tickets sold in period</span>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card-bms h-100">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-percent me-2"></i>GST &amp; Fees</h5></div>
+      <div class="card-bms-body text-center">
+        <h2 class="stat-value" style="font-size:2rem;">{{ data.components.gst|floatformat:2 }}</h2>
+        <span class="text-muted small">Total GST collected in period</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-8 col-md-12">
+    {% include 'admin/analytics/partials/_chart_card.html' with title="Revenue Trend" chart_key="revenue_trend" %}
+  </div>
+  <div class="col-lg-4 col-md-12">
+    <div class="card-bms h-100">
+      <div class="card-bms-header"><h5 class="mb-0">Revenue by Method</h5></div>
+      <div class="card-bms-body">
+        <canvas data-chart="revenue_by_method" height="100"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-md-12">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Revenue Components</h5></div>
+      <div class="card-bms-body">
+        <div class="row g-3 text-center">
+          <div class="col-6 col-md-2">
+            <p class="stat-label">Ticket</p>
+            <h5 class="mb-0" data-stat="components.ticket_fmt">{{ data.components.ticket_fmt }}</h5>
+          </div>
+          <div class="col-6 col-md-2">
+            <p class="stat-label">GST</p>
+            <h5 class="mb-0" data-stat="components.gst_fmt">{{ data.components.gst_fmt }}</h5>
+          </div>
+          <div class="col-6 col-md-2">
+            <p class="stat-label">Platform Fee</p>
+            <h5 class="mb-0" data-stat="components.platform_fee_fmt">{{ data.components.platform_fee_fmt }}</h5>
+          </div>
+          <div class="col-6 col-md-2">
+            <p class="stat-label">Misc Fee</p>
+            <h5 class="mb-0" data-stat="components.misc_fee_fmt">{{ data.components.misc_fee_fmt }}</h5>
+          </div>
+          <div class="col-6 col-md-2">
+            <p class="stat-label">Discount</p>
+            <h5 class="mb-0" data-stat="components.discount_fmt">{{ data.components.discount_fmt }}</h5>
+          </div>
+          <div class="col-6 col-md-2">
+            <p class="stat-label">Net Total</p>
+            <h5 class="mb-0" data-stat="components.total_fmt">{{ data.components.total_fmt }}</h5>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Movie, Theater, Seat,Booking
+from .models import Movie, Theater, Seat, Booking, Wishlist
 
 @admin.register(Movie)
 class MovieAdmin(admin.ModelAdmin):
@@ -16,3 +16,7 @@ class SeatAdmin(admin.ModelAdmin):
 @admin.register(Booking)
 class BookingAdmin(admin.ModelAdmin):
     list_display = ['user', 'seat', 'movie','theater','booked_at']
+
+@admin.register(Wishlist)
+class WishlistAdmin(admin.ModelAdmin):
+    list_display = ['user', 'movie', 'created_at']

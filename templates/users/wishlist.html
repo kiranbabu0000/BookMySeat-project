@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ user.username }} — Wishlist{% endblock %}
+
+{% block content %}
+<section class="page-section">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <h1 class="section-title">My Wishlist</h1>
+        <p class="section-subtitle text-muted mb-0">Movies you have saved for later</p>
+      </div>
+      <a href="{% url 'movie_list' %}" class="section-link">Browse Movies <i class="bi bi-arrow-right"></i></a>
+    </div>
+
+    {% if wishlist_movies %}
+    <div class="row stagger-children">
+      {% for movie in wishlist_movies %}
+      <div class="col-6 col-sm-4 col-md-3 col-lg-2 mb-4">
+        <article class="movie-card h-100">
+          <a href="{% url 'movie_detail' movie.id %}" class="text-decoration-none d-flex flex-column h-100" aria-label="View {{ movie.name }}">
+            <div class="movie-card__poster-wrap">
+              {% if movie.image %}
+              <img src="{{ movie.image.url }}" class="movie-card__poster" alt="{{ movie.name }} poster" loading="lazy">
+              {% else %}
+              <div class="movie-card__poster d-flex align-items-center justify-content-center" style="background: var(--bg-tertiary); color: var(--text-muted); font-size: 2rem;">
+                <i class="bi bi-film"></i>
+              </div>
+              {% endif %}
+              <span class="movie-card__rating" aria-label="Rating {{ movie.rating }}">
+                <i class="bi bi-star-fill" aria-hidden="true"></i> {{ movie.rating }}
+              </span>
+            </div>
+            <div class="movie-card__body">
+              <h3 class="movie-card__title">{{ movie.name }}</h3>
+              <p class="movie-card__meta">
+                <i class="bi bi-people me-1" aria-hidden="true"></i>{{ movie.cast|truncatewords:4 }}
+              </p>
+              <div class="movie-card__footer">
+                <span class="btn btn-bms-primary btn-sm movie-card__btn">
+                  Book Now <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                </span>
+              </div>
+            </div>
+          </a>
+          <form method="post" action="{% url 'toggle_wishlist' movie.id %}" class="wishlist-remove">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-bms-outline w-100 mt-1" aria-label="Remove {{ movie.name }} from wishlist">
+              <i class="bi bi-heartbreak me-1"></i> Remove
+            </button>
+          </form>
+        </article>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state__icon"><i class="bi bi-heart"></i></div>
+      <h3 class="empty-state__title">Your wishlist is empty</h3>
+      <p class="empty-state__text">Tap the heart on any movie to save it here for later.</p>
+      <a href="{% url 'movie_list' %}" class="btn btn-bms-primary">Browse Movies</a>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

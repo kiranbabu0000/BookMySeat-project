@@ -30,7 +30,7 @@
           <select name="show" class="form-select" required>
             <option value="">Select Show</option>
             {% for s in shows %}
-            <option value="{{ s.id }}">{{ s.movie.name }} - {{ s.theatre.name }} ({{ s.date|date:"d M Y" }} {{ s.time|time:"g:i A" }})</option>
+            <option value="{{ s.id }}">{{ s.movie.name }} - {{ s.name }} ({{ s.time|date:"d M Y, g:i A" }})</option>
             {% endfor %}
           </select>
         </div>

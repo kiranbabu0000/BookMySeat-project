@@ -60,42 +60,127 @@
 }
 
 [data-theme="dark"] {
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #141414;
-  --bg-tertiary: #1d1d1d;
-  --bg-card: #232323;
-  --bg-elevated: #2b2b2b;
-  --bg-input: #181818;
-  --bg-search: #161616;
-  --bg-glass: rgba(20, 20, 20, 0.9);
-  --bg-hover: rgba(229, 9, 20, 0.16);
-  --surface-soft: #1c1c1c;
-  --surface-strong: #2f2f2f;
-  --text-primary: #f8fafc;
-  --text-secondary: #e2e8f0;
-  --text-muted: #94a3b8;
-  --text-inverse: #0f172a;
+  --bg-primary: #0a0e14;
+  --bg-secondary: #0f1520;
+  --bg-tertiary: #161e2c;
+  --bg-card: #1a2334;
+  --bg-elevated: #212c40;
+  --bg-input: #0c111b;
+  --bg-search: #0d131e;
+  --bg-glass: rgba(15, 21, 32, 0.88);
+  --bg-hover: rgba(229, 9, 20, 0.18);
+  --surface-soft: #141c29;
+  --surface-strong: #1f2a3d;
+  --text-primary: #f2f5fa;
+  --text-secondary: #c9d2e0;
+  --text-muted: #8a97ab;
+  --text-inverse: #0a0e14;
   --text-on-accent: #ffffff;
   --accent-primary: #e50914;
   --accent-primary-hover: #f40612;
-  --accent-secondary: #3b82f6;
-  --accent-secondary-hover: #60a5fa;
+  --accent-secondary: #4f8ef7;
+  --accent-secondary-hover: #74a9ff;
   --accent-gold: #d4af37;
   --accent-success: #22c55e;
-  --border-color: #3a3a3a;
-  --border-subtle: #2a2a2a;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 60px rgba(229, 9, 20, 0.25);
-  --navbar-bg: rgba(10, 10, 10, 0.92);
-  --footer-bg: #050505;
-  --footer-text: #94a3b8;
-  --seat-available: #2a2a2a;
+  --border-color: #263042;
+  --border-subtle: #1a2332;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.65);
+  --shadow-glow: 0 0 60px rgba(229, 9, 20, 0.28);
+  --navbar-bg: rgba(10, 14, 20, 0.9);
+  --footer-bg: #05080d;
+  --footer-text: #8a97ab;
+  --seat-available: #1f2838;
   --seat-selected: #e50914;
   --seat-reserved: #d4af37;
-  --seat-booked: #404040;
+  --seat-booked: #2c3850;
   --seat-vip: #d4af37;
-  --seat-wheelchair: #3b82f6;
-  --screen-bg: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%);
+  --seat-wheelchair: #4f8ef7;
+  --screen-bg: linear-gradient(180deg, #2c3850 0%, #1a2334 100%);
+}
+
+/* ============================================================
+   Theme switch — "wave" transition & dark-mode polish
+   ============================================================ */
+
+/* Native form controls & scrollbars follow the active theme */
+:root { color-scheme: light; }
+[data-theme="dark"] { color-scheme: dark; }
+
+/* Freeze CSS transitions during a theme swap so the View
+   Transition snapshots capture the final colours instantly. */
+.theme-switching,
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+  animation-duration: 0.01ms !important;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  mix-blend-mode: normal;
+}
+
+/* The outgoing theme melts away while the wave sweeps in, so there is no
+   static flash of the old theme — it clearly reads as a slow wave. */
+::view-transition-old(root) {
+  animation: bms-theme-dissolve 900ms ease-in-out both;
+}
+
+::view-transition-new(root) {
+  animation: bms-theme-wave 900ms cubic-bezier(0.33, 1, 0.68, 1) both;
+  clip-path: circle(0px at var(--wave-x, 50%) var(--wave-y, 50%));
+}
+
+@keyframes bms-theme-dissolve {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes bms-theme-wave {
+  from { clip-path: circle(0px at var(--wave-x, 50%) var(--wave-y, 50%)); }
+  to   { clip-path: circle(150vmax at var(--wave-x, 50%) var(--wave-y, 50%)); }
+}
+
+/* Toggle button — icon spins in as the theme switches */
+.theme-toggle {
+  position: relative;
+  overflow: hidden;
+}
+.theme-toggle .bi {
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.theme-toggle .theme-icon--spin {
+  animation: bms-theme-icon-spin 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes bms-theme-icon-spin {
+  0%   { transform: rotate(0deg) scale(0.4); opacity: 0; }
+  50%  { transform: rotate(200deg) scale(1.25); opacity: 1; }
+  100% { transform: rotate(360deg) scale(1); opacity: 1; }
+}
+
+/* Cinematic ambient glow (red top, blue bottom) behind content in dark mode */
+[data-theme="dark"] body {
+  background-image:
+    radial-gradient(1100px 520px at 85% -10%, rgba(229, 9, 20, 0.09), transparent 60%),
+    radial-gradient(900px 520px at -5% 108%, rgba(79, 142, 247, 0.07), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Themed scrollbars in dark mode */
+[data-theme="dark"] ::-webkit-scrollbar { width: 10px; height: 10px; }
+[data-theme="dark"] ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #2a3550, #1f2838);
+  border-radius: 999px;
+  border: 2px solid var(--bg-secondary);
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #37456b; }
+[data-theme="dark"] ::-webkit-scrollbar-corner { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation-duration: 0.01ms !important; }
 }

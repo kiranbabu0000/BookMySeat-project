@@ -1,0 +1,33 @@
+{% load admin_tags %}
+<form method="get" class="row g-2 align-items-end" data-analytics-filter data-endpoint="{% url 'admin_analytics_data' analytics_section %}">
+  <div class="col-md-3">
+    <label class="form-label small text-muted mb-1" for="rangePreset">Date Range</label>
+    <select name="range" id="rangePreset" class="form-select form-select-sm" data-range-preset>
+      {% for value, label in range_presets %}
+      <option value="{{ value }}" {% if range_key == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2 custom-range-fields {% if range_key != 'custom' %}d-none{% endif %}">
+    <label class="form-label small text-muted mb-1" for="rangeStart">From</label>
+    <input type="date" id="rangeStart" name="start_date" class="form-control form-control-sm" value="{{ start_date }}">
+  </div>
+  <div class="col-md-2 custom-range-fields {% if range_key != 'custom' %}d-none{% endif %}">
+    <label class="form-label small text-muted mb-1" for="rangeEnd">To</label>
+    <input type="date" id="rangeEnd" name="end_date" class="form-control form-control-sm" value="{{ end_date }}">
+  </div>
+  <div class="col-md-5 d-flex flex-wrap gap-2 align-items-center">
+    <button type="submit" class="btn btn-bms btn-sm px-3">
+      <i class="bi bi-funnel"></i> Apply
+    </button>
+    <button type="button" class="btn btn-outline-bms btn-sm px-3" data-refresh-btn title="Refresh data">
+      <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+    <span class="text-muted small ms-2" data-ajax-status></span>
+    <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Export">
+      <a href="{% url 'admin_analytics_export' analytics_section %}?format=csv&{% url_replace %}" class="btn btn-outline-bms" title="Export CSV"><i class="bi bi-filetype-csv"></i></a>
+      <a href="{% url 'admin_analytics_export' analytics_section %}?format=xlsx&{% url_replace %}" class="btn btn-outline-bms" title="Export Excel"><i class="bi bi-file-earmark-excel"></i></a>
+      <a href="{% url 'admin_analytics_export' analytics_section %}?format=pdf&{% url_replace %}" class="btn btn-outline-bms" title="Export PDF"><i class="bi bi-file-earmark-pdf"></i></a>
+    </div>
+  </div>
+</form>

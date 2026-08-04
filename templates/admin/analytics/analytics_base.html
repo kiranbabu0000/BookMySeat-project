@@ -1,0 +1,28 @@
+{% extends 'admin/base_admin.html' %}
+{% load static %}
+
+{% block title %}{{ area_title }}{% endblock %}
+{% block page_title %}{{ area_title }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'admin/css/analytics.css' %}?v=202607">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <div>
+    <h4 class="mb-1" style="color: var(--text-primary);">{{ area_title }}</h4>
+    <span class="text-muted small" data-range-label>{{ range.label }} &middot; {{ range.start_date|date:"d M Y" }} &rarr; {{ range.end_date|date:"d M Y" }}</span>
+  </div>
+</div>
+
+{% include 'admin/analytics/partials/_filter_bar.html' %}
+
+{% block analytics_content %}{% endblock %}
+
+{{ analytics_json|json_script:"analytics-data" }}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'admin/js/analytics.js' %}?v=202607"></script>
+{% endblock %}

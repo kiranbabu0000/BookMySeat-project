@@ -1,0 +1,43 @@
+{% extends 'admin/analytics/analytics_base.html' %}
+{% block analytics_content %}
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Total Bookings" value=data.total icon="bi-ticket-perforated" color="var(--accent-secondary)" stat_key="total" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Confirmed" value=data.confirmed icon="bi-check2-circle" color="var(--accent-success)" stat_key="confirmed" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Cancelled" value=data.cancelled icon="bi-x-octagon" color="var(--accent-primary)" stat_key="cancelled" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Cancellation Rate" value=data.cancelled_rate|floatformat:1|add:"%" icon="bi-percent" color="var(--accent-gold)" stat_key="cancelled_rate_fmt" %}
+</div>
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Bookings Trend" chart_key="bookings_trend" %}
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Bookings by Status" chart_key="bookings_by_status" %}
+</div>
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Bookings by Weekday" chart_key="bookings_by_weekday" %}
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Bookings by Hour" chart_key="bookings_by_hour" %}
+</div>
+
+<div class="row g-4">
+  <div class="col-md-12">
+    <div class="card-bms">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Bookings by Status</h5></div>
+      <div class="card-bms-body p-0">
+        <div class="table-responsive">
+          <table class="table table-bms mb-0">
+            <thead><tr><th>Status</th><th>Count</th></tr></thead>
+            <tbody data-table="bookings_status">
+              {% for s in data.statuses %}
+              <tr><td>{{ s.key }}</td><td>{{ s.count }}</td></tr>
+              {% empty %}
+              <tr><td colspan="2" class="text-center text-muted py-4">No bookings in this period.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

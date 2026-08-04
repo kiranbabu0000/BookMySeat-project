@@ -1,0 +1,21 @@
+{% extends 'admin/analytics/analytics_base.html' %}
+{% block analytics_content %}
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Transactions" value=data.total_transactions icon="bi-arrow-repeat" color="var(--accent-secondary)" stat_key="total_transactions" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Captured" value=data.captured icon="bi-check2-circle" color="var(--accent-success)" stat_key="captured" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Success Rate" value=data.success_rate|floatformat:1|add:"%" icon="bi-graph-up-arrow" color="var(--accent-gold)" stat_key="success_rate_fmt" %}
+  {% include 'admin/analytics/partials/_stat_card.html' with label="Failed" value=data.failed icon="bi-x-octagon" color="var(--accent-primary)" stat_key="failed" %}
+</div>
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Payment Status" chart_key="payments_by_status" %}
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Transaction Status" chart_key="tx_by_status" %}
+</div>
+
+<div class="row g-4 mb-4">
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Payments by Method" chart_key="payments_by_method" %}
+  {% include 'admin/analytics/partials/_chart_card.html' with title="Captured Payments Trend" chart_key="captured_trend" %}
+</div>
+
+{% endblock %}

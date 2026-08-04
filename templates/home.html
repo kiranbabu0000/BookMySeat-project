@@ -68,6 +68,25 @@
 </section>
 {% endif %}
 
+<!-- Recently Viewed -->
+{% if recently_viewed %}
+<section class="page-section page-section--alt">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Recently Viewed</h2>
+        <p class="section-subtitle text-muted mb-0">Pick up where you left off</p>
+      </div>
+    </div>
+    <div class="row stagger-children">
+      {% for movie in recently_viewed|slice:":4" %}
+        {% include 'partials/_movie_card.html' with movie=movie %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
 <!-- Now Showing -->
 <section class="page-section">
   <div class="container-bms">

@@ -127,11 +127,7 @@
             </form>
             {% else %}
             <button type="button" class="btn btn-sm btn-outline-danger" disabled
-              {% if row.running_with_bookings %}
-              title="Still running with {{ row.bookings }} booking(s) — it becomes deletable once all its shows are over."
-              {% else %}
-              title="There is an active reservation in progress. Try again shortly."
-              {% endif %}>
+              title="Still has {{ row.bookings }} booked ticket(s) on running or upcoming shows — it becomes deletable once those shows are over.">
               <i class="bi bi-trash me-1"></i>Delete
             </button>
             {% endif %}

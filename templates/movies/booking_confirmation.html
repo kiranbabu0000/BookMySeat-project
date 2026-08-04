@@ -21,6 +21,10 @@
 
           <div class="booking-summary mx-auto mb-4" style="max-width: 520px;">
             <div class="d-flex justify-content-between py-2">
+              <span class="text-muted">Movie</span>
+              <strong style="color: var(--text-primary);">{{ reservation.show.movie.name }}</strong>
+            </div>
+            <div class="d-flex justify-content-between py-2">
               <span class="text-muted">Cinema</span>
               <strong style="color: var(--text-primary);">{{ reservation.show.name }}</strong>
             </div>
@@ -35,10 +39,24 @@
               </strong>
             </div>
             <div class="d-flex justify-content-between py-2">
+              <span class="text-muted">Seat Count</span>
+              <strong style="color: var(--text-primary);">{{ bookings|length }} Seat{{ bookings|length|pluralize }}</strong>
+            </div>
+            <div class="d-flex justify-content-between py-2">
               <span class="text-muted">Booking Reference</span>
               <strong style="color: var(--text-primary);">
                 {% for b in bookings %}{{ b.booking_ref }}{% if not forloop.last %}, {% endif %}{% endfor %}
               </strong>
+            </div>
+            <div class="d-flex justify-content-between py-2">
+              <span class="text-muted">Payment ID</span>
+              <strong style="color: var(--text-primary); word-break: break-all;">
+                {% if payment_tx.gateway_payment_id %}{{ payment_tx.gateway_payment_id }}{% elif bookings.0.payment.transaction_id %}{{ bookings.0.payment.transaction_id }}{% else %}—{% endif %}
+              </strong>
+            </div>
+            <div class="d-flex justify-content-between py-2">
+              <span class="text-muted">Order ID</span>
+              <strong style="color: var(--text-primary); word-break: break-all;">{{ payment_tx.gateway_order_id|default:"—" }}</strong>
             </div>
             <div class="d-flex justify-content-between py-2">
               <span class="text-muted">Amount Paid</span>

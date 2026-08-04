@@ -7,8 +7,9 @@ ADMIN_URL_PREFIXES = (
     '/admin-movies/', '/remove-movie/', '/genres/', '/languages/',
     '/cast/', '/theatres/', '/screens/', '/shows/', '/pricing/',
     '/trailers/', '/images/', '/seats/', '/bookings/', '/reservations/',
-    '/users/', '/staff/', '/coupons/', '/notifications/', '/reviews/',
-    '/logs/', '/settings/', '/search-suggestions/',
+    '/payments/', '/users/', '/staff/', '/coupons/', '/notifications/',
+    '/reviews/', '/logs/', '/settings/', '/search-suggestions/',
+    '/analytics/',
 )
 
 

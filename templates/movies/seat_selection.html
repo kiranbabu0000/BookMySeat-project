@@ -46,8 +46,8 @@
              data-release-url-template="{% url 'api_reservation_release' 'TOKEN' %}"
              data-payment-url-template="{% url 'payment_page' 'TOKEN' %}">
           {% csrf_token %}
-          {{ show_json|json_script:"showData" }}
-          {{ reservation_json|json_script:"reservationData" }}
+          {{ show_data|json_script:"showData" }}
+          {{ reservation_data|json_script:"reservationData" }}
 
           <div class="cinema-screen"></div>
 

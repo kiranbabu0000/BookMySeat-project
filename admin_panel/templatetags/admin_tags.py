@@ -12,10 +12,13 @@ def url_replace(context, **kwargs):
 
 
 @register.filter
-def get_item(dictionary, key):
-    if dictionary is None:
+def get_item(container, key):
+    if container is None:
         return None
+    getter = getattr(container, 'get', None)
+    if callable(getter):
+        return getter(key)
     try:
-        return dictionary.get(key)
-    except AttributeError:
+        return container[key]
+    except (KeyError, IndexError, TypeError):
         return None

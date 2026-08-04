@@ -41,13 +41,19 @@
 
   function initFormLoading() {
     document.querySelectorAll('form[data-loading]').forEach(function (form) {
+      var btn = form.querySelector('[type="submit"]');
+      if (!btn) return;
       form.addEventListener('submit', function () {
-        var btn = form.querySelector('[type="submit"]');
-        if (!btn || btn.disabled) return;
+        if (btn.disabled) return;
         btn.disabled = true;
-        var original = btn.innerHTML;
+        btn.dataset.originalHtml = btn.innerHTML;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Loading...';
-        btn.dataset.originalHtml = original;
+      });
+      window.addEventListener('pageshow', function () {
+        if (btn.dataset.originalHtml) {
+          btn.innerHTML = btn.dataset.originalHtml;
+          btn.disabled = false;
+        }
       });
     });
   }
