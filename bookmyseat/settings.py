@@ -13,9 +13,16 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 import os
 import dj_database_url
-from dotenv import load_dotenv
+
 # Load .env file (gitignored) for local secrets like email SMTP credentials.
-load_dotenv()
+# python-dotenv is listed in requirements.txt, but guard the import so the app
+# still boots from real environment variables on serverless platforms (Vercel)
+# even if the package is missing from a cached/stale build.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
