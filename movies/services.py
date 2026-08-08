@@ -30,6 +30,20 @@ def _round2(value):
     return value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
+ECONOMY_MIN_PRICE = Decimal('60.00')
+
+
+def is_economy_category(category):
+    """True when a seat category is the discounted Economy band."""
+    return category is not None and category.name.strip().lower() == 'economy'
+
+
+def economy_ticket_price(base):
+    """Economy rows are priced at 50% of the normal price (min ₹60; taxes extra)."""
+    half = _round2(Decimal(base) * Decimal('0.5'))
+    return half if half >= ECONOMY_MIN_PRICE else ECONOMY_MIN_PRICE
+
+
 def row_of(seat_number):
     return (seat_number or '').rstrip('0123456789').upper() or 'Z'
 
@@ -76,8 +90,34 @@ def seat_price(show, seat_number, categories=None, price_map=None):
         price_map = price_map or _price_map(show)
     category = category_for_seat(seat_number, categories)
     if category is not None and category.id in price_map:
-        return _round2(price_map[category.id])
-    return _round2(Decimal(show.ticket_price))
+        base = _round2(price_map[category.id])
+    else:
+        base = _round2(Decimal(show.ticket_price))
+    if is_economy_category(category):
+        return economy_ticket_price(base)
+    return base
+
+
+def _category_of(seat, categories=None, by_id=None):
+    """Resolve a seat's category, preferring the explicit FK over row ranges."""
+    if getattr(seat, 'category_id', None):
+        if by_id is not None:
+            return by_id.get(seat.category_id)
+        try:
+            return seat.category
+        except Exception:
+            pass
+    return category_for_seat(seat.seat_number, categories)
+
+
+def _price_for_category(show, category, price_map):
+    if category is not None and category.id in price_map:
+        base = _round2(price_map[category.id])
+    else:
+        base = _round2(Decimal(show.ticket_price))
+    if is_economy_category(category):
+        return economy_ticket_price(base)
+    return base
 
 
 def get_pricing_config():
@@ -147,18 +187,18 @@ def discount_for(subtotal, coupon):
 def _pricing_for_seats(show, seat_objects):
     """Price breakdown for a set of Seat rows (fees, GST, no coupon)."""
     categories = _load_categories()
+    by_id = {c.id: c for c in categories}
     price_map = _price_map(show)
     seats = []
-    for seat in sorted(seat_objects, key=lambda s: s.seat_number):
-        number = seat.seat_number
-        category = category_for_seat(number, categories)
+    for seat in sorted(seat_objects, key=lambda s: (s.row_idx, s.col_idx, s.seat_number)):
+        category = _category_of(seat, categories, by_id)
         category_name = category.name if category else ''
         seats.append({
             'seat_id': seat.id,
-            'seat_number': number,
+            'seat_number': seat.seat_number,
             'tier': category_name,
             'category': category_name,
-            'price': seat_price(show, number, categories, price_map),
+            'price': _price_for_category(show, category, price_map),
         })
     subtotal = sum((s['price'] for s in seats), Decimal('0.00'))
     config = get_pricing_config()
@@ -257,7 +297,7 @@ def release_expired_reservations():
 
 
 def seat_data_for_show(show, now=None):
-    """Return ordered seat info: {id, number, row, tier, price, state} for a show."""
+    """Return ordered seat info: {id, number, row, tier, price, state, ...geometry}."""
     now = now or timezone.now()
     reserved = Reservation.objects.filter(
         show=show,
@@ -268,22 +308,35 @@ def seat_data_for_show(show, now=None):
     seats = (
         Seat.objects.filter(theater=show)
         .annotate(is_reserved=Exists(reserved))
-        .order_by('seat_number')
-        .values_list('pk', 'seat_number', 'is_booked', 'is_reserved')
+        .order_by('row_idx', 'col_idx', 'seat_number')
+        .values(
+            'pk', 'seat_number', 'is_booked', 'is_reserved',
+            'seat_type', 'category_id', 'row_label', 'row_idx',
+            'col_idx', 'side', 'gap_before', 'is_best_view', 'couple_group',
+        )
     )
     categories = _load_categories()
+    by_id = {c.id: c for c in categories}
     price_map = _price_map(show)
     rows = []
-    for pk, number, booked, is_reserved in seats:
-        category = category_for_seat(number, categories)
+    for item in seats:
+        number = item['seat_number']
+        category = by_id.get(item['category_id']) or category_for_seat(number, categories)
         rows.append({
-            'id': pk,
+            'id': item['pk'],
             'number': number,
-            'row': number.rstrip('0123456789') or 'Z',
+            'row': item['row_label'] or (number.rstrip('0123456789') or 'Z'),
+            'row_idx': item['row_idx'],
+            'col_idx': item['col_idx'],
+            'side': item['side'],
+            'gap_before': item['gap_before'],
+            'seat_type': item['seat_type'],
+            'best_view': item['is_best_view'],
+            'couple_group': item['couple_group'],
             'tier': category.name if category else '',
             'category': category.name if category else '',
-            'price': seat_price(show, number, categories, price_map),
-            'state': 'booked' if booked else ('reserved' if is_reserved else 'available'),
+            'price': _price_for_category(show, category, price_map),
+            'state': 'booked' if item['is_booked'] else ('reserved' if item['is_reserved'] else 'available'),
         })
     return rows
 
@@ -293,6 +346,38 @@ def seat_states_for_show(show, now=None):
     return {
         str(item['id']): item['state'] for item in seat_data_for_show(show, now)
     }
+
+
+def seat_layout_for_show(show):
+    """Return serializable layout metadata for rendering the seat map."""
+    spec = show.layout_spec or {}
+    return {
+        'variant': spec.get('variant', 'straight'),
+        'rows': spec.get('rows'),
+        'cols_per_section': spec.get('cols_per_section'),
+        'total_cols': spec.get('total_cols'),
+        'screen_cols': spec.get('screen_cols'),
+        'tier_gap_row': spec.get('tier_gap_row'),
+        'sections': spec.get('sections', []),
+        'couple_rows': spec.get('couple_rows', []),
+        'couple_pairs': spec.get('couple_pairs', []),
+        'wheelchair_seats': spec.get('wheelchair_seats', []),
+        'exits': spec.get('exits', []),
+        'size': spec.get('size', 'small'),
+    }
+
+
+def _validate_couple_pairs(seats):
+    """Both seats of a couple pair must be selected together."""
+    grouped = {}
+    for seat in seats:
+        if seat.couple_group:
+            grouped.setdefault(seat.couple_group, []).append(seat)
+    for group, members in grouped.items():
+        if len(members) != 2:
+            raise ReservationError(
+                'Couple seats must be selected together as a pair.'
+            )
 
 
 def _parse_seat_ids(raw_ids, limit=12):
@@ -350,12 +435,33 @@ def _bulk_hold_seats(reservation, seats):
         ) from None
 
 
-def create_reservation(user, show_id, seat_ids):
+MAX_TICKET_COUNT = 10
+
+
+def _coerce_ticket_count(ticket_count):
+    """Validate a user-chosen ticket count (1-10). Returns int or None."""
+    if ticket_count is None:
+        return None
+    try:
+        count = int(ticket_count)
+    except (TypeError, ValueError):
+        raise ReservationError('Invalid ticket count.') from None
+    if count < 1 or count > MAX_TICKET_COUNT:
+        raise ReservationError(
+            'You can book between 1 and {} tickets.'.format(MAX_TICKET_COUNT)
+        )
+    return count
+
+
+def create_reservation(user, show_id, seat_ids, ticket_count=None):
     """Atomically reserve a set of seats for the user."""
     now = timezone.now()
     requested = _parse_seat_ids(seat_ids)
     if not requested:
         raise ReservationError('Please select at least one seat.')
+    count = _coerce_ticket_count(ticket_count)
+    if count is not None and len(requested) > count:
+        raise ReservationError(f'You can select a maximum of {count} seats.')
 
     with transaction.atomic():
         try:
@@ -374,6 +480,7 @@ def create_reservation(user, show_id, seat_ids):
 
         seats = _locked_seats(requested, show)
         _assert_available(seats, now)
+        _validate_couple_pairs(seats)
 
         reservation = Reservation.objects.create(
             token=secrets.token_urlsafe(24),
@@ -381,6 +488,7 @@ def create_reservation(user, show_id, seat_ids):
             show=show,
             status='active',
             payment_status='pending',
+            ticket_count=count or len(seats),
             expires_at=now + timedelta(seconds=RESERVATION_HOLD_SECONDS),
         )
         _bulk_hold_seats(reservation, seats)
@@ -447,8 +555,18 @@ def modify_reservation(user, token, add_seat_ids, remove_seat_ids):
             _assert_available(seats, now)
             _bulk_hold_seats(reservation, seats)
 
-        if not ReservedSeat.objects.filter(reservation=reservation).exists():
+        held_count = ReservedSeat.objects.filter(reservation=reservation).count()
+        if reservation.ticket_count and held_count > reservation.ticket_count:
+            raise ReservationError(
+                'You can hold a maximum of {} seats.'.format(reservation.ticket_count)
+            )
+        if not held_count:
             raise ReservationError('Reservation must keep at least one seat.')
+
+        _validate_couple_pairs([
+            rs.seat
+            for rs in ReservedSeat.objects.filter(reservation=reservation).select_related('seat')
+        ])
 
         reservation.expires_at = now + timedelta(seconds=RESERVATION_HOLD_SECONDS)
         reservation.save(update_fields=['expires_at', 'updated_at'])
@@ -466,6 +584,14 @@ def _generate_booking_ref():
 def generate_booking_ref():
     """Public helper returning a unique booking reference."""
     return _generate_booking_ref()
+
+
+def _generate_reservation_booking_ref():
+    """Unique transaction-level booking reference (e.g. BMS39DBA878)."""
+    while True:
+        ref = 'BMS' + secrets.token_hex(4).upper()
+        if not Reservation.objects.filter(booking_ref=ref).exists():
+            return ref
 
 
 def confirm_booking(user, token, transaction_id=None, payment_method='upi', coupon_code=None):
@@ -536,30 +662,65 @@ def confirm_booking(user, token, transaction_id=None, payment_method='upi', coup
         bookings = []
         for idx, row in enumerate(rows):
             seat = row['seat']
-            booking = Booking.objects.create(
-                user=user,
+            booking, created = Booking.objects.get_or_create(
                 seat=seat,
-                movie=show.movie,
-                theater=show,
-                reservation=reservation,
-                booking_ref=_generate_booking_ref(),
-                seat_category=seat_categories.get(row['seat_id'], ''),
-                ticket_price=row['price'],
-                gst_rate=pricing['gst_rate'],
-                gst_amount=_round2(gst_share),
-                platform_fee=_round2(platform_share),
-                misc_fee=_round2(misc_share),
-                discount=_round2(row['disc_share']),
-                total=charged[idx],
+                defaults={
+                    'user': user,
+                    'movie': show.movie,
+                    'theater': show,
+                    'reservation': reservation,
+                    'booking_ref': _generate_booking_ref(),
+                    'seat_category': seat_categories.get(row['seat_id'], ''),
+                    'ticket_price': row['price'],
+                    'gst_rate': pricing['gst_rate'],
+                    'gst_amount': _round2(gst_share),
+                    'platform_fee': _round2(platform_share),
+                    'misc_fee': _round2(misc_share),
+                    'discount': _round2(row['disc_share']),
+                    'total': charged[idx],
+                    'status': 'confirmed',
+                },
             )
+            if not created:
+                booking.user = user
+                booking.movie = show.movie
+                booking.theater = show
+                booking.reservation = reservation
+                booking.booking_ref = _generate_booking_ref()
+                booking.seat_category = seat_categories.get(row['seat_id'], '')
+                booking.ticket_price = row['price']
+                booking.gst_rate = pricing['gst_rate']
+                booking.gst_amount = _round2(gst_share)
+                booking.platform_fee = _round2(platform_share)
+                booking.misc_fee = _round2(misc_share)
+                booking.discount = _round2(row['disc_share'])
+                booking.total = charged[idx]
+                booking.status = 'confirmed'
+                booking.booked_at = timezone.now()
+                booking.save(update_fields=[
+                    'user', 'movie', 'theater', 'reservation', 'booking_ref',
+                    'seat_category', 'ticket_price', 'gst_rate', 'gst_amount',
+                    'platform_fee', 'misc_fee', 'discount', 'total', 'status',
+                    'booked_at',
+                ])
             Seat.objects.filter(pk=seat.pk).update(is_booked=True)
-            Payment.objects.create(
+            payment, _ = Payment.objects.get_or_create(
                 booking=booking,
-                amount=charged[idx],
-                payment_method=payment_method,
-                transaction_id=transaction_id or '',
-                status='completed',
+                defaults={
+                    'amount': charged[idx],
+                    'payment_method': payment_method,
+                    'transaction_id': transaction_id or '',
+                    'status': 'completed',
+                },
             )
+            if not _:
+                payment.amount = charged[idx]
+                payment.payment_method = payment_method
+                payment.transaction_id = transaction_id or ''
+                payment.status = 'completed'
+                payment.save(update_fields=[
+                    'amount', 'payment_method', 'transaction_id', 'status',
+                ])
             bookings.append(booking)
 
         reservation.coupon = coupon
@@ -574,11 +735,14 @@ def confirm_booking(user, token, transaction_id=None, payment_method='upi', coup
         reservation.total_amount = total
         reservation.status = 'booked'
         reservation.payment_status = 'completed'
+        reservation.ticket_count = count
+        if not reservation.booking_ref:
+            reservation.booking_ref = _generate_reservation_booking_ref()
         reservation.save(update_fields=[
             'coupon', 'coupon_code', 'subtotal_amount', 'convenience_fee',
             'platform_fee', 'misc_fee', 'gst_rate', 'gst_amount',
             'discount_amount', 'total_amount', 'status',
-            'payment_status', 'updated_at',
+            'payment_status', 'ticket_count', 'booking_ref', 'updated_at',
         ])
         if coupon:
             Coupon.objects.filter(pk=coupon.pk).update(used_count=F('used_count') + 1)
@@ -695,6 +859,49 @@ def cancel_booking(user, booking_id):
         booking.theater.bump_seat_revision()
         booking.status = 'cancelled'
         booking.save(update_fields=['status'])
+    return True
+
+
+def cancel_reservation_booking(user, booking_ref):
+    """Cancel an entire booking (all seats) by its transaction booking reference."""
+    now = timezone.now()
+    with transaction.atomic():
+        try:
+            reservation = (
+                Reservation.objects.select_for_update()
+                .select_related('show')
+                .get(booking_ref=booking_ref)
+            )
+        except Reservation.DoesNotExist:
+            raise ReservationError('Booking not found.') from None
+        if reservation.user_id != user.id:
+            raise ReservationError('This booking does not belong to you.')
+        if reservation.show.time <= now:
+            raise ReservationError(
+                'Cancellation is not allowed once the show has started.'
+            )
+        bookings = list(
+            reservation.bookings.select_for_update().select_related('seat')
+        )
+        if not bookings:
+            raise ReservationError('This booking has no seats to cancel.')
+        Payment.objects.filter(
+            booking__in=bookings, status='completed'
+        ).update(status='refunded')
+        try:
+            from .payments import refund_reservation_transactions
+            refund_reservation_transactions(reservation)
+        except Exception:
+            pass
+        seat_ids = [b.seat_id for b in bookings]
+        Seat.objects.filter(pk__in=seat_ids).update(is_booked=False)
+        Booking.objects.filter(pk__in=[b.pk for b in bookings]).update(
+            status='cancelled'
+        )
+        reservation.status = 'cancelled'
+        reservation.payment_status = 'refunded'
+        reservation.save(update_fields=['status', 'payment_status', 'updated_at'])
+        reservation.show.bump_seat_revision()
     return True
 
 

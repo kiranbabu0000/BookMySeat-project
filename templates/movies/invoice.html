@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Invoice {{ invoice_number }} — {{ movie_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .invoice-page { padding: 3rem 0; }
+  .invoice-card {
+    max-width: 720px; margin: 0 auto;
+    background: #fff; color: #111;
+    border-radius: 14px; overflow: hidden;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.18);
+  }
+  .invoice-head { padding: 1.75rem 2rem; background: #111; color: #fff; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .invoice-brand { font-weight: 800; font-size: 1.35rem; }
+  .invoice-meta { font-size: 0.8rem; color: #cbd5e1; }
+  .invoice-body { padding: 1.75rem 2rem; }
+  .invoice-section { margin-bottom: 1.5rem; }
+  .invoice-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px; color: #888; margin-bottom: 0.5rem; }
+  .invoice-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  .invoice-table th { text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.6px; color: #888; padding: 0.5rem 0.25rem; border-bottom: 2px solid #eee; }
+  .invoice-table td { padding: 0.6rem 0.25rem; border-bottom: 1px solid #f1f5f9; }
+  .invoice-table td.amt { text-align: right; font-variant-numeric: tabular-nums; }
+  .invoice-total { font-weight: 800; font-size: 1.05rem; }
+  .invoice-actions { text-align: center; margin-top: 1.5rem; }
+  @media print {
+    body { background: #fff !important; }
+    header, footer, .offcanvas, .navbar, .skip-link, .invoice-actions { display: none !important; }
+    .invoice-page { padding: 0; }
+    .invoice-card { box-shadow: none; border: 1px solid #ccc; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="page-section invoice-page">
+  <div class="container-bms">
+    <div class="invoice-card" id="invoiceCard">
+      <div class="invoice-head">
+        <div>
+          <div class="invoice-brand">BookMySeat</div>
+          <div class="invoice-meta">Tax Invoice</div>
+        </div>
+        <div class="text-end">
+          <div style="font-weight: 700;">{{ invoice_number }}</div>
+          <div class="invoice-meta">{{ booked_at|date:"d M Y, g:i A" }}</div>
+        </div>
+      </div>
+
+      <div class="invoice-body">
+        <div class="invoice-section">
+          <div class="invoice-label">Billed To</div>
+          <div style="font-weight: 600;">{{ customer.get_full_name|default:customer.username }}</div>
+          <div style="font-size: 0.85rem; color: #555;">{{ customer.email }}</div>
+        </div>
+
+        <div class="invoice-section">
+          <div class="invoice-label">Booking Details</div>
+          <div style="font-size: 0.9rem;">
+            <div><strong>{{ movie_name }}</strong></div>
+            <div style="color: #555;">{{ theatre_name }} · {{ screen_name|default:"Main" }}</div>
+            <div style="color: #555;">{{ show_time|date:"g:i A, D M d Y" }}</div>
+            <div style="color: #555;">Seats: {{ seat_labels|join:", " }} ({{ ticket_count }})</div>
+            <div style="color: #555;">Booking Ref: <strong>{{ booking_ref }}</strong></div>
+          </div>
+        </div>
+
+        <div class="invoice-section">
+          <table class="invoice-table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Qty</th>
+                <th class="amt">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Ticket ({{ seat_labels|join:", " }})</td>
+                <td>{{ ticket_count }}</td>
+                <td class="amt">₹{{ subtotal|floatformat:2 }}</td>
+              </tr>
+              <tr>
+                <td>Platform Fee</td>
+                <td>{{ ticket_count }}</td>
+                <td class="amt">₹{{ platform_fee|floatformat:2 }}</td>
+              </tr>
+              <tr>
+                <td>Miscellaneous Fee</td>
+                <td>1</td>
+                <td class="amt">₹{{ misc_fee|floatformat:2 }}</td>
+              </tr>
+              <tr>
+                <td>GST ({{ gst_rate }}%)</td>
+                <td>1</td>
+                <td class="amt">₹{{ gst_amount|floatformat:2 }}</td>
+              </tr>
+              {% if discount %}
+              <tr>
+                <td>Coupon Discount{% if coupon_code %} ({{ coupon_code }}){% endif %}</td>
+                <td>1</td>
+                <td class="amt">− ₹{{ discount|floatformat:2 }}</td>
+              </tr>
+              {% endif %}
+              <tr>
+                <td class="invoice-total">Total Paid</td>
+                <td></td>
+                <td class="amt invoice-total">₹{{ total|floatformat:2 }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="invoice-section" style="border-top: 1px solid #eee; padding-top: 1rem;">
+          <div class="invoice-label">Payment Details</div>
+          <div style="font-size: 0.9rem;">
+            <div>Method: <strong>{{ payment.payment_method|default:"Online"|upper }}</strong></div>
+            <div>Transaction ID: <span class="text-monospace">{{ payment.transaction_id|default:"—" }}</span></div>
+            <div>Status: <strong>Paid</strong></div>
+          </div>
+        </div>
+
+        <p style="font-size: 0.75rem; color: #888; margin-bottom: 0;">
+          This is a computer-generated invoice for your movie ticket booking.
+          The GST shown is included in the total paid. Please retain this invoice for your records.
+        </p>
+      </div>
+    </div>
+
+    <div class="invoice-actions">
+      <button class="btn btn-bms-primary justify-content-center" onclick="window.print()">
+        <i class="bi bi-printer me-1"></i> Print / Save as PDF
+      </button>
+      <a href="{% url 'download_ticket' booking_ref %}" class="btn btn-bms-outline justify-content-center">
+        <i class="bi bi-ticket-perforated me-1"></i> View Ticket
+      </a>
+      <a href="{% url 'profile' %}" class="btn btn-bms-outline justify-content-center">
+        <i class="bi bi-arrow-left me-1"></i> Back to Profile
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %}

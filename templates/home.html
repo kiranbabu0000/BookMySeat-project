@@ -68,6 +68,47 @@
 </section>
 {% endif %}
 
+<!-- Browse by Category -->
+{% if genres %}
+<section class="page-section pb-0">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Browse by Category</h2>
+        <p class="section-subtitle text-muted mb-0">Explore movies by genre</p>
+      </div>
+      <a href="{% url 'movie_list' %}" class="section-link">All Movies <i class="bi bi-arrow-right"></i></a>
+    </div>
+    <nav class="genre-chips" aria-label="Movie categories">
+      {% for genre in genres %}
+      <a class="genre-chip" href="{% url 'movie_list' %}?genre={{ genre.slug }}">
+        <i class="bi bi-film" aria-hidden="true"></i>{{ genre.name }}
+      </a>
+      {% endfor %}
+    </nav>
+  </div>
+</section>
+{% endif %}
+
+<!-- Recommended for You -->
+{% if recommended %}
+<section class="page-section page-section--alt">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Recommended for You</h2>
+        <p class="section-subtitle text-muted mb-0">Picked from your bookings and interests</p>
+      </div>
+    </div>
+    <div class="movie-rail stagger-children">
+      {% for movie in recommended|slice:":10" %}
+        {% include 'partials/_movie_card.html' with movie=movie rail=True %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
 <!-- Recently Viewed -->
 {% if recently_viewed %}
 <section class="page-section page-section--alt">
@@ -78,9 +119,9 @@
         <p class="section-subtitle text-muted mb-0">Pick up where you left off</p>
       </div>
     </div>
-    <div class="row stagger-children">
-      {% for movie in recently_viewed|slice:":4" %}
-        {% include 'partials/_movie_card.html' with movie=movie %}
+    <div class="movie-rail stagger-children">
+      {% for movie in recently_viewed|slice:":10" %}
+        {% include 'partials/_movie_card.html' with movie=movie rail=True %}
       {% endfor %}
     </div>
   </div>
@@ -99,9 +140,9 @@
     </div>
 
     {% if movies %}
-    <div class="row stagger-children">
-      {% for movie in movies|slice:":8" %}
-        {% include 'partials/_movie_card.html' with movie=movie %}
+    <div class="movie-rail stagger-children">
+      {% for movie in movies|slice:":10" %}
+        {% include 'partials/_movie_card.html' with movie=movie rail=True %}
       {% endfor %}
     </div>
     {% else %}
@@ -113,6 +154,139 @@
     {% endif %}
   </div>
 </section>
+
+<!-- Laughing Therapy -->
+<section class="page-section page-section--alt">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Laughing Therapy</h2>
+        <p class="section-subtitle text-muted mb-0">Side-splitting stand-up &amp; comedy nights</p>
+      </div>
+      <a href="{% url 'movie_list' %}?category=laughing_therapy" class="section-link">View All <i class="bi bi-arrow-right"></i></a>
+    </div>
+
+    {% if laughing_therapy %}
+    <div class="movie-rail stagger-children">
+      {% for movie in laughing_therapy|slice:":10" %}
+        {% include 'partials/_movie_card.html' with movie=movie rail=True %}
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state__icon"><i class="bi bi-emoji-laughing"></i></div>
+      <h3 class="empty-state__title">No comedy shows yet</h3>
+      <p class="empty-state__text">Check back soon for upcoming stand-up nights.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Live Concerts -->
+<section class="page-section">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Live Concerts</h2>
+        <p class="section-subtitle text-muted mb-0">Catch your favourite artists live</p>
+      </div>
+      <a href="{% url 'movie_list' %}?category=live_concert" class="section-link">View All <i class="bi bi-arrow-right"></i></a>
+    </div>
+
+    {% if live_concerts %}
+    <div class="movie-rail stagger-children">
+      {% for movie in live_concerts|slice:":10" %}
+        {% include 'partials/_movie_card.html' with movie=movie rail=True %}
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state__icon"><i class="bi bi-music-note-beamed"></i></div>
+      <h3 class="empty-state__title">No concerts right now</h3>
+      <p class="empty-state__text">Upcoming live concerts will appear here.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Top Rated -->
+{% if top_rated %}
+<section class="page-section page-section--alt">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Top Rated</h2>
+        <p class="section-subtitle text-muted mb-0">The highest rated films, loved by audiences</p>
+      </div>
+      <a href="{% url 'movie_list' %}?sort=rating" class="section-link">View All <i class="bi bi-arrow-right"></i></a>
+    </div>
+    <div class="movie-rail stagger-children">
+      {% for movie in top_rated|slice:":10" %}
+        {% include 'partials/_movie_card.html' with movie=movie rail=True %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- Coming Soon -->
+{% if coming_soon %}
+<section class="page-section">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Coming Soon</h2>
+        <p class="section-subtitle text-muted mb-0">Get ready for these upcoming releases</p>
+      </div>
+    </div>
+    <div class="movie-rail stagger-children">
+      {% for movie in coming_soon|slice:":10" %}
+        {% include 'partials/_movie_card.html' with movie=movie rail=True %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- Trending Now -->
+{% if trending %}
+<section class="page-section page-section--alt">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Trending Now</h2>
+        <p class="section-subtitle text-muted mb-0">What everyone is watching this week</p>
+      </div>
+      <a href="{% url 'movie_list' %}?sort=popularity" class="section-link">View All <i class="bi bi-arrow-right"></i></a>
+    </div>
+    <div class="movie-rail stagger-children">
+      {% for movie in trending|slice:":10" %}
+        {% include 'partials/_movie_card.html' with movie=movie rail=True %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- Recently Released -->
+{% if recently_released %}
+<section class="page-section">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Recently Released</h2>
+        <p class="section-subtitle text-muted mb-0">Fresh from the cinema halls</p>
+      </div>
+      <a href="{% url 'movie_list' %}?sort=newest" class="section-link">View All <i class="bi bi-arrow-right"></i></a>
+    </div>
+    <div class="movie-rail stagger-children">
+      {% for movie in recently_released|slice:":10" %}
+        {% include 'partials/_movie_card.html' with movie=movie rail=True %}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
 
 <!-- Featured Offer -->
 <section class="page-section page-section--alt">

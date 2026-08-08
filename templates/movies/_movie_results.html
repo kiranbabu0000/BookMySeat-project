@@ -1,0 +1,69 @@
+{% comment %}
+Movie discovery results — count, active-filter chips, grid and pagination.
+Rendered both server-side (full page) and via AJAX (discovery.js).
+{% endcomment %}
+<div class="discovery-count" id="movieCount">
+  <span class="discovery-count__num">{{ total }}</span>
+  Movie{{ total|pluralize }} found
+</div>
+
+{% if chips %}
+<div class="discovery-chips" id="discoveryChips">
+  {% for chip in chips %}
+  <button type="button" class="discovery-chip" data-chip-param="{{ chip.param }}" data-chip-value="{{ chip.value }}" aria-label="Remove filter {{ chip.label }}">
+    {{ chip.label }} <i class="bi bi-x-lg" aria-hidden="true"></i>
+  </button>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div id="movieList" class="row g-3 stagger-children">
+  {% for movie in movies %}
+    {% include 'partials/_movie_card.html' with movie=movie %}
+  {% empty %}
+  <div class="col-12">
+    <div class="empty-state">
+      <div class="empty-state__icon"><i class="bi bi-search"></i></div>
+      <h2 class="empty-state__title">No movies found</h2>
+      <p class="empty-state__text">
+        {% if params.search or params.genres or params.languages or params.city or params.theatre_id or params.release or params.rating or params.timings %}
+        No movies match your current search and filters. Try removing some filters.
+        {% else %}
+        No movies are available at the moment. Check back soon for the latest releases.
+        {% endif %}
+      </p>
+      {% if params.search or params.genres or params.languages or params.city or params.theatre_id or params.release or params.rating or params.timings %}
+      <button type="button" class="btn btn-bms-primary" data-clear-filters>Clear All Filters</button>
+      {% else %}
+      <a href="{% url 'movie_list' %}" class="btn btn-bms-primary">Browse Movies</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if paginator.num_pages > 1 %}
+<nav class="mt-4" aria-label="Movie list pagination">
+  <ul class="pagination discovery-pagination justify-content-center mb-0">
+    <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+      <a class="page-link" href="?{% if qs_base %}{{ qs_base }}&{% endif %}page={{ prev_page }}" data-page="{{ prev_page }}" aria-label="Previous page">
+        <i class="bi bi-chevron-left" aria-hidden="true"></i>
+      </a>
+    </li>
+    {% for num in page_range %}
+      {% if num == '…' %}
+      <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+      {% elif num == page_obj.number %}
+      <li class="page-item active" aria-current="page"><span class="page-link">{{ num }}</span></li>
+      {% else %}
+      <li class="page-item"><a class="page-link" href="?{% if qs_base %}{{ qs_base }}&{% endif %}page={{ num }}" data-page="{{ num }}">{{ num }}</a></li>
+      {% endif %}
+    {% endfor %}
+    <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+      <a class="page-link" href="?{% if qs_base %}{{ qs_base }}&{% endif %}page={{ next_page }}" data-page="{{ next_page }}" aria-label="Next page">
+        <i class="bi bi-chevron-right" aria-hidden="true"></i>
+      </a>
+    </li>
+  </ul>
+</nav>
+{% endif %}

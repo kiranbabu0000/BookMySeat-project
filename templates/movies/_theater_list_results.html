@@ -1,0 +1,94 @@
+{% load movie_extras %}
+{% if theaters %}
+  {% regroup theaters by name as theatre_groups %}
+  {% for group in theatre_groups %}
+  <article class="theater-card animate-fade-up">
+    <div class="theater-card__head">
+      <div class="theater-card__identity">
+        <h3 class="theater-card__name"><i class="bi bi-buildings me-2 text-danger"></i>{{ group.grouper }}</h3>
+        {% with admin_theatre=group.list.0.admin_show.theatre %}
+        <p class="theater-card__location mb-0">
+          <i class="bi bi-geo-alt me-1"></i>
+          {% if admin_theatre %}{{ admin_theatre.address|default:admin_theatre.location|default:'' }}{% if admin_theatre.city %} · {{ admin_theatre.city }}{% endif %}{% endif %}
+        </p>
+        {% endwith %}
+      </div>
+      <div class="theater-card__actions">
+        <span class="theater-card__count" title="Available showtimes">
+          <i class="bi bi-ticket-perforated me-1"></i>{{ group.list|length }} show{{ group.list|length|pluralize }}
+        </span>
+        {% with show=group.list.0 %}
+        <a href="{% url 'book_seats' show.id %}" class="btn btn-bms-outline btn-sm"
+           data-book-url="{% url 'book_seats' show.id %}">
+          <i class="bi bi-ticket-perforated me-1"></i> Book
+        </a>
+        {% endwith %}
+      </div>
+    </div>
+
+    <div class="theater-amenities" aria-label="Theater amenities">
+      {% with admin_theatre=group.list.0.admin_show.theatre %}
+      {% if admin_theatre and admin_theatre.facilities %}
+        {% for facility in admin_theatre.facilities|split_items|slice:":6" %}
+          <span class="amenity-badge">{{ facility }}</span>
+        {% endfor %}
+      {% else %}
+        <span class="amenity-badge"><i class="bi bi-phone"></i> M-Ticket</span>
+        <span class="amenity-badge"><i class="bi bi-cup-straw"></i> F&amp;B</span>
+        <span class="amenity-badge"><i class="bi bi-p-square"></i> Parking</span>
+        <span class="amenity-badge"><i class="bi bi-universal-access"></i> Accessible</span>
+        <span class="amenity-badge"><i class="bi bi-badge-3d"></i> 3D</span>
+      {% endif %}
+      {% endwith %}
+    </div>
+
+    {% regroup group.list by screen_name as screens %}
+    {% for screen in screens %}
+    <div class="theater-screen">
+      <div class="theater-screen__head">
+        <span class="theater-screen__name"><i class="bi bi-tv me-1 text-danger"></i>{{ screen.grouper }}</span>
+        {% if group.list.0.movie.category == 'movie' %}
+        <span class="theater-screen__format"><i class="bi bi-stars me-1"></i>2D · 4K · Dolby Atmos</span>
+        {% endif %}
+      </div>
+      <div class="showtime-grid">
+        {% for theater in screen.list %}
+        {% with part=theater.time|showtime_part %}
+        <a href="{% url 'book_seats' theater.id %}" class="showtime-btn showtime-btn--{{ part }}"
+           data-book-url="{% url 'book_seats' theater.id %}">
+          <span class="showtime-btn__time"><i class="showtime-btn__dot showtime-btn__dot--{{ part }}"></i>{{ theater.time|date:"g:i A" }}</span>
+          <small>{{ theater.time|date:"D, M d" }}</small>
+          <span class="showtime-btn__price">₹{{ theater.ticket_price }}</span>
+        </a>
+        {% endwith %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </article>
+  {% endfor %}
+
+  <p class="text-muted small mt-4">
+    <span class="showtime-legend" aria-label="Showtime colour key">
+      <span class="showtime-legend__item"><i class="showtime-btn__dot showtime-btn__dot--morning"></i>Morning</span>
+      <span class="showtime-legend__item"><i class="showtime-btn__dot showtime-btn__dot--afternoon"></i>Afternoon</span>
+      <span class="showtime-legend__item"><i class="showtime-btn__dot showtime-btn__dot--evening"></i>Evening</span>
+      <span class="showtime-legend__item"><i class="showtime-btn__dot showtime-btn__dot--night"></i>Night</span>
+    </span>
+    &nbsp;·&nbsp;
+    <i class="bi bi-info-circle me-1"></i>
+    <span class="text-warning">●</span> Non-cancellable tickets · Best view seats are highlighted in the seat map
+  </p>
+{% else %}
+<div class="empty-state">
+  <div class="empty-state__icon"><i class="bi bi-building"></i></div>
+  <h2 class="empty-state__title">No shows on {{ selected_date|date:"l, M j" }}{% if city %} in {{ city }}{% endif %}</h2>
+  <p class="empty-state__text">Sorry, no showtimes are available for this movie on that date{% if city %} in {{ city }}{% endif %}. Try another day{% if city %} or browse all cities{% endif %}.</p>
+  <div class="d-flex gap-2 justify-content-center flex-wrap">
+    <a href="{% url 'movie_list' %}{% if movie.category != 'movie' %}?category={{ movie.category }}{% endif %}" class="btn btn-bms-primary">{% if movie.category == 'movie' %}Browse Other Movies{% else %}Browse Other Events{% endif %}</a>
+    {% if city %}
+    <a href="?date={{ selected_date|date:"Y-m-d" }}" class="btn btn-bms-outline">Show All Cities</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

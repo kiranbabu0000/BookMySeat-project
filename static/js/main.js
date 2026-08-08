@@ -9,6 +9,8 @@
     initPasswordToggles();
     initFormLoading();
     setActiveNavLink();
+    initFitText();
+    initImageFallback();
   });
 
   function initNavbarScroll() {
@@ -67,5 +69,56 @@
         link.classList.add('active');
       }
     });
+  }
+
+  function initFitText() {
+    document.querySelectorAll('[data-fit-text]').forEach(function (el) {
+      fitText(el);
+    });
+    window.addEventListener('resize', function () {
+      document.querySelectorAll('[data-fit-text]').forEach(function (el) {
+        fitText(el);
+      });
+    }, { passive: true });
+  }
+
+  function initImageFallback() {
+    var PLACEHOLDER = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600">' +
+      '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+      '<stop offset="0" stop-color="#1f2838"/><stop offset="1" stop-color="#0a0e14"/>' +
+      '</linearGradient></defs>' +
+      '<rect width="400" height="600" fill="url(#g)"/>' +
+      '<g fill="none" stroke="#3b4a63" stroke-width="14" opacity="0.7">' +
+      '<rect x="96" y="150" width="208" height="52" rx="10"/>' +
+      '<rect x="96" y="234" width="208" height="52" rx="10"/>' +
+      '<rect x="96" y="318" width="208" height="52" rx="10"/>' +
+      '</g>' +
+      '<circle cx="200" cy="300" r="0"/>' +
+      '</svg>'
+    );
+    document.addEventListener('error', function (e) {
+      var img = e.target;
+      if (!img || img.tagName !== 'IMG' || img.dataset.fallbackApplied) return;
+      img.dataset.fallbackApplied = '1';
+      img.src = PLACEHOLDER;
+    }, true);
+  }
+
+  function fitText(el) {
+    var base = parseFloat(el.dataset.baseSize);
+    if (!base) {
+      base = parseFloat(window.getComputedStyle(el).fontSize);
+      if (!base) return;
+      el.dataset.baseSize = base;
+    }
+    var min = 11;
+    var elWidth = el.clientWidth;
+    if (!elWidth) return;
+    el.style.fontSize = base + 'px';
+    while (el.scrollWidth > elWidth && base > min) {
+      base -= 0.5;
+      el.style.fontSize = base + 'px';
+    }
   }
 })();

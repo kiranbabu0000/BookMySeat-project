@@ -63,6 +63,8 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'admin_panel.middleware.AdminIdentityMiddleware',
+    'users.middleware.NoStoreMiddleware',
+    'users.middleware.LoggedOutGuardMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -87,6 +89,16 @@ EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False') == 'True'
 DEFAULT_FROM_EMAIL = os.environ.get(
     'DEFAULT_FROM_EMAIL', 'BookMySeat <no-reply@bookmyseat.com>'
 )
+
+# Public site base URL used to build absolute links inside emails.
+SITE_URL = os.environ.get('SITE_URL', '')
+
+# Async email outbox (see movies/models.EmailOutbox): the process_email_outbox
+# management command retries failed deliveries with exponential backoff using
+# these knobs. Defaults target roughly a 1 hour delivery window.
+EMAIL_OUTBOX_MAX_ATTEMPTS = int(os.environ.get('EMAIL_OUTBOX_MAX_ATTEMPTS', '6'))
+EMAIL_OUTBOX_BACKOFF_BASE = int(os.environ.get('EMAIL_OUTBOX_BACKOFF_BASE_SECONDS', '60'))
+EMAIL_OUTBOX_CLAIM_MAX_AGE = int(os.environ.get('EMAIL_OUTBOX_CLAIM_MAX_AGE_SECONDS', '600'))
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -114,6 +126,28 @@ CSRF_COOKIE_SECURE = os.environ.get(
 ) == 'True'
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_NAME = 'bms_sessionid'
+
+# Cache. Uses Redis (via REDIS_URL) when available so rate limiting, OTP and
+# analytics payload caching stay consistent across workers; otherwise falls
+# back to a per-process LocMem cache for local development.
+if os.environ.get('REDIS_URL'):
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': os.environ['REDIS_URL'],
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            },
+            'KEY_PREFIX': 'bms',
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'bms-dev-cache',
+        }
+    }
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -126,6 +160,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'admin_panel.context_processors.admin_notifications',
+                'movies.context_processors.bms_cities',
             ],
         },
     },
@@ -158,6 +193,29 @@ RAZORPAY_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET', '')
 # When True the checkout page renders a demo/sandbox pay button that mimics a
 # successful Razorpay callback so the whole flow can be exercised without keys.
 RAZORPAY_DEMO_MODE = os.environ.get('RAZORPAY_DEMO_MODE', 'True') == 'True'
+
+# Razorpay gateway diagnostics (order creation, checkout payload, signature
+# verification, webhooks) are printed to the console during development.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{asctime} {levelname} {name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'movies.gateway': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False},
+        'movies.payments': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False},
+    },
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators

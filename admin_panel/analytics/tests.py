@@ -43,11 +43,11 @@ class AnalyticsDataTestCase(TestCase):
 
         cls.theater1 = Theater.objects.create(
             name='Analytics PVR', movie=cls.movie1,
-            time=timezone.now() + timedelta(hours=5),
+            time=_at(0, hour=5),
         )
         cls.theater2 = Theater.objects.create(
             name='Analytics IMAX', movie=cls.movie2,
-            time=timezone.now() + timedelta(hours=6),
+            time=_at(0, hour=6),
         )
 
         seats = [

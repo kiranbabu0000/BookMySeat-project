@@ -1,0 +1,101 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Booking confirmed — {{ movie_name }}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f1f5f9; font-family:Arial, Helvetica, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9; padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#e11d48; padding:20px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:22px; font-weight:bold; color:#ffffff;">BookMySeat</td>
+                  <td align="right" style="font-size:12px; color:#fecdd3; text-transform:uppercase; letter-spacing:1px;">M-Ticket</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:28px 32px;">
+              <h2 style="margin:0 0 6px; color:#111111; font-size:20px;">Booking confirmed!</h2>
+              <p style="margin:0 0 20px; color:#64748b; font-size:14px;">
+                Hi {{ user.username }}, your seats for <strong style="color:#e11d48;">{{ movie_name }}</strong> are locked.
+              </p>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc; border:1px solid #eef2f7; border-radius:12px; padding:0;">
+                <tr>
+                  <td style="padding:16px 20px; font-size:13px; color:#334155; line-height:1.7;">
+                    <strong style="color:#111111;">{{ movie_name }}</strong><br>
+                    {{ theatre_name }} · {{ screen_name }} Screen<br>
+                    <span style="color:#e11d48; font-weight:bold;">{{ show_time|date:"g:i A" }} · {{ show_time|date:"D, M d Y" }}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="border-top:1px dashed #cbd5e1; padding:14px 20px; font-size:13px; color:#334155; line-height:1.8;">
+                    <strong style="color:#111111;">Seats</strong><br>{{ seat_label }}<br>
+                    <strong style="color:#111111;">Booking Ref</strong><br>{{ booking_ref }}
+                  </td>
+                </tr>
+                {% if payment_id %}
+                <tr>
+                  <td style="border-top:1px dashed #cbd5e1; padding:14px 20px; font-size:13px; color:#334155; line-height:1.8;">
+                    <strong style="color:#111111;">Payment ID</strong><br>{{ payment_id }}
+                  </td>
+                </tr>
+                {% endif %}
+              </table>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">
+                <tr>
+                  <td>
+                    {% if qr_data_uri %}
+                    <img src="{{ qr_data_uri }}" alt="Ticket QR code" width="140" height="140" style="width:140px; height:140px; border:1px solid #e2e8f0; border-radius:8px;">
+                    {% endif %}
+                  </td>
+                  <td align="right" style="vertical-align:middle; font-size:14px; color:#334155;">
+                    <div style="font-size:12px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px;">Total Paid</div>
+                    <div style="font-size:26px; font-weight:bold; color:#e11d48;">{{ total_label }}</div>
+                    <div style="font-size:12px; color:#64748b;">{{ ticket_count }} ticket{{ ticket_count|pluralize }}</div>
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;">
+                <tr>
+                  <td style="padding-bottom:10px;">
+                    <a href="{{ ticket_url }}" style="display:block; text-align:center; background-color:#e11d48; color:#ffffff; text-decoration:none; font-weight:bold; font-size:14px; padding:13px 20px; border-radius:8px;">View / Print Ticket</a>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <a href="{{ pdf_url }}" style="display:block; text-align:center; background-color:#ffffff; color:#e11d48; text-decoration:none; font-weight:bold; font-size:14px; padding:13px 20px; border:1px solid #e11d48; border-radius:8px;">Download PDF Ticket</a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0; color:#94a3b8; font-size:12px; line-height:1.6;">
+                Present the ticket (digital or printed) with the QR code at the venue entrance.
+                You can always find your tickets in your <a href="{{ site_url }}" style="color:#e11d48;">BookMySeat</a> profile.
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f8fafc; padding:14px 32px; font-size:11px; color:#94a3b8; text-align:center;">
+              BookMySeat · Enjoy the show!
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -16,8 +16,9 @@ from django.utils import timezone
 
 from admin_panel.models import Coupon, Payment, PaymentTransaction, PricingConfig
 from . import gateway
-from .models import Reservation
+from .models import Booking, RESERVATION_HOLD_SECONDS, Reservation
 from .payments import (
+    PAYMENT_HOLD_SECONDS,
     PaymentError,
     cancel_stale_orders,
     handle_webhook,
@@ -34,6 +35,7 @@ from .services import (
     create_reservation,
     release_reservation,
 )
+from .testutils import DEMO_RAZORPAY
 from .tests import _make_categories_and_prices, _make_show
 
 WEBHOOK_SECRET = 'test-webhook-secret'
@@ -47,6 +49,7 @@ def _signed_body(payload):
     return body, digest
 
 
+@DEMO_RAZORPAY
 class PaymentServiceTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user('alice', 'alice@example.com', 'password123')
@@ -73,6 +76,15 @@ class PaymentServiceTests(TestCase):
         tx2, _ = start_checkout(self.user, self.reservation.token)
         self.assertEqual(tx1.pk, tx2.pk)
         self.assertEqual(PaymentTransaction.objects.filter(reservation=self.reservation).count(), 1)
+
+    def test_start_checkout_demo_keeps_original_hold(self):
+        before = self.reservation.expires_at
+        _tx, checkout = start_checkout(self.user, self.reservation.token)
+        self.reservation.refresh_from_db()
+        self.assertEqual(self.reservation.expires_at, before)
+        self.assertGreater(checkout['hold_seconds'], RESERVATION_HOLD_SECONDS - 10)
+        self.assertLess(checkout['hold_seconds'], RESERVATION_HOLD_SECONDS + 10)
+        self.assertLess(checkout['hold_seconds'], PAYMENT_HOLD_SECONDS)
 
     def test_start_checkout_binds_coupon(self):
         Coupon.objects.create(
@@ -277,6 +289,7 @@ class PaymentServiceTests(TestCase):
         self.assertEqual(tx.status, 'cancelled')
 
 
+@DEMO_RAZORPAY
 @override_settings(RAZORPAY_WEBHOOK_SECRET=WEBHOOK_SECRET)
 class PaymentWebhookTests(TestCase):
     def setUp(self):
@@ -320,6 +333,31 @@ class PaymentWebhookTests(TestCase):
         self.tx.refresh_from_db()
         self.assertEqual(self.tx.status, 'captured')
         self.assertEqual(self.tx.gateway_payment_id, 'pay_WEBHOOK_1')
+
+    def test_webhook_payment_authorized_confirms_booking(self):
+        amount = gateway.paise_from_decimal(self.tx.amount)
+        body, sig = _signed_body({
+            'event': 'payment.authorized',
+            'payload': {
+                'payment': {
+                    'entity': {
+                        'id': 'pay_WEBHOOK_AUTH',
+                        'order_id': self.tx.gateway_order_id,
+                        'amount': amount,
+                        'method': 'card',
+                        'status': 'authorized',
+                    }
+                }
+            },
+        })
+        handle_webhook(body, sig)
+        self.reservation.refresh_from_db()
+        self.assertEqual(self.reservation.status, 'booked')
+        self.seats[0].refresh_from_db()
+        self.assertTrue(self.seats[0].is_booked)
+        self.tx.refresh_from_db()
+        self.assertEqual(self.tx.status, 'captured')
+        self.assertEqual(self.tx.gateway_payment_id, 'pay_WEBHOOK_AUTH')
 
     def test_webhook_payment_captured_is_idempotent(self):
         amount = gateway.paise_from_decimal(self.tx.amount)
@@ -445,6 +483,7 @@ class PaymentWebhookTests(TestCase):
         self.assertEqual(bad.status_code, 400)
 
 
+@DEMO_RAZORPAY
 @patch('movies.gateway.demo_mode', return_value=False)
 class PaymentRealGatewayTests(TestCase):
     """Exercise the real (non-demo) code path with a mocked gateway."""
@@ -469,6 +508,18 @@ class PaymentRealGatewayTests(TestCase):
         mock_create_order.assert_called_once()
         self.assertEqual(mock_create_order.call_args[1]['receipt'],
                          'BMS-{}'.format(self.reservation.token[:10].upper()))
+
+    @patch('movies.gateway.create_order',
+           return_value={'id': 'order_REAL_1'})
+    def test_start_checkout_real_extends_hold(self, mock_create_order, mock_demo):
+        original_hold = (self.reservation.expires_at - timezone.now()).total_seconds()
+        self.assertLess(original_hold, PAYMENT_HOLD_SECONDS)
+        _tx, checkout = start_checkout(self.user, self.reservation.token)
+        self.reservation.refresh_from_db()
+        remaining = (self.reservation.expires_at - timezone.now()).total_seconds()
+        self.assertGreater(remaining, PAYMENT_HOLD_SECONDS - 10)
+        self.assertLess(remaining, PAYMENT_HOLD_SECONDS + 10)
+        self.assertGreater(checkout['hold_seconds'], PAYMENT_HOLD_SECONDS - 10)
 
     @patch('movies.gateway.fetch_payment')
     @patch('movies.gateway.verify_payment_signature', return_value=True)
@@ -554,6 +605,7 @@ class PaymentRealGatewayTests(TestCase):
             )
 
 
+@DEMO_RAZORPAY
 class PaymentApiTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user('alice', 'alice@example.com', 'password123')
@@ -665,17 +717,86 @@ class PaymentApiTests(TestCase):
         self.seats[0].refresh_from_db()
         self.assertTrue(self.seats[0].is_booked)
 
-    def test_simulate_payment_failure_keeps_seats(self):
+    def test_demo_failure_keeps_seats_held(self):
         token = self._reserve(self.seats[0].id).json()['reservation']['token']
+        checkout = self._start(token).json()['checkout']
         response = self.client.post(
-            reverse('simulate_payment', args=[token]),
-            data={'action': 'fail', 'transaction_id': 'TXN-X'},
+            reverse('payment_failed', args=[token]),
+            data={
+                'razorpay_order_id': checkout['order_id'],
+                'razorpay_payment_id': 'pay_DEMO_failed',
+                'error': 'Simulated failure',
+                'payment_method': 'upi',
+            },
+            content_type='application/json',
         )
-        self.assertRedirects(response, reverse('payment_page', args=[token]))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        self.seats[0].refresh_from_db()
+        self.assertFalse(self.seats[0].is_booked)
+        tx = PaymentTransaction.objects.get(gateway_order_id=checkout['order_id'])
+        self.assertEqual(tx.status, 'failed')
+
+    def test_cancelled_payment_records_attempt_and_allows_retry(self):
+        token = self._reserve(self.seats[0].id).json()['reservation']['token']
+        checkout = self._start(token).json()['checkout']
+        response = self.client.post(
+            reverse('payment_failed', args=[token]),
+            data={
+                'razorpay_order_id': checkout['order_id'],
+                'razorpay_payment_id': '',
+                'error': 'Payment cancelled by user',
+                'payment_method': '',
+            },
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['ok'])
+        tx = PaymentTransaction.objects.get(gateway_order_id=checkout['order_id'])
+        self.assertEqual(tx.status, 'failed')
+        self.assertEqual(tx.failure_reason, 'Payment cancelled by user')
         self.seats[0].refresh_from_db()
         self.assertFalse(self.seats[0].is_booked)
 
+        retry = self._start(token)
+        self.assertEqual(retry.status_code, 200)
+        self.assertNotEqual(retry.json()['checkout']['order_id'], checkout['order_id'])
+        self.assertFalse(self.seats[0].is_booked)
 
+    def test_retry_after_failure_creates_single_booking(self):
+        token = self._reserve(self.seats[0].id).json()['reservation']['token']
+        first = self._start(token).json()['checkout']
+        self.client.post(
+            reverse('payment_failed', args=[token]),
+            data={
+                'razorpay_order_id': first['order_id'],
+                'razorpay_payment_id': 'pay_DEMO_failed',
+                'error': 'Declined',
+                'payment_method': 'upi',
+            },
+            content_type='application/json',
+        )
+        retry = self._start(token).json()['checkout']
+        self.assertNotEqual(retry['order_id'], first['order_id'])
+        verify = self._verify(
+            token, retry['order_id'], 'pay_DEMO_pending',
+            retry['demo_signature'],
+        )
+        self.assertEqual(verify.status_code, 200)
+        self.assertTrue(verify.json()['ok'])
+        self.assertEqual(
+            Booking.objects.filter(reservation__token=token).count(), 1
+        )
+        self.assertEqual(
+            Payment.objects.filter(booking__reservation__token=token).count(), 1
+        )
+        self.assertEqual(
+            PaymentTransaction.objects.filter(reservation__token=token, status='captured').count(),
+            1,
+        )
+
+
+@DEMO_RAZORPAY
 @override_settings(RAZORPAY_WEBHOOK_SECRET=WEBHOOK_SECRET)
 class PaymentAdminTests(TestCase):
     def setUp(self):

@@ -11,7 +11,7 @@
         <form method="post" class="row g-3">
           {% csrf_token %}
           <input type="hidden" name="action" value="generate_seats">
-          <div class="col-md-6">
+          <div class="col-12">
             <label class="form-label small">Theatre / Show</label>
             <select name="theater_id" class="form-select" required>
               <option value="">Select Show</option>
@@ -20,29 +20,24 @@
               {% endfor %}
             </select>
           </div>
-          <div class="col-md-3">
-            <label class="form-label small">Rows</label>
-            <input type="number" name="rows" class="form-control" value="10" min="1" max="26">
-          </div>
-          <div class="col-md-3">
-            <label class="form-label small">Per Row</label>
-            <input type="number" name="seats_per_row" class="form-control" value="20" min="1" max="50">
-          </div>
           <div class="col-12">
-            <button type="submit" class="btn btn-bms-primary"><i class="bi bi-grid-3x3-gap"></i> Generate</button>
+            <button type="submit" class="btn btn-bms-primary w-100"><i class="bi bi-grid-3x3-gap"></i> Generate Seats from Layout</button>
+            <div class="form-text mt-1">Recreates any missing seats using the screen's layout (sections, aisles, couple &amp; wheelchair seats).</div>
           </div>
         </form>
       </div>
     </div>
-    <div class="card-bms">
-      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Legend</h5></div>
-      <div class="card-bms-body">
-        <div class="seat-legend">
-          <div class="seat-legend-item"><span class="seat-legend-swatch" style="background: var(--accent-success);"></span> Available</div>
-          <div class="seat-legend-item"><span class="seat-legend-swatch" style="background: var(--accent-primary);"></span> Booked / Blocked</div>
+      <div class="card-bms">
+        <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Legend</h5></div>
+        <div class="card-bms-body">
+          <div class="seat-legend">
+            <div class="seat-legend-item"><span class="seat-legend-swatch" style="background: var(--accent-success);"></span> Available</div>
+            <div class="seat-legend-item"><span class="seat-legend-swatch" style="background: var(--accent-primary);"></span> Booked / Blocked</div>
+            <div class="seat-legend-item"><span class="seat-legend-swatch" style="background: var(--seat-couple);"></span> Couple</div>
+            <div class="seat-legend-item"><span class="seat-legend-swatch" style="background: var(--seat-wheelchair);"></span> Wheelchair</div>
+          </div>
         </div>
       </div>
-    </div>
   </div>
   <div class="col-md-7">
     <div class="card-bms">
@@ -60,24 +55,40 @@
           </div>
         </form>
         {% if selected_theater %}
-        <div class="d-flex flex-wrap gap-2 justify-content-center">
-          {% for seat in seats %}
-          <form method="post" class="d-inline">
-            {% csrf_token %}
-            <input type="hidden" name="seat_id" value="{{ seat.id }}">
-            {% if seat.is_booked %}
-            <button type="submit" name="action" value="unblock_seat" class="btn btn-sm seat-btn" style="background: var(--accent-primary); color: #fff; width: 45px; height: 45px; font-size: 0.7rem; padding: 0;" title="Booked - Click to unblock">
-              {{ seat.seat_number }}
-            </button>
-            {% else %}
-            <button type="submit" name="action" value="block_seat" class="btn btn-sm seat-btn" style="background: var(--accent-success); color: #fff; width: 45px; height: 45px; font-size: 0.7rem; padding: 0;" title="Available - Click to block">
-              {{ seat.seat_number }}
-            </button>
-            {% endif %}
-          </form>
-          {% empty %}
-          <p class="text-muted">No seats found for this show. Generate seats first.</p>
-          {% endfor %}
+        {% regroup seats by row_label as seat_rows %}
+        <div class="screen-preview__screen"></div>
+        {% for row in seat_rows %}
+        <div class="screen-preview__row">
+          <span class="screen-preview__label">{{ row.grouper }}</span>
+          <div class="screen-preview__cells">
+            {% for seat in row.list %}
+              {% if seat.gap_before %}
+              <span class="screen-preview__cell screen-preview__cell--aisle" title="Aisle"></span>
+              {% endif %}
+              <form method="post" class="d-inline" title="Seat {{ seat.seat_number }}{% if seat.seat_type == 'couple' %} (Couple){% elif seat.seat_type == 'wheelchair' %} (Wheelchair){% endif %}">
+                {% csrf_token %}
+                <input type="hidden" name="seat_id" value="{{ seat.id }}">
+                {% if seat.is_booked %}
+                <button type="submit" name="action" value="unblock_seat" class="screen-preview__cell screen-preview__cell--booked">
+                {% else %}
+                <button type="submit" name="action" value="block_seat" class="screen-preview__cell{% if seat.seat_type == 'couple' %} screen-preview__cell--couple{% elif seat.seat_type == 'wheelchair' %} screen-preview__cell--wheelchair{% endif %}">
+                {% endif %}
+                </button>
+              </form>
+            {% empty %}
+            <p class="text-muted">No seats found for this show. Generate seats first.</p>
+            {% endfor %}
+          </div>
+        </div>
+        {% empty %}
+        <p class="text-muted text-center py-4">No seats found for this show. Generate seats first.</p>
+        {% endfor %}
+        <div class="screen-preview__legend">
+          <span><span class="screen-preview__dot screen-preview__dot--seat"></span>Available</span>
+          <span><span class="screen-preview__dot" style="background: var(--accent-primary);"></span>Booked</span>
+          <span><span class="screen-preview__dot screen-preview__dot--couple"></span>Couple</span>
+          <span><span class="screen-preview__dot screen-preview__dot--wheelchair"></span>Wheelchair</span>
+          <span><span class="screen-preview__dot screen-preview__dot--aisle"></span>Aisle</span>
         </div>
         {% else %}
         <p class="text-muted text-center py-4">Select a show to view seats.</p>

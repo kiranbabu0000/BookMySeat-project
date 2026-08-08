@@ -125,9 +125,15 @@
         <div class="col-md-8">
           <div class="row g-3">
             <div class="col-md-6">
-              <label class="form-label fw-semibold small">Movie Name</label>
+              <label class="form-label fw-semibold small">Movie / Event Name</label>
               {{ form.name }}
               {% if form.name.errors %}<div class="invalid-feedback d-block">{{ form.name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Category</label>
+              {{ form.category }}
+              {% if form.category.errors %}<div class="invalid-feedback d-block">{{ form.category.errors.0 }}</div>{% endif %}
+              <div class="form-text text-muted">Pick a Laughing Therapy or Live Concert to publish an event instead of a movie.</div>
             </div>
             <div class="col-md-3">
               <label class="form-label fw-semibold small">Duration (min)</label>
@@ -143,6 +149,11 @@
               <label class="form-label fw-semibold small">Description</label>
               {{ form.description }}
               {% if form.description.errors %}<div class="invalid-feedback d-block">{{ form.description.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-12">
+              <label class="form-label fw-semibold small">Story / Synopsis</label>
+              {{ form.story }}
+              {% if form.story.errors %}<div class="invalid-feedback d-block">{{ form.story.errors.0 }}</div>{% endif %}
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold small">Certificate (Age Rating)</label>
@@ -255,6 +266,26 @@
             <label class="form-label fw-semibold small">Producer</label>
             {{ form.producer }}
             {% if form.producer.errors %}<div class="invalid-feedback d-block">{{ form.producer.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Writer</label>
+            {{ form.writer }}
+            {% if form.writer.errors %}<div class="invalid-feedback d-block">{{ form.writer.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Music Director</label>
+            {{ form.music_director }}
+            {% if form.music_director.errors %}<div class="invalid-feedback d-block">{{ form.music_director.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Cinematographer</label>
+            {{ form.cinematographer }}
+            {% if form.cinematographer.errors %}<div class="invalid-feedback d-block">{{ form.cinematographer.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Production Company</label>
+            {{ form.production_company }}
+            {% if form.production_company.errors %}<div class="invalid-feedback d-block">{{ form.production_company.errors.0 }}</div>{% endif %}
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold small">Trailer URL</label>

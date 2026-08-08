@@ -11,9 +11,7 @@
         <div class="card border-0 shadow-sm p-4 p-md-5" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
           <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
             <div>
-              <span class="badge bg-danger mb-2">
-                {% if demo_checkout %}Secure Checkout (Demo){% else %}Secure Checkout{% endif %}
-              </span>
+              <span class="badge bg-danger mb-2">Secure Checkout</span>
               <h1 class="h3 fw-bold mb-1" style="color: var(--text-primary);">{{ reservation.show.movie.name }}</h1>
               <p class="text-muted mb-0">
                 <i class="bi bi-building me-1 text-danger"></i>{{ reservation.show.name }}
@@ -24,7 +22,7 @@
               <div class="reservation-timer-bar__info">
                 <i class="bi bi-hourglass-split me-1"></i>
                 <span>Complete payment in</span>
-                <strong id="reservationTimer">02:00</strong>
+                <strong id="reservationTimer">05:00</strong>
               </div>
             </div>
           </div>
@@ -96,11 +94,8 @@
           </button>
 
           {% if demo_checkout %}
-          <button type="button" class="btn btn-bms-outline w-100 justify-content-center py-2 mt-2" id="failBtn">
-            <i class="bi bi-x-circle me-1"></i> Simulate Payment Failure
-          </button>
           <p class="text-muted small text-center mt-3 mb-0">
-            <i class="bi bi-shield-lock me-1"></i>Demo checkout — no real money is charged. The same signature-verified
+            <i class="bi bi-shield-lock me-1"></i>Test checkout — no real money is charged. The same signature-verified
             flow used in production runs here, so the experience matches live payments exactly.
           </p>
           {% else %}
@@ -132,11 +127,11 @@
     var token = '{{ reservation.token }}';
     var timerEl = document.getElementById('reservationTimer');
     var payBtn = document.getElementById('payBtn');
-    var failBtn = document.getElementById('failBtn');
     var feedbackEl = document.getElementById('paymentFeedback');
     var csrf = document.getElementById('csrfToken').value;
     var couponCodeInput = document.getElementById('couponCodeInput');
     var demoCheckout = {{ demo_checkout|yesno:"true,false" }};
+    var modalOpen = false;
     var startUrl = '{{ start_payment_url|escapejs }}';
     var verifyUrl = '{{ verify_payment_url|escapejs }}';
     var failedUrl = '{{ failed_payment_url|escapejs }}';
@@ -160,7 +155,7 @@
     function tick() {
       var remaining = Math.max(0, Math.floor((expiresAt.getTime() - timeOffsetMs - Date.now()) / 1000));
       timerEl.textContent = pad(Math.floor(remaining / 60)) + ':' + pad(remaining % 60);
-      if (remaining <= 0) {
+      if (remaining <= 0 && !modalOpen) {
         clearInterval(handle);
         fetch('/movies/api/reservation/' + token + '/release/', {
           method: 'POST',
@@ -168,6 +163,17 @@
           body: '{}'
         }).catch(function () {});
         window.location.href = bookSeatsUrl;
+      }
+    }
+
+    function resetDeadline(holdSeconds) {
+      var s = Number(holdSeconds);
+      if (!isNaN(s) && s > 0) {
+        expiresAt = new Date(Date.now() + s * 1000);
+        timeOffsetMs = 0;
+        clearInterval(handle);
+        handle = setInterval(tick, 1000);
+        tick();
       }
     }
 
@@ -250,13 +256,11 @@
     function lockCheckout() {
       payBtn.disabled = true;
       payBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Processing payment\u2026';
-      if (failBtn) { failBtn.disabled = true; }
     }
 
     function enableCheckout() {
       payBtn.disabled = false;
       payBtn.innerHTML = '<i class="bi bi-lock-fill me-1"></i> Pay <span id="payBtnAmt">' + fmt(currentTotal) + '</span> Securely';
-      if (failBtn) { failBtn.disabled = false; }
     }
 
     function handleFailure(data) {
@@ -268,12 +272,24 @@
       enableCheckout();
     }
 
+    function recordCancelled(orderId) {
+      if (!modalOpen) return;
+      modalOpen = false;
+      postJson(failedUrl, {
+        razorpay_order_id: orderId,
+        razorpay_payment_id: '',
+        error: 'Payment cancelled by user',
+        payment_method: ''
+      }).catch(function () {});
+      showFeedback('Payment cancelled. Your seats are still held for a few minutes — you can retry.', false);
+      enableCheckout();
+    }
+
     function verify(orderId, paymentId, signature) {
       postJson(verifyUrl, {
         razorpay_order_id: orderId,
         razorpay_payment_id: paymentId,
         razorpay_signature: signature,
-        payment_method: 'upi',
         demo: demoCheckout
       }).then(function (data) {
         if (data.ok && data.confirmation_url) {
@@ -308,14 +324,37 @@
           order_id: checkout.order_id,
           name: 'BookMySeat',
           description: 'Movie tickets',
+          config: {
+            display: {
+              blocks: {
+                upi: { name: 'Pay via UPI', instruments: [{ method: 'upi' }] },
+                card: { name: 'Cards', instruments: [{ method: 'card' }] },
+                netbanking: { name: 'Net Banking', instruments: [{ method: 'netbanking' }] },
+                wallet: { name: 'Wallets', instruments: [{ method: 'wallet' }] },
+                emi: { name: 'EMI', instruments: [{ method: 'emi' }] }
+              },
+              sequence: ['block.upi', 'block.card', 'block.netbanking', 'block.wallet', 'block.emi'],
+              preferences: { show_default_blocks: true }
+            }
+          },
           handler: function (response) {
+            modalOpen = false;
             verify(response.razorpay_order_id, response.razorpay_payment_id, response.razorpay_signature);
           },
-          modal: { ondismiss: function () { enableCheckout(); } },
+          modal: { ondismiss: function () { recordCancelled(checkout.order_id); } },
           theme: { color: '#dc2626' },
           prefill: { name: '{{ user.get_full_name|escapejs|default:user.username }}', email: '{{ user.email|escapejs }}' }
         };
         var rzp = new Razorpay(options);
+        if (window.console && window.console.log) {
+          console.log('[BookMySeat] Razorpay options:', {
+            key: options.key, amount: options.amount, currency: options.currency,
+            order_id: options.order_id, name: options.name, description: options.description,
+            prefill: options.prefill, theme: options.theme, modal: options.modal
+          });
+        }
+        modalOpen = true;
+        resetDeadline(checkout.hold_seconds);
         rzp.open();
       }).catch(function () {
         showFeedback('Could not reach the payment service. Please try again.', false);
@@ -327,33 +366,6 @@
       if (payBtn.disabled) return;
       startCheckout();
     });
-
-    if (failBtn) {
-      failBtn.addEventListener('click', function () {
-        if (failBtn.disabled) return;
-        lockCheckout();
-        postJson(startUrl, { coupon_code: couponCodeInput.value || '' }).then(function (data) {
-          if (!data.ok) { handleFailure(data); return; }
-          var orderId = data.checkout.order_id;
-          return postJson(failedUrl, {
-            razorpay_order_id: orderId,
-            razorpay_payment_id: 'pay_DEMO_failed',
-            error: 'Simulated payment failure',
-            payment_method: 'upi'
-          });
-        }).then(function (data) {
-          if (data && data.ok) {
-            showFeedback('Payment failed. Your seats are still held — you can retry.', false);
-          } else {
-            handleFailure(data || {});
-          }
-          enableCheckout();
-        }).catch(function () {
-          showFeedback('Could not record the failure. Please try again.', false);
-          enableCheckout();
-        });
-      });
-    }
   })();
 </script>
 {% endblock %}

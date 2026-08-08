@@ -65,10 +65,21 @@ class Theatre(models.Model):
 
 
 class Screen(models.Model):
+    SIZE_CHOICES = [
+        ('small', 'Small'),
+        ('medium', 'Medium'),
+        ('large', 'Large'),
+        ('imax', 'IMAX'),
+        ('premium', 'Premium'),
+    ]
     theatre = models.ForeignKey(Theatre, on_delete=models.CASCADE, related_name='screens')
     name = models.CharField(max_length=100)
     capacity = models.PositiveIntegerField(default=0)
     seat_layout = models.TextField(blank=True, null=True, help_text="Describe seat layout (e.g., A1-A20, B1-B20)")
+    size = models.CharField(max_length=20, choices=SIZE_CHOICES, default='small', help_text="Screen class; drives the default seat layout")
+    rows = models.PositiveIntegerField(default=0, help_text="Number of seat rows in the layout")
+    cols_per_section = models.PositiveIntegerField(default=0, help_text="Max seats per section (left/right of the aisle) in a row")
+    layout_spec = models.JSONField(default=dict, blank=True, help_text="Full seat-layout definition used to generate seats for shows on this screen")
 
     class Meta:
         ordering = ['theatre', 'name']
@@ -76,6 +87,14 @@ class Screen(models.Model):
 
     def __str__(self):
         return f'{self.name} - {self.theatre.name}'
+
+    def get_layout_spec(self):
+        """Return an effective layout spec, generating a default one if none set."""
+        from admin_panel.layouts import build_layout_spec, SCREEN_SIZES
+        if self.layout_spec:
+            return self.layout_spec
+        size = self.size if self.size in SCREEN_SIZES else 'small'
+        return build_layout_spec(size)
 
 
 class Show(models.Model):
@@ -90,13 +109,14 @@ class Show(models.Model):
     theatre = models.ForeignKey(Theatre, on_delete=models.CASCADE, related_name='shows')
     screen = models.ForeignKey(Screen, on_delete=models.CASCADE, related_name='shows')
     theater = models.OneToOneField('movies.Theater', on_delete=models.SET_NULL, null=True, blank=True, related_name='admin_show', help_text="Linked booking-flow show (movies.Theater) kept in sync with this Show")
-    date = models.DateField()
-    time = models.TimeField()
+    date = models.DateField(db_index=True)
+    time = models.TimeField(db_index=True)
     ticket_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active', db_index=True)
 
     class Meta:
         ordering = ['date', 'time']
+        unique_together = ['movie', 'theatre', 'screen', 'date', 'time']
 
     def __str__(self):
         return f'{self.movie.name} - {self.theatre.name} - {self.date} {self.time}'
@@ -173,7 +193,7 @@ class AuditLog(models.Model):
     object_id = models.PositiveIntegerField(null=True, blank=True)
     details = models.TextField(blank=True)
     ip_address = models.GenericIPAddressField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -254,6 +274,9 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'is_read']),
+        ]
 
     def __str__(self):
         return self.title
@@ -275,6 +298,9 @@ class Review(models.Model):
     class Meta:
         ordering = ['-created_at']
         unique_together = ['movie', 'user']
+        indexes = [
+            models.Index(fields=['movie', 'is_approved', 'is_hidden']),
+        ]
 
     def __str__(self):
         return f'{self.user.username} - {self.movie.name} ({self.rating}/5)'
@@ -362,3 +388,17 @@ class PaymentTransaction(models.Model):
 
     def __str__(self):
         return f'PaymentTransaction {self.gateway_order_id or self.id} - {self.status}'
+
+
+class ReviewHelpful(models.Model):
+    """Records a user marking a review as helpful (one vote per user per review)."""
+    review = models.ForeignKey(Review, on_delete=models.CASCADE, related_name='helpful_votes')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='review_helpful_votes')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['review', 'user']
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.user.username} -> helpful: {self.review.id}'

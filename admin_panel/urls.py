@@ -45,6 +45,7 @@ urlpatterns = [
     path('screens/add/', views.ScreenCreateView.as_view(), name='admin_screen_add'),
     path('screens/<int:pk>/edit/', views.ScreenUpdateView.as_view(), name='admin_screen_edit'),
     path('screens/<int:pk>/delete/', views.ScreenDeleteView.as_view(), name='admin_screen_delete'),
+    path('screens/preview/', views.screen_layout_preview, name='admin_screen_preview'),
 
     path('shows/', views.ShowListView.as_view(), name='admin_show_list'),
     path('shows/add/', views.ShowCreateView.as_view(), name='admin_show_add'),

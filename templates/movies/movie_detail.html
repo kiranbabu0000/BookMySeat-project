@@ -11,7 +11,10 @@
     <nav aria-label="breadcrumb">
       <ol class="breadcrumb breadcrumb-bms">
         <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
-        <li class="breadcrumb-item"><a href="{% url 'movie_list' %}">Movies</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'movie_list' %}{% if movie.category != 'movie' %}?category={{ movie.category }}{% endif %}">
+          {% if movie.category == 'laughing_therapy' %}Laughing Therapy
+          {% elif movie.category == 'live_concert' %}Live Concerts
+          {% else %}Movies{% endif %}</a></li>
         <li class="breadcrumb-item active" aria-current="page">{{ movie.name }}</li>
       </ol>
     </nav>
@@ -39,6 +42,9 @@
             <div class="movie-hero__info">
               <h1 class="movie-hero__title">{{ movie.name }}</h1>
               <div class="movie-hero__badges">
+                {% if movie.category != 'movie' %}
+                <span class="badge-bms-primary">{{ movie.get_category_display }}</span>
+                {% endif %}
                 {% if movie.certificate %}
                 <span class="badge-bms-outline">{{ movie.certificate }}</span>
                 {% endif %}
@@ -75,7 +81,7 @@
               {% if movie.genres.all %}
               <div class="movie-hero__genres">
                 {% for genre in movie.genres.all %}
-                <a href="{% url 'movie_list' %}?genre={{ genre.slug }}" class="genre-tag">{{ genre.name }}</a>
+                <a href="{% url 'movie_list' %}?{% if movie.category != 'movie' %}category={{ movie.category }}&{% endif %}genre={{ genre.slug }}" class="genre-tag">{{ genre.name }}</a>
                 {% endfor %}
               </div>
               {% endif %}
@@ -83,39 +89,27 @@
               <div class="movie-hero__langs">
                 <i class="bi bi-translate"></i>
                 {% for lang in movie.languages.all %}
-                <a href="{% url 'movie_list' %}?language={{ lang.code }}" class="lang-tag">{{ lang.name }}</a>
+                <a href="{% url 'movie_list' %}?{% if movie.category != 'movie' %}category={{ movie.category }}&{% endif %}language={{ lang.code }}" class="lang-tag">{{ lang.name }}</a>
                 {% endfor %}
               </div>
-              {% endif %}
-              {% if movie.director %}
-              <p class="movie-hero__meta"><strong>Director:</strong> {{ movie.director }}</p>
-              {% endif %}
-              {% if movie.producer %}
-              <p class="movie-hero__meta"><strong>Producer:</strong> {{ movie.producer }}</p>
-              {% endif %}
-              {% if movie.cast %}
-              <p class="movie-hero__meta"><strong>Cast:</strong> {{ movie.cast|truncatewords:20 }}</p>
-              {% endif %}
-              {% if movie.description %}
-              <p class="movie-hero__desc">{{ movie.description }}</p>
               {% endif %}
               <div class="movie-hero__actions">
                 {% if movie.status == 'now_showing' %}
                 <a href="{% url 'theater_list' movie.id %}" class="btn btn-bms-primary btn-lg">
-                  <i class="bi bi-ticket-perforated"></i> Book Now
+                  <i class="bi bi-ticket-perforated"></i> {% if movie.category != 'movie' %}Book Tickets{% else %}Book Now{% endif %}
                 </a>
                 {% endif %}
                 {% if user.is_authenticated %}
                 <form method="post" action="{% url 'toggle_wishlist' movie.id %}" style="display:inline;">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-outline-bms btn-lg {% if in_wishlist %}btn-bms-wishlist{% endif %}" id="wishlist-toggle-btn">
+                  <button type="submit" class="btn btn-bms-outline btn-lg {% if in_wishlist %}btn-bms-wishlist{% endif %}" id="wishlist-toggle-btn">
                     <i class="bi {% if in_wishlist %}bi-heart-fill{% else %}bi-heart{% endif %}"></i>
                     {% if in_wishlist %}In Wishlist{% else %}Add to Wishlist{% endif %}
                   </button>
                 </form>
                 {% endif %}
-                {% if movie.trailer_url %}
-                <a href="{{ movie.trailer_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-bms btn-lg">
+                {% if movie.category == 'movie' and movie.trailer_url %}
+                <a href="{{ movie.trailer_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-bms-outline btn-lg">
                   <i class="bi bi-play-circle"></i> Watch Trailer
                 </a>
                 {% endif %}
@@ -126,11 +120,95 @@
       </div>
     </div>
 
+    <!-- About the Movie -->
+    <section class="detail-section" id="about">
+      <div class="section-header">
+        <h2 class="section-title">{% if movie.category == 'movie' %}About the Movie{% else %}About the Event{% endif %}</h2>
+      </div>
+      {% if movie.description %}
+      <p class="about-desc">{{ movie.description }}</p>
+      {% endif %}
+      {% if movie.story and movie.category == 'movie' %}
+      <div class="about-story">
+        <h3 class="about-story__title">Story</h3>
+        <p class="about-story__text">{{ movie.story }}</p>
+      </div>
+      {% endif %}
+      <div class="about-grid">
+        {% if movie.certificate %}
+        <div class="about-item">
+          <span class="about-item__label">Certificate</span>
+          <span class="about-item__value">{{ movie.certificate }}</span>
+        </div>
+        {% endif %}
+        {% if movie.duration %}
+        <div class="about-item">
+          <span class="about-item__label">Duration</span>
+          <span class="about-item__value">{{ movie.duration }} min</span>
+        </div>
+        {% endif %}
+        {% if movie.release_date %}
+        <div class="about-item">
+          <span class="about-item__label">Release Date</span>
+          <span class="about-item__value">{{ movie.release_date|date:"M d, Y" }}</span>
+        </div>
+        {% endif %}
+        {% if movie.languages.all %}
+        <div class="about-item">
+          <span class="about-item__label">Languages</span>
+          <span class="about-item__value">{% for lang in movie.languages.all %}{{ lang.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+        </div>
+        {% endif %}
+        {% if movie.genres.all %}
+        <div class="about-item">
+          <span class="about-item__label">Genres</span>
+          <span class="about-item__value">{% for genre in movie.genres.all %}{{ genre.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+        </div>
+        {% endif %}
+        {% if movie.director %}
+        <div class="about-item">
+          <span class="about-item__label">Director</span>
+          <span class="about-item__value">{{ movie.director }}</span>
+        </div>
+        {% endif %}
+        {% if movie.producer %}
+        <div class="about-item">
+          <span class="about-item__label">Producer</span>
+          <span class="about-item__value">{{ movie.producer }}</span>
+        </div>
+        {% endif %}
+        {% if movie.writer %}
+        <div class="about-item">
+          <span class="about-item__label">Writer</span>
+          <span class="about-item__value">{{ movie.writer }}</span>
+        </div>
+        {% endif %}
+        {% if movie.music_director %}
+        <div class="about-item">
+          <span class="about-item__label">Music Director</span>
+          <span class="about-item__value">{{ movie.music_director }}</span>
+        </div>
+        {% endif %}
+        {% if movie.cinematographer %}
+        <div class="about-item">
+          <span class="about-item__label">Cinematographer</span>
+          <span class="about-item__value">{{ movie.cinematographer }}</span>
+        </div>
+        {% endif %}
+        {% if movie.production_company %}
+        <div class="about-item">
+          <span class="about-item__label">Production</span>
+          <span class="about-item__value">{{ movie.production_company }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+
     <!-- Cast Section -->
     {% if cast_members %}
     <section class="detail-section" id="cast">
       <div class="section-header">
-        <h2 class="section-title">Cast &amp; Crew</h2>
+        <h2 class="section-title">{% if movie.category == 'movie' %}Cast{% else %}Line Up{% endif %}</h2>
       </div>
       <div class="cast-grid">
         {% for member in cast_members %}
@@ -155,126 +233,32 @@
     </section>
     {% endif %}
 
-    <!-- Gallery Section -->
-    {% if gallery %}
-    <section class="detail-section" id="gallery">
+    <!-- Crew Section -->
+    {% if crew %}
+    <section class="detail-section" id="crew">
       <div class="section-header">
-        <h2 class="section-title">Gallery</h2>
+        <h2 class="section-title">Crew</h2>
       </div>
-      <div class="gallery-grid">
-        {% for img in gallery %}
-        <a href="{{ img.image.url }}" class="gallery-item" data-lightbox="movie-gallery" data-title="{{ img.caption|default:movie.name }}">
-          <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Gallery image' }}" loading="lazy">
-          {% if img.caption %}
-          <div class="gallery-item__caption">{{ img.caption }}</div>
-          {% endif %}
-        </a>
-        {% endfor %}
-      </div>
-    </section>
-    {% endif %}
-
-    <!-- Trailers Section -->
-    {% if trailers %}
-    <section class="detail-section" id="trailers">
-      <div class="section-header">
-        <h2 class="section-title">Trailers &amp; Videos</h2>
-      </div>
-      <div class="trailers-grid">
-        {% for trailer in trailers %}
-        <div class="trailer-card">
-          <div class="trailer-card__embed">
-            {% with embed=trailer.url|youtube_embed %}
-            {% if embed %}
-            <iframe src="{{ embed }}" title="{{ trailer.title|default:'Trailer' }}" frameborder="0" allowfullscreen loading="lazy"></iframe>
-            {% endif %}
-            {% endwith %}
+      <div class="crew-grid">
+        {% for member in crew %}
+        <div class="crew-card">
+          <div class="crew-card__icon"><i class="bi bi-person-badge"></i></div>
+          <div class="crew-card__info">
+            <h4 class="crew-card__name">{{ member.name }}</h4>
+            <span class="crew-card__role">{{ member.role }}</span>
           </div>
-          {% if trailer.title %}
-          <div class="trailer-card__info">
-            <h4>{{ trailer.title }}</h4>
-            {% if trailer.is_featured %}<span class="badge-bms-primary">Featured</span>{% endif %}
-          </div>
-          {% endif %}
         </div>
         {% endfor %}
       </div>
     </section>
     {% endif %}
 
-    <!-- Show Timings -->
-    {% if shows or theaters %}
-    <section class="detail-section" id="showtimes">
-      <div class="section-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-          <h2 class="section-title">Show Timings</h2>
-          <p class="section-subtitle text-muted mb-0">Select a showtime to book your seats</p>
-        </div>
-        <a href="{% url 'theater_list' movie.id %}" class="btn btn-bms-primary">
-          <i class="bi bi-ticket-perforated"></i> Book Now
-        </a>
-      </div>
-
-      {% if theaters %}
-      <div class="row">
-        {% for theater in theaters %}
-        <div class="col-md-6 col-lg-4 mb-3">
-          <div class="showtime-card">
-            <div class="showtime-card__header">
-              <h3 class="showtime-card__name">{{ theater.name }}</h3>
-              <span class="badge-bms-outline">{{ theater.time|date:"D, M d" }}</span>
-            </div>
-            <div class="showtime-card__body">
-              <span class="showtime-card__time">{{ theater.time|date:"g:i A" }}</span>
-              {% if theater.screen_name %}
-              <small class="text-muted d-block">{{ theater.screen_name }}</small>
-              {% endif %}
-            </div>
-            <div class="showtime-card__footer">
-              <a href="{% url 'book_seats' theater.id %}" class="btn btn-bms-primary btn-sm w-100">Book Seats</a>
-            </div>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-      {% elif shows %}
-      {% regroup shows by theatre as theatre_list %}
-      {% for theatre_group in theatre_list %}
-      <div class="card mb-3" style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-lg);">
-        <div class="card-body">
-          <h4 class="mb-1" style="color:var(--text-primary);">{{ theatre_group.grouper.name }}</h4>
-          {% if theatre_group.grouper.location %}
-          <p class="small text-muted mb-3">{{ theatre_group.grouper.location }}</p>
-          {% endif %}
-          {% regroup theatre_group.list by screen as screen_list %}
-          {% for screen_group in screen_list %}
-          <div class="mb-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <strong class="text-muted small">{{ screen_group.grouper.name }}</strong>
-              <span class="text-muted small">Capacity: {{ screen_group.grouper.capacity }}</span>
-            </div>
-            <div class="d-flex flex-wrap gap-2">
-              {% for show in screen_group.list %}
-              <span class="btn btn-sm" style="background:var(--bg-tertiary); color:var(--text-primary); border:1px solid var(--border-color); cursor:default;">
-                {{ show.time|time:"g:i A" }}<br><small class="text-muted">&#8377;{{ show.ticket_price }}</small>
-              </span>
-              {% endfor %}
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-      </div>
-      {% endfor %}
-      {% endif %}
-    </section>
-    {% endif %}
-
-    <!-- Reviews Section -->
+    <!-- Top Verified Reviews -->
     <section class="detail-section" id="reviews">
       <div class="section-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
           <h2 class="section-title">
-            Reviews
+            Top Verified Reviews
             {% if total_reviews > 0 %}
             <span class="text-muted fs-6 fw-normal">({{ total_reviews }})</span>
             {% endif %}
@@ -387,7 +371,7 @@
         {% else %}
         <div class="alert alert-bms alert-info mb-4">
           <i class="bi bi-info-circle me-2"></i>
-          You need to book a ticket and watch the show before you can write a review.
+          You need to book a ticket and attend the show before you can write a review.
           <a href="{% url 'theater_list' movie.id %}" class="alert-link">Book Now</a>
         </div>
         {% endif %}
@@ -395,6 +379,50 @@
       <div class="alert alert-bms alert-info mb-4">
         <i class="bi bi-info-circle me-2"></i>
         <a href="{% url 'login' %}?next={{ request.path }}" class="alert-link">Log in</a> to write a review.
+      </div>
+      {% endif %}
+
+      {% if verified_reviews %}
+      <div class="verified-reviews mb-4">
+        {% for review in verified_reviews %}
+        <div class="review-card">
+          <div class="review-card__avatar">
+            <div class="review-card__avatar-placeholder">
+              {{ review.user.username|first|upper }}
+            </div>
+          </div>
+          <div class="review-card__body">
+            <div class="review-card__header">
+              <strong class="review-card__user">{{ review.user.username }}</strong>
+              {% if review.booking %}
+              <span class="review-card__verified" title="Verified ticket buyer">
+                <i class="bi bi-patch-check-fill"></i> Verified Viewer
+              </span>
+              {% endif %}
+              <span class="review-card__date">{{ review.created_at|date:"M d, Y" }}</span>
+            </div>
+            <div class="review-card__rating">
+              {% for i in "12345" %}
+              <i class="bi bi-star{% if forloop.counter <= review.rating %}-fill text-warning{% else %} text-muted{% endif %}"></i>
+              {% endfor %}
+            </div>
+            <p class="review-card__comment">{{ review.comment }}</p>
+            <div class="review-card__actions mt-2">
+              {% if user.is_authenticated and review.user != user %}
+              <form method="POST" action="{% url 'helpful_review' review.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-bms-outline {% if review.id in user_helpful_ids %}btn-bms-wishlist{% endif %}">
+                  <i class="bi bi-hand-thumbs-up{% if review.id in user_helpful_ids %}-fill{% endif %}"></i>
+                  Helpful ({{ review.helpful_count }})
+                </button>
+              </form>
+              {% else %}
+              <span class="helpful-count"><i class="bi bi-hand-thumbs-up"></i> {{ review.helpful_count }} helpful</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
       </div>
       {% endif %}
 
@@ -428,6 +456,13 @@
             {% endif %}
             <div class="review-card__actions mt-2">
               {% if user.is_authenticated and review.user != user %}
+              <form method="POST" action="{% url 'helpful_review' review.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-bms-outline {% if review.id in user_helpful_ids %}btn-bms-wishlist{% endif %}">
+                  <i class="bi bi-hand-thumbs-up{% if review.id in user_helpful_ids %}-fill{% endif %}"></i>
+                  Helpful ({{ review.helpful_count }})
+                </button>
+              </form>
               <form method="POST" action="{% url 'report_review' review.id %}" class="d-inline"
                     onsubmit="return confirm('Report this review as inappropriate?')">
                 {% csrf_token %}
@@ -435,12 +470,44 @@
                   <i class="bi bi-flag"></i> Report
                 </button>
               </form>
+              {% elif review.user == user %}
+              <span class="helpful-count"><i class="bi bi-hand-thumbs-up"></i> {{ review.helpful_count }} helpful</span>
+              {% else %}
+              <span class="helpful-count"><i class="bi bi-hand-thumbs-up"></i> {{ review.helpful_count }} helpful</span>
               {% endif %}
             </div>
           </div>
         </div>
         {% endfor %}
       </div>
+
+      {% if reviews.has_other_pages %}
+      <nav class="mt-4" aria-label="Review pages">
+        <ul class="pagination justify-content-center">
+          {% if reviews.has_previous %}
+          <li class="page-item">
+            <a class="page-link" href="?rpage={{ reviews.previous_page_number }}#reviews" aria-label="Previous">
+              <span aria-hidden="true">&laquo;</span>
+            </a>
+          </li>
+          {% endif %}
+          {% for num in reviews.paginator.page_range %}
+          {% if num == reviews.number %}
+          <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+          {% elif num >= reviews.number|add:"-2" and num <= reviews.number|add:"2" %}
+          <li class="page-item"><a class="page-link" href="?rpage={{ num }}#reviews">{{ num }}</a></li>
+          {% endif %}
+          {% endfor %}
+          {% if reviews.has_next %}
+          <li class="page-item">
+            <a class="page-link" href="?rpage={{ reviews.next_page_number }}#reviews" aria-label="Next">
+              <span aria-hidden="true">&raquo;</span>
+            </a>
+          </li>
+          {% endif %}
+        </ul>
+      </nav>
+      {% endif %}
       {% else %}
       <div class="empty-state">
         <div class="empty-state__icon"><i class="bi bi-chat-square-text"></i></div>
@@ -449,43 +516,63 @@
       {% endif %}
     </section>
 
-    <!-- Similar Movies -->
+    <!-- More Like This -->
     {% if similar_movies %}
     <section class="detail-section" id="similar">
       <div class="section-header">
-        <h2 class="section-title">Similar Movies</h2>
+        <h2 class="section-title">{% if movie.category == 'movie' %}More Like This{% else %}More Events Like This{% endif %}</h2>
+        <a href="{% url 'movie_list' %}{% if movie.category != 'movie' %}?category={{ movie.category }}{% endif %}" class="section-link">View All <i class="bi bi-arrow-right"></i></a>
       </div>
-      <div class="row">
+      <div class="movie-rail stagger-children">
         {% for sm in similar_movies %}
-          {% include 'partials/_movie_card.html' with movie=sm %}
+          {% include 'partials/_movie_card.html' with movie=sm rail=True %}
         {% endfor %}
       </div>
     </section>
     {% endif %}
 
-    <!-- Trending Movies -->
-    {% if trending_movies %}
-    <section class="detail-section" id="trending">
+    <!-- Gallery Section -->
+    {% if gallery %}
+    <section class="detail-section" id="gallery">
       <div class="section-header">
-        <h2 class="section-title">Trending Now</h2>
+        <h2 class="section-title">Gallery</h2>
       </div>
-      <div class="row">
-        {% for tm in trending_movies %}
-          {% include 'partials/_movie_card.html' with movie=tm %}
+      <div class="gallery-grid">
+        {% for img in gallery %}
+        <a href="{{ img.image.url }}" class="gallery-item" data-lightbox="movie-gallery" data-title="{{ img.caption|default:movie.name }}">
+          <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Gallery image' }}" loading="lazy">
+          {% if img.caption %}
+          <div class="gallery-item__caption">{{ img.caption }}</div>
+          {% endif %}
+        </a>
         {% endfor %}
       </div>
     </section>
     {% endif %}
 
-    <!-- Recently Released -->
-    {% if recently_released %}
-    <section class="detail-section" id="recent">
+    <!-- Trailers Section -->
+    {% if trailers and movie.category == 'movie' %}
+    <section class="detail-section" id="trailers">
       <div class="section-header">
-        <h2 class="section-title">Recently Released</h2>
+        <h2 class="section-title">Trailers &amp; Videos</h2>
       </div>
-      <div class="row">
-        {% for rr in recently_released %}
-          {% include 'partials/_movie_card.html' with movie=rr %}
+      <div class="trailers-grid">
+        {% for trailer in trailers %}
+        <div class="trailer-card">
+          <div class="trailer-card__embed">
+            {% with embed=trailer.url|youtube_embed %}
+            {% if embed %}
+            <iframe src="{{ embed }}" title="{{ trailer.title|default:'Trailer' }}" frameborder="0" allowfullscreen loading="lazy"></iframe>
+            {% endif %}
+            {% endwith %}
+          </div>
+          {% if trailer.title %}
+          <div class="trailer-card__info">
+            <h4>{{ trailer.title }}</h4>
+            {% if trailer.is_featured %}<span class="badge-bms-primary">Featured</span>{% endif %}
+          </div>
+          {% endif %}
+        </div>
         {% endfor %}
       </div>
     </section>
@@ -597,20 +684,64 @@
   text-decoration: none;
 }
 .lang-tag:hover { color: var(--accent-gold); }
-.movie-hero__meta {
-  color: var(--text-secondary);
-  margin-bottom: 0.25rem;
-  font-size: 0.9rem;
-}
-.movie-hero__desc {
-  color: var(--text-secondary);
-  margin-top: 0.75rem;
-  line-height: 1.7;
-}
 .movie-hero__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
   margin-top: 1.5rem;
+}
+
+/* About */
+.about-desc {
+  color: var(--text-secondary);
+  line-height: 1.8;
+  margin-bottom: 1rem;
+  max-width: 75ch;
+}
+.about-story {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--accent-primary);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.about-story__title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+.about-story__text {
+  color: var(--text-secondary);
+  line-height: 1.75;
+  margin: 0;
+}
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+.about-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.about-item__label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.about-item__value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 /* Cast */
@@ -671,6 +802,56 @@
   background: rgba(212,175,55,0.12);
   padding: 0.15rem 0.5rem;
   border-radius: var(--radius-pill);
+}
+
+/* Crew */
+.crew-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.9rem;
+}
+.crew-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  transition: all var(--transition-fast);
+}
+.crew-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+}
+.crew-card__icon {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--accent-primary);
+}
+.crew-card__info {
+  min-width: 0;
+}
+.crew-card__name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crew-card__role {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 /* Gallery */
@@ -740,39 +921,6 @@
   color: var(--text-primary);
 }
 
-/* Showtime Card */
-.showtime-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-.showtime-card__header {
-  padding: 1rem;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.showtime-card__name {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-.showtime-card__body {
-  padding: 1rem;
-  text-align: center;
-}
-.showtime-card__time {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--accent-gold);
-}
-.showtime-card__footer {
-  padding: 0 1rem 1rem;
-}
-
 /* Rating Summary */
 .rating-summary {
   background: var(--bg-card);
@@ -825,6 +973,14 @@
 .star-rating__stars label:hover ~ label {
   color: #ffc107;
 }
+.verified-reviews {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.verified-reviews .review-card {
+  border-left: 3px solid var(--accent-gold);
+}
 .reviews-list {
   display: flex;
   flex-direction: column;
@@ -866,10 +1022,13 @@
 }
 .review-card__verified {
   font-size: 0.75rem;
-  color: #0d6efd;
+  color: var(--accent-success);
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
+  background: color-mix(in srgb, var(--accent-success) 12%, transparent);
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-pill);
 }
 .review-card__date {
   font-size: 0.75rem;
@@ -889,6 +1048,13 @@
   line-height: 1.6;
 }
 .review-card__comment:empty { display: none; }
+.helpful-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
 
 /* Sections */
 .detail-section {

@@ -2,23 +2,107 @@
 {% block title %}{% if object %}Edit{% else %}Add{% endif %} Screen{% endblock %}
 {% block page_title %}{% if object %}Edit Screen{% else %}Add New Screen{% endif %}{% endblock %}
 {% block content %}
-<div class="card-bms" style="max-width: 600px;">
-  <div class="card-bms-body">
-    <form method="post">{% csrf_token %}
-      <div class="row g-3">
-        {% for field in form %}
-        <div class="col-md-6">
-          <label class="form-label fw-semibold small">{{ field.label }}</label>
-          {{ field }}
-          {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors.0 }}</div>{% endif %}
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card-bms">
+      <div class="card-bms-body">
+        <form method="post" id="screenForm">{% csrf_token %}
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold small">{{ form.theatre.label }}</label>
+              {{ form.theatre }}
+              {% if form.theatre.errors %}<div class="invalid-feedback d-block">{{ form.theatre.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.name.label }}</label>
+              {{ form.name }}
+              {% if form.name.errors %}<div class="invalid-feedback d-block">{{ form.name.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.size.label }}</label>
+              {{ form.size }}
+              {% if form.size.errors %}<div class="invalid-feedback d-block">{{ form.size.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">{{ form.capacity.label }}</label>
+              {{ form.capacity }}
+              {% if form.capacity.errors %}<div class="invalid-feedback d-block">{{ form.capacity.errors.0 }}</div>{% endif %}
+              <div class="form-text">Computed automatically from the layout.</div>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Seat Layout Description</label>
+              {{ form.seat_layout }}
+              <div class="form-text">Free-text description of the layout (e.g. "VIP rows H–J, recliners").</div>
+            </div>
+          </div>
+          <div class="mt-4">
+            <button type="submit" class="btn btn-bms-primary"><i class="bi bi-check-lg"></i> {% if object %}Update{% else %}Create{% endif %} Screen</button>
+            <a href="{% url 'admin_screen_list' %}" class="btn btn-outline-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card-bms">
+      <div class="card-bms-body">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h6 class="fw-semibold mb-0"><i class="bi bi-grid-3x3-gap me-2 text-primary"></i>Layout Preview</h6>
+          <span class="badge-bms-info" id="previewBadge">{{ preview_capacity|default:0 }} seats</span>
         </div>
-        {% endfor %}
+        <div class="screen-preview-wrap">
+          <div class="screen-preview__screen"></div>
+          <div id="previewRows" class="screen-preview" data-url="{% url 'admin_screen_preview' %}">
+            {% for row in preview_rows %}
+            <div class="screen-preview__row">
+              <span class="screen-preview__label">{{ row.label }}</span>
+              <div class="screen-preview__cells">
+                {% for cell in row.cells %}
+                <span class="screen-preview__cell screen-preview__cell--{{ cell }}"></span>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="screen-preview__legend">
+            <span><i class="screen-preview__dot screen-preview__dot--seat"></i>Seat</span>
+            <span><i class="screen-preview__dot screen-preview__dot--couple"></i>Couple</span>
+            <span><i class="screen-preview__dot screen-preview__dot--wheelchair"></i>Wheelchair</span>
+            <span><i class="screen-preview__dot screen-preview__dot--aisle"></i>Aisle</span>
+          </div>
+        </div>
       </div>
-      <div class="mt-4">
-        <button type="submit" class="btn btn-bms-primary"><i class="bi bi-check-lg"></i> {% if object %}Update{% else %}Create{% endif %} Screen</button>
-        <a href="{% url 'admin_screen_list' %}" class="btn btn-outline-secondary">Cancel</a>
-      </div>
-    </form>
+    </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var sizeSelect = document.getElementById('{{ form.size.id_for_label }}');
+  var wrap = document.getElementById('previewRows');
+  var badge = document.getElementById('previewBadge');
+  if (!sizeSelect || !wrap) return;
+  sizeSelect.addEventListener('change', function () {
+    var url = wrap.dataset.url + '?size=' + encodeURIComponent(sizeSelect.value);
+    fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data.preview_rows) return;
+        var html = data.preview_rows.map(function (row) {
+          var cells = row.cells.map(function (cell) {
+            return '<span class="screen-preview__cell screen-preview__cell--' + cell + '"></span>';
+          }).join('');
+          return '<div class="screen-preview__row"><span class="screen-preview__label">' + row.label + '</span>' +
+                 '<div class="screen-preview__cells">' + cells + '</div></div>';
+        }).join('');
+        wrap.innerHTML = html;
+        badge.textContent = data.capacity + ' seats';
+        var cap = document.getElementById('{{ form.capacity.id_for_label }}');
+        if (cap) cap.value = data.capacity;
+      }).catch(function () {});
+  });
+})();
+</script>
 {% endblock %}

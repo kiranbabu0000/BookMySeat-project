@@ -1,89 +1,200 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Movies{% endblock %}
 
 {% block content %}
 <section class="page-section">
   <div class="container-bms">
-    <div class="section-header">
+    <div class="section-header d-flex flex-wrap justify-content-between align-items-end gap-3">
       <div>
-        <h1 class="section-title">Movies</h1>
-        <p class="section-subtitle text-muted mb-0">Discover and book the latest releases</p>
+        <h1 class="section-title">
+          {% if params.category == 'laughing_therapy' %}Laughing Therapy
+          {% elif params.category == 'live_concert' %}Live Concerts
+          {% else %}Movies{% endif %}
+        </h1>
+        <p class="section-subtitle text-muted mb-0">Search, filter and sort{% if params.category == 'movie' %} the latest releases{% else %} upcoming events{% endif %}</p>
       </div>
     </div>
 
-    <!-- Search & Filters -->
-    <div class="row justify-content-center mb-4">
-      <div class="col-lg-8">
-        <form method="GET" action="{% url 'movie_list' %}" role="search">
-          <div class="input-group input-group-lg mb-3">
-            <span class="input-group-text bg-transparent border-end-0" style="border-color: var(--border-color);">
-              <i class="bi bi-search text-muted"></i>
-            </span>
-            <input type="search" name="search" class="form-control form-bms border-start-0"
-                   placeholder="Search movies by title..."
-                   value="{{ request.GET.search|default:'' }}"
-                   aria-label="Search movies"
-                   id="movieSearchInput">
-            <button class="btn btn-bms-primary px-4" type="submit">Search</button>
-          </div>
-          <div class="d-flex flex-wrap gap-2">
-            <select name="genre" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
-              <option value="">All Genres</option>
-              {% for g in genres %}
-              <option value="{{ g.slug }}" {% if request.GET.genre == g.slug %}selected{% endif %}>{{ g.name }}</option>
-              {% endfor %}
-            </select>
-            <select name="language" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
-              <option value="">All Languages</option>
-              {% for l in languages %}
-              <option value="{{ l.code }}" {% if request.GET.language == l.code %}selected{% endif %}>{{ l.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </form>
+    <form id="discoveryForm" method="get" action="{% url 'movie_list' %}" role="search" novalidate>
+      <div class="discovery-tabs mb-3" role="group" aria-label="Browse by category">
+        {% for value, label in category_options %}
+        <a href="?{% if params.category != value %}category={{ value }}{% endif %}"
+           class="discovery-tab{% if params.category == value %} is-active{% endif %}">{{ label }}</a>
+        {% endfor %}
       </div>
-    </div>
+      <!-- Toolbar: search + sort -->
+      <div class="discovery-toolbar">
+        <div class="discovery-toolbar__search position-relative">
+          <i class="bi bi-search discovery-toolbar__search-icon" aria-hidden="true"></i>
+          <input type="search" name="search" class="form-control form-bms discovery-toolbar__input"
+                 placeholder="{% if params.category == 'movie' %}Search movies by title...{% else %}Search events by name...{% endif %}"
+                 value="{{ params.search|default:'' }}"
+                 aria-label="Search" id="movieSearchInput" autocomplete="off">
+          <div id="discoverySuggestions" class="search-suggestions d-none"></div>
+        </div>
+        <div class="discovery-toolbar__sort">
+          <label for="sortSelect" class="visually-hidden">Sort movies</label>
+          <select name="sort" id="sortSelect" class="form-select form-select-sm form-bms" onchange="this.form.requestSubmit()">
+            <option value="popularity" {% if params.sort == 'popularity' %}selected{% endif %}>Popularity</option>
+            <option value="newest" {% if params.sort == 'newest' %}selected{% endif %}>Newest Releases</option>
+            <option value="rating" {% if params.sort == 'rating' %}selected{% endif %}>Highest Rating</option>
+            <option value="price_asc" {% if params.sort == 'price_asc' %}selected{% endif %}>Price (Low to High)</option>
+            <option value="price_desc" {% if params.sort == 'price_desc' %}selected{% endif %}>Price (High to Low)</option>
+            <option value="alpha_asc" {% if params.sort == 'alpha_asc' %}selected{% endif %}>Name (A-Z)</option>
+            <option value="alpha_desc" {% if params.sort == 'alpha_desc' %}selected{% endif %}>Name (Z-A)</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-bms-outline discovery-toolbar__clear {% if params.category == 'movie' and not params.search and not params.genres and not params.languages and not params.city and not params.theatre_id and not params.release and not params.rating and not params.timings %}d-none{% endif %}" data-clear-filters>
+          <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Clear All
+        </button>
+      </div>
 
-    <!-- Results -->
-    <div class="row" id="movieList">
-      {% for movie in movies %}
-        {% include 'partials/_movie_card.html' with movie=movie %}
-      {% empty %}
-      <div class="col-12">
-        <div class="empty-state">
-          <div class="empty-state__icon"><i class="bi bi-search"></i></div>
-          <h2 class="empty-state__title">No movies found</h2>
-          <p class="empty-state__text">
-            {% if request.GET.search %}
-            No results for "{{ request.GET.search }}". Try a different search term.
-            {% else %}
-            No movies are available at the moment.
-            {% endif %}
-          </p>
-          <a href="{% url 'movie_list' %}" class="btn btn-bms-primary">View All Movies</a>
+      <div class="row g-4">
+        <!-- Filters sidebar -->
+        <div class="col-lg-3">
+          <button class="btn btn-bms-outline w-100 d-lg-none mb-3" type="button" data-bs-toggle="collapse"
+                  data-bs-target="#discoveryFilters" aria-expanded="false" aria-controls="discoveryFilters">
+            <i class="bi bi-funnel me-1" aria-hidden="true"></i> Filters
+          </button>
+          <div class="collapse d-lg-block" id="discoveryFilters">
+            <aside class="discovery-filters" aria-label="Movie filters">
+              <div class="discovery-filter-group"
+                   onchange="this.closest('form').requestSubmit()">
+                <h2 class="discovery-filter-group__title">Genres</h2>
+                {% for genre in genres %}
+                <label class="discovery-check">
+                  <input type="checkbox" name="genre" value="{{ genre.slug }}"
+                         {% if genre.slug in params.genres %}checked{% endif %}>
+                  <span>{{ genre.name }}</span>
+                </label>
+                {% empty %}
+                <p class="text-muted small mb-0">No genres available.</p>
+                {% endfor %}
+              </div>
+
+              <div class="discovery-filter-group"
+                   onchange="this.closest('form').requestSubmit()">
+                <h2 class="discovery-filter-group__title">Languages</h2>
+                {% for language in languages %}
+                <label class="discovery-check">
+                  <input type="checkbox" name="language" value="{{ language.code }}"
+                         {% if language.code in params.languages %}checked{% endif %}>
+                  <span>{{ language.name }}</span>
+                </label>
+                {% empty %}
+                <p class="text-muted small mb-0">No languages available.</p>
+                {% endfor %}
+              </div>
+
+              <div class="discovery-filter-group"
+                   onchange="this.closest('form').requestSubmit()">
+                <h2 class="discovery-filter-group__title">City</h2>
+                <select name="city" class="form-select form-select-sm form-bms" id="citySelect">
+                  <option value="">All Cities</option>
+                  {% for city in cities %}
+                  <option value="{{ city }}" {% if params.city == city %}selected{% endif %}>{{ city }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="discovery-filter-group"
+                   onchange="this.closest('form').requestSubmit()">
+                <h2 class="discovery-filter-group__title">Theatre</h2>
+                <select name="theatre" class="form-select form-select-sm form-bms" id="theatreSelect">
+                  <option value="">All Theatres</option>
+                  {% for theatre in theatres %}
+                  <option value="{{ theatre.id }}" data-city="{{ theatre.city|default:'' }}"
+                          {% if params.theatre_id == theatre.id %}selected{% endif %}>{{ theatre.name }}{% if theatre.city %} ({{ theatre.city }}){% endif %}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="discovery-filter-group"
+                   onchange="this.closest('form').requestSubmit()">
+                <h2 class="discovery-filter-group__title">Release Date</h2>
+                <select name="release" class="form-select form-select-sm form-bms">
+                  <option value="">Any Time</option>
+                  <option value="this_week" {% if params.release == 'this_week' %}selected{% endif %}>This Week</option>
+                  <option value="this_month" {% if params.release == 'this_month' %}selected{% endif %}>This Month</option>
+                  <option value="last_3_months" {% if params.release == 'last_3_months' %}selected{% endif %}>Last 3 Months</option>
+                  <option value="last_year" {% if params.release == 'last_year' %}selected{% endif %}>Last Year</option>
+                </select>
+              </div>
+
+              <div class="discovery-filter-group"
+                   onchange="this.closest('form').requestSubmit()">
+                <h2 class="discovery-filter-group__title">Rating</h2>
+                <select name="rating" class="form-select form-select-sm form-bms">
+                  <option value="">Any Rating</option>
+                  <option value="4" {% if params.rating == 4 %}selected{% endif %}>4+ stars</option>
+                  <option value="5" {% if params.rating == 5 %}selected{% endif %}>5+ stars</option>
+                  <option value="6" {% if params.rating == 6 %}selected{% endif %}>6+ stars</option>
+                  <option value="7" {% if params.rating == 7 %}selected{% endif %}>7+ stars</option>
+                  <option value="8" {% if params.rating == 8 %}selected{% endif %}>8+ stars</option>
+                  <option value="9" {% if params.rating == 9 %}selected{% endif %}>9+ stars</option>
+                </select>
+              </div>
+
+              <div class="discovery-filter-group"
+                   onchange="this.closest('form').requestSubmit()">
+                <h2 class="discovery-filter-group__title">Show Timing</h2>
+                <label class="discovery-check">
+                  <input type="checkbox" name="timing" value="morning" {% if 'morning' in params.timings %}checked{% endif %}>
+                  <span>Morning</span>
+                </label>
+                <label class="discovery-check">
+                  <input type="checkbox" name="timing" value="afternoon" {% if 'afternoon' in params.timings %}checked{% endif %}>
+                  <span>Afternoon</span>
+                </label>
+                <label class="discovery-check">
+                  <input type="checkbox" name="timing" value="evening" {% if 'evening' in params.timings %}checked{% endif %}>
+                  <span>Evening</span>
+                </label>
+                <label class="discovery-check">
+                  <input type="checkbox" name="timing" value="night" {% if 'night' in params.timings %}checked{% endif %}>
+                  <span>Night</span>
+                </label>
+              </div>
+
+              <button type="submit" class="btn btn-bms-primary w-100 mt-3">
+                <i class="bi bi-funnel me-1" aria-hidden="true"></i> Apply Filters
+              </button>
+            </aside>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div class="col-lg-9">
+          {% if recommended %}
+          <section class="discovery-recommended mb-4" aria-label="Recommended for you">
+            <div class="section-header">
+              <h2 class="section-title">Recommended for You</h2>
+              <p class="section-subtitle text-muted mb-0">Picked from your bookings and interests</p>
+            </div>
+            <div class="row g-3 stagger-children">
+              {% for movie in recommended %}
+                {% include 'partials/_movie_card.html' with movie=movie %}
+              {% endfor %}
+            </div>
+          </section>
+          {% endif %}
+
+          <div id="discoveryResults" class="position-relative">
+            <div id="discoveryLoading" class="discovery-loading d-none" role="status" aria-live="polite">
+              <div class="spinner-border text-danger" role="status" aria-hidden="true"></div>
+              <span class="visually-hidden">Loading movies&hellip;</span>
+            </div>
+            {% include 'movies/_movie_results.html' %}
+          </div>
         </div>
       </div>
-      {% endfor %}
-    </div>
+    </form>
   </div>
 </section>
 {% endblock %}
 
 {% block extra_js %}
-<script>
-  document.addEventListener('DOMContentLoaded', function () {
-    var input = document.getElementById('movieSearchInput');
-    if (!input) return;
-    input.addEventListener('input', function () {
-      var term = this.value.toLowerCase();
-      document.querySelectorAll('#movieList .movie-card').forEach(function (card) {
-        var title = card.querySelector('.movie-card__title');
-        var col = card.closest('[class*="col-"]');
-        if (!title || !col) return;
-        col.style.display = title.textContent.toLowerCase().includes(term) ? '' : 'none';
-      });
-    });
-  });
-</script>
+<script src="{% static 'js/discovery.js' %}?v=202608"></script>
 {% endblock %}

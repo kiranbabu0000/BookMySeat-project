@@ -11,7 +11,9 @@ Security model
 * Coupon codes are bound to the transaction at checkout start and reused at
   confirmation, so a client cannot swap coupons after an order is created.
 """
+import logging
 import secrets
+from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
@@ -23,6 +25,14 @@ from . import gateway
 from .models import Reservation
 from .notifications import send_booking_confirmation
 from .services import ReservationError, confirm_booking, reservation_pricing
+
+logger = logging.getLogger(__name__)
+
+# A real Razorpay checkout (filling card details, 3-D Secure, etc.) takes longer
+# than the seat-selection hold, so once a real order is created the reservation
+# is given a fresh grace window. Demo checkout completes instantly and keeps the
+# original hold.
+PAYMENT_HOLD_SECONDS = 600
 
 
 class PaymentError(Exception):
@@ -149,6 +159,12 @@ def start_checkout(user, token, coupon_code=''):
                 tx.payload = {'order': order}
             tx.save(update_fields=['gateway_order_id', 'payload', 'is_demo', 'updated_at'])
 
+        if not gateway.demo_mode():
+            reservation.expires_at = timezone.now() + timedelta(
+                seconds=PAYMENT_HOLD_SECONDS
+            )
+            reservation.save(update_fields=['expires_at', 'updated_at'])
+
     checkout = {
         'key': settings.RAZORPAY_KEY_ID if not gateway.demo_mode() else '',
         'order_id': tx.gateway_order_id,
@@ -162,16 +178,26 @@ def start_checkout(user, token, coupon_code=''):
         checkout['demo_signature'] = gateway.demo_signature(
             tx.gateway_order_id, 'pay_DEMO_pending'
         )
+    logger.info(
+        'start_checkout: reservation=%s tx=%s order=%s key=%s amount=%s paise currency=%s demo=%s hold_seconds=%s',
+        reservation.token, tx.id, tx.gateway_order_id, checkout['key'],
+        checkout['amount'], checkout['currency'], checkout['demo'], checkout['hold_seconds'],
+    )
     return tx, checkout
 
 
 def _verify_capture(tx, gateway_payment_id, gateway_signature, demo):
-    """Verify the payment really belongs to this order and matches the amount."""
+    """Verify the payment really belongs to this order and matches the amount.
+
+    Returns the verified payment entity (None in demo mode) so callers can
+    record the exact payment method reported by the gateway instead of a
+    client-supplied label.
+    """
     if demo:
         expected = gateway.demo_signature(tx.gateway_order_id, gateway_payment_id)
         if not secrets.compare_digest(expected, gateway_signature or ''):
             raise PaymentError('Payment signature verification failed.')
-        return
+        return None
 
     if not gateway.verify_payment_signature(
         tx.gateway_order_id, gateway_payment_id, gateway_signature
@@ -187,6 +213,7 @@ def _verify_capture(tx, gateway_payment_id, gateway_signature, demo):
         raise PaymentError('Payment amount does not match the order.')
     if payment.get('status') not in ('captured', 'authorized'):
         raise PaymentError('Payment has not been captured.')
+    return payment
 
 
 def verify_and_confirm(user, token, *, gateway_order_id, gateway_payment_id,
@@ -198,6 +225,11 @@ def verify_and_confirm(user, token, *, gateway_order_id, gateway_payment_id,
     """
     reservation, _ = _owned_active_reservation(user, token)
     tx = _transaction_for_order(user, gateway_order_id)
+    logger.info(
+        'verify_and_confirm callback: reservation=%s order=%s payment=%s signature=%s... demo=%s tx=%s tx.status=%s',
+        token, gateway_order_id, gateway_payment_id, (gateway_signature or '')[:16],
+        demo, tx.pk, tx.status,
+    )
 
     if not demo and not gateway.demo_mode():
         if tx.reservation_id != reservation.id:
@@ -212,7 +244,14 @@ def verify_and_confirm(user, token, *, gateway_order_id, gateway_payment_id,
             'Please contact support.'
         )
 
-    _verify_capture(tx, gateway_payment_id, gateway_signature, demo)
+    verified_payment = _verify_capture(
+        tx, gateway_payment_id, gateway_signature, demo
+    )
+    payment_method = (verified_payment or {}).get('method') or method
+    logger.info(
+        'Payment verified for order=%s payment=%s method=%s demo=%s',
+        gateway_order_id, gateway_payment_id, payment_method, demo,
+    )
 
     with transaction.atomic():
         locked = (
@@ -235,7 +274,7 @@ def verify_and_confirm(user, token, *, gateway_order_id, gateway_payment_id,
                 user,
                 token,
                 transaction_id=gateway_payment_id,
-                payment_method=method,
+                payment_method=payment_method,
                 coupon_code=applied_coupon or None,
             )
         except ReservationError as exc:
@@ -245,7 +284,7 @@ def verify_and_confirm(user, token, *, gateway_order_id, gateway_payment_id,
                     status='captured',
                     gateway_payment_id=gateway_payment_id,
                     gateway_signature=gateway_signature,
-                    method=method,
+                    method=payment_method,
                     captured_at=timezone.now(),
                     payload=dict(locked.payload or {}, **{'payment_id': gateway_payment_id}),
                     updated_at=timezone.now(),
@@ -257,7 +296,7 @@ def verify_and_confirm(user, token, *, gateway_order_id, gateway_payment_id,
             status='captured',
             gateway_payment_id=gateway_payment_id,
             gateway_signature=gateway_signature,
-            method=method,
+            method=payment_method,
             captured_at=timezone.now(),
             payload=dict(locked.payload or {}, **{'payment_id': gateway_payment_id}),
             updated_at=timezone.now(),
@@ -287,6 +326,10 @@ def record_failure(user, token, *, gateway_order_id, gateway_payment_id,
             raise PaymentError('No active payment order found for this reservation.')
     if tx.status == 'captured':
         return tx
+    logger.info(
+        'Payment attempt recorded as failed: reservation=%s order=%s payment=%s reason=%s',
+        token, gateway_order_id, gateway_payment_id, failure_reason,
+    )
     tx.status = 'failed'
     tx.gateway_payment_id = gateway_payment_id or tx.gateway_payment_id
     tx.failure_reason = (failure_reason or '')[:255]
@@ -370,7 +413,8 @@ def handle_webhook(body, signature):
         raise PaymentError('Invalid webhook payload.') from None
 
     event = payload.get('event', '')
-    if event in ('payment.captured', 'order.paid'):
+    logger.info('Razorpay webhook event received: %s', event)
+    if event in ('payment.authorized', 'payment.captured', 'order.paid'):
         _webhook_payment_captured(payload)
     elif event == 'payment.failed':
         _webhook_payment_failed(payload)

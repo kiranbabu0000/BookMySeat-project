@@ -45,15 +45,18 @@ class MovieForm(forms.ModelForm):
     class Meta:
         model = Movie
         fields = [
-            'name', 'description', 'duration', 'release_date', 'certificate',
+            'name', 'category', 'description', 'story', 'duration', 'release_date', 'certificate',
             'rating', 'imdb_rating', 'image', 'thumbnail', 'banner', 'cast',
-            'director', 'producer', 'trailer_url', 'status',
+            'director', 'producer', 'writer', 'music_director', 'cinematographer',
+            'production_company', 'trailer_url', 'status',
             'show_on_homepage',
             'genres', 'languages',
         ]
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'category': forms.Select(attrs={'class': 'form-select'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
+            'story': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'duration': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Duration in minutes'}),
             'release_date': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'certificate': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'U, UA, A'}),
@@ -65,6 +68,10 @@ class MovieForm(forms.ModelForm):
             'cast': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'director': forms.TextInput(attrs={'class': 'form-control'}),
             'producer': forms.TextInput(attrs={'class': 'form-control'}),
+            'writer': forms.TextInput(attrs={'class': 'form-control'}),
+            'music_director': forms.TextInput(attrs={'class': 'form-control'}),
+            'cinematographer': forms.TextInput(attrs={'class': 'form-control'}),
+            'production_company': forms.TextInput(attrs={'class': 'form-control'}),
             'trailer_url': forms.URLInput(attrs={'class': 'form-control'}),
             'status': forms.Select(attrs={'class': 'form-select'}),
             'show_on_homepage': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -191,13 +198,35 @@ class TheatreForm(forms.ModelForm):
 class ScreenForm(forms.ModelForm):
     class Meta:
         model = Screen
-        fields = ['theatre', 'name', 'capacity', 'seat_layout']
+        fields = ['theatre', 'name', 'size', 'capacity', 'seat_layout']
         widgets = {
             'theatre': forms.Select(attrs={'class': 'form-select'}),
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Screen name (e.g., Screen 1)'}),
-            'capacity': forms.NumberInput(attrs={'class': 'form-control'}),
+            'size': forms.Select(attrs={'class': 'form-select'}),
+            'capacity': forms.NumberInput(attrs={'class': 'form-control', 'readonly': 'readonly'}),
             'seat_layout': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
+
+    def clean(self):
+        cleaned = super().clean()
+        from admin_panel.layouts import build_layout_spec, capacity_of
+        size = cleaned.get('size') or getattr(self.instance, 'size', 'small') or 'small'
+        spec = build_layout_spec(size)
+        cleaned['capacity'] = capacity_of(spec)
+        cleaned['rows'] = spec['rows']
+        cleaned['cols_per_section'] = spec['cols_per_section']
+        cleaned['layout_spec'] = spec
+        return cleaned
+
+    def save(self, commit=True):
+        screen = super().save(commit=False)
+        screen.capacity = self.cleaned_data.get('capacity') or screen.capacity
+        screen.rows = self.cleaned_data.get('rows') or 0
+        screen.cols_per_section = self.cleaned_data.get('cols_per_section') or 0
+        screen.layout_spec = self.cleaned_data.get('layout_spec') or screen.layout_spec
+        if commit:
+            screen.save()
+        return screen
 
 
 class ShowForm(forms.ModelForm):

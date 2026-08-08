@@ -1,9 +1,9 @@
 from django.contrib import admin
 from .models import (
     CastMember, Theatre, Screen, Show, Trailer, MovieImage,
-    AdminProfile, AdminPermission, AuditLog, Coupon, Notification, Review, Payment
+    AdminProfile, AdminPermission, AuditLog, Coupon, Notification, Review, ReviewHelpful, Payment
 )
-from movies.models import Reservation, ReservedSeat
+from movies.models import Reservation, ReservedSeat, EmailOutbox
 
 
 @admin.register(Reservation)
@@ -93,7 +93,22 @@ class ReviewAdmin(admin.ModelAdmin):
     list_filter = ['is_approved', 'rating']
 
 
+@admin.register(ReviewHelpful)
+class ReviewHelpfulAdmin(admin.ModelAdmin):
+    list_display = ['review', 'user', 'created_at']
+    list_filter = ['created_at']
+
+
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
     list_display = ['booking', 'amount', 'payment_method', 'status', 'paid_at']
     list_filter = ['status', 'payment_method']
+
+
+@admin.register(EmailOutbox)
+class EmailOutboxAdmin(admin.ModelAdmin):
+    list_display = ['recipient', 'subject', 'status', 'attempts', 'next_attempt_at', 'created_at', 'sent_at']
+    list_filter = ['status', 'created_at']
+    search_fields = ['recipient', 'subject']
+    readonly_fields = ['recipient', 'subject', 'status', 'attempts', 'next_attempt_at',
+                       'last_error', 'created_at', 'updated_at', 'sent_at']

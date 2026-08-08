@@ -1,11 +1,13 @@
 from django.urls import path
-from .views import register, login_view, profile, reset_password, home, user_logout_view, toggle_wishlist, wishlist, my_notifications, mark_notification_read
+from .views import register, login_view, register_otp, register_otp_resend, profile, reset_password, home, user_logout_view, toggle_wishlist, wishlist, my_notifications, mark_notification_read
 from django.contrib.auth import views as auth_views
 
 urlpatterns = [
     path('',home,name='home'),
     path('register/', register, name='register'),
     path('login/', login_view, name='login'),
+    path('register/otp/', register_otp, name='register_otp'),
+    path('register/otp/resend/', register_otp_resend, name='register_otp_resend'),
     path('profile/', profile, name='profile'),
     path('wishlist/', wishlist, name='wishlist'),
     path('wishlist/toggle/<int:movie_id>/', toggle_wishlist, name='toggle_wishlist'),

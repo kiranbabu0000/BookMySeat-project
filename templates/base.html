@@ -34,9 +34,18 @@
   <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasNav" aria-labelledby="offcanvasNavLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="offcanvasNavLabel">
-        <a class="navbar-brand" href="{% url 'home' %}">
-          <span class="brand-icon"><i class="bi bi-film"></i></span>
-          BookMySeat
+        <a class="navbar-brand" href="{% url 'home' %}" aria-label="BookMySeat Home">
+          <img src="{% static 'img/logo.png' %}" alt="" class="brand-logo">
+          <span class="brand-text-wrap">
+            <span class="brand-title">
+              <span class="brand-book">Book</span><span class="brand-my">My</span><span class="brand-seat">Seat</span>
+            </span>
+            <span class="brand-tagline" aria-hidden="true">
+              <span class="brand-tagline-line">&mdash;</span>
+              Your Show <span class="brand-tagline-dot">.</span> Your Seat
+              <span class="brand-tagline-line">&mdash;</span>
+            </span>
+          </span>
         </a>
       </h5>
       <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
@@ -87,54 +96,163 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="{% static 'js/main.js' %}"></script>
+  <script src="{% static 'js/city.js' %}?v=202608"></script>
   <script>
   document.addEventListener('DOMContentLoaded', function() {
     var input = document.getElementById('navbarSearchInput');
     var suggestions = document.getElementById('searchSuggestions');
+    var form = document.getElementById('navbarSearchForm');
     if (!input || !suggestions) return;
+    var RECENT_KEY = 'bms_recent_searches';
     var debounceTimer;
+    var lastQuery = '';
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function(c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function highlightName(name, term) {
+      var text = escapeHtml(name);
+      if (!term) return text;
+      var idx = name.toLowerCase().indexOf(term.toLowerCase());
+      if (idx === -1) return text;
+      return text.slice(0, idx) + '<mark>' + text.slice(idx, idx + term.length) + '</mark>' + text.slice(idx + term.length);
+    }
+    function getRecent() {
+      try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch (e) { return []; }
+    }
+    function saveRecent(q) {
+      if (!q) return;
+      var items = getRecent().filter(function(x) { return x.toLowerCase() !== q.toLowerCase(); });
+      items.unshift(q);
+      try { localStorage.setItem(RECENT_KEY, JSON.stringify(items.slice(0, 6))); } catch (e) {}
+    }
+    function clearRecent() {
+      try { localStorage.removeItem(RECENT_KEY); } catch (e) {}
+      renderIdle();
+    }
+    function movieLink(m, term) {
+      var a = document.createElement('a');
+      a.href = m.url;
+      a.className = 'search-suggestions__item';
+      if (m.type === 'trending') {
+        var fire = document.createElement('i');
+        fire.className = 'bi bi-fire search-suggestions__icon';
+        fire.setAttribute('aria-hidden', 'true');
+        a.appendChild(fire);
+      }
+      var span = document.createElement('span');
+      span.className = 'search-suggestions__name';
+      span.innerHTML = term ? highlightName(m.name, term) : escapeHtml(m.name);
+      a.appendChild(span);
+      return a;
+    }
+    function header(text, icon) {
+      var h = document.createElement('div');
+      h.className = 'search-suggestions__header';
+      h.innerHTML = '<i class="bi ' + (icon || 'bi-search') + '"></i>' + escapeHtml(text);
+      return h;
+    }
+    function renderIdle() {
+      suggestions.innerHTML = '';
+      var recent = getRecent();
+      if (recent.length > 0) {
+        suggestions.appendChild(header('Recent Searches', 'bi-clock-history'));
+        recent.forEach(function(q) {
+          var item = document.createElement('a');
+          item.href = '#';
+          item.className = 'search-suggestions__item';
+          item.addEventListener('click', function(e) {
+            e.preventDefault();
+            input.value = q;
+            saveRecent(q);
+            if (form) form.submit();
+          });
+          var span = document.createElement('span');
+          span.className = 'search-suggestions__name';
+          span.textContent = q;
+          item.appendChild(span);
+          suggestions.appendChild(item);
+        });
+        var clear = document.createElement('button');
+        clear.type = 'button';
+        clear.className = 'search-suggestions__clear';
+        clear.textContent = 'Clear recent searches';
+        clear.addEventListener('click', function(e) {
+          e.preventDefault();
+          clearRecent();
+        });
+        suggestions.appendChild(clear);
+      }
+      suggestions.appendChild(header('Trending Now', 'bi-fire'));
+      var loader = document.createElement('div');
+      loader.className = 'search-suggestions__item disabled';
+      loader.textContent = 'Loading\u2026';
+      suggestions.appendChild(loader);
+      suggestions.classList.remove('d-none');
+      fetch('/search-suggestions/?q=')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (input.value.trim().length > 0) return;
+          loader.remove();
+          if (data.length === 0) {
+            suggestions.appendChild(emptyItem('Nothing trending right now'));
+          } else {
+            data.forEach(function(m) { suggestions.appendChild(movieLink(m, '')); });
+          }
+        })
+        .catch(function() { loader.remove(); });
+    }
+    function emptyItem(text) {
+      var d = document.createElement('div');
+      d.className = 'search-suggestions__item disabled';
+      d.textContent = text;
+      return d;
+    }
+    function renderResults(q) {
+      fetch('/search-suggestions/?q=' + encodeURIComponent(q))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (input.value.trim() !== q) return;
+          suggestions.innerHTML = '';
+          if (data.length === 0) {
+            suggestions.appendChild(emptyItem('No movies found for "' + escapeHtml(q) + '"'));
+          } else {
+            data.forEach(function(m) { suggestions.appendChild(movieLink(m, q)); });
+          }
+          suggestions.classList.remove('d-none');
+        })
+        .catch(function() {
+          if (input.value.trim() === q) suggestions.classList.add('d-none');
+        });
+    }
+
     input.addEventListener('input', function() {
       clearTimeout(debounceTimer);
       var q = this.value.trim();
+      lastQuery = q;
       if (q.length < 1) {
-        suggestions.classList.add('d-none');
-        suggestions.innerHTML = '';
+        renderIdle();
         return;
       }
-      debounceTimer = setTimeout(function() {
-        fetch('/search-suggestions/?q=' + encodeURIComponent(q))
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            suggestions.innerHTML = '';
-            if (data.length === 0) {
-              suggestions.innerHTML = '<div class="search-suggestions__item disabled">No movies found</div>';
-            } else {
-              data.forEach(function(m) {
-                var a = document.createElement('a');
-                a.href = m.url;
-                a.className = 'search-suggestions__item';
-                var span = document.createElement('span');
-                span.className = 'search-suggestions__name';
-                span.textContent = m.name;
-                a.appendChild(span);
-                suggestions.appendChild(a);
-              });
-            }
-            suggestions.classList.remove('d-none');
-          })
-          .catch(function() {
-            suggestions.classList.add('d-none');
-          });
-      }, 250);
+      debounceTimer = setTimeout(function() { renderResults(q); }, 250);
     });
+
+    input.addEventListener('focus', function() {
+      if (input.value.trim().length < 1) renderIdle();
+      else if (lastQuery) renderResults(lastQuery);
+    });
+
+    if (form) {
+      form.addEventListener('submit', function() {
+        saveRecent(input.value.trim());
+      });
+    }
+
     document.addEventListener('click', function(e) {
       if (!input.contains(e.target) && !suggestions.contains(e.target)) {
         suggestions.classList.add('d-none');
-      }
-    });
-    input.addEventListener('focus', function() {
-      if (suggestions.children.length > 0) {
-        suggestions.classList.remove('d-none');
       }
     });
   });

@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.db.models import Count, Q, Avg
+from django.template.loader import render_to_string
+from django.db.models import Q, Avg, Count, F
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, transaction
 from django.contrib import messages
@@ -10,12 +11,13 @@ from django.urls import reverse
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-from .models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, Wishlist, RESERVATION_HOLD_SECONDS
+from .models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, Wishlist, TicketDownload, RESERVATION_HOLD_SECONDS
 from . import gateway, payments
 from .payments import PaymentError
 from .services import (
     ReservationError,
     cancel_booking,
+    cancel_reservation_booking,
     confirm_booking,
     create_reservation,
     expire_stale_for_show,
@@ -26,37 +28,72 @@ from .services import (
     release_expired_reservations,
     reservation_pricing,
     seat_data_for_show,
+    seat_layout_for_show,
     seat_states_for_show,
 )
 from .notifications import send_booking_confirmation
-from admin_panel.models import CastMember, Trailer, MovieImage, Review, Genre, Language, Show, Theatre, Screen, PaymentTransaction
+from admin_panel.models import Review, ReviewHelpful, Show, PaymentTransaction, AuditLog
+from .qr import build_qr_payload, ticket_qr_data_uri
 import json
-import hashlib
 import secrets
+from datetime import date as date_type, timedelta
+from urllib.parse import quote
 
 
 def movie_list(request):
-    search_query = request.GET.get('search')
-    genre_slug = request.GET.get('genre')
-    lang_code = request.GET.get('language')
-    movies_qs = Movie.objects.filter(is_deleted=False).exclude(status__in=['archived', 'hidden'])
-    if search_query:
-        movies_qs = movies_qs.filter(name__icontains=search_query)
-    if genre_slug:
-        movies_qs = movies_qs.filter(genres__slug=genre_slug)
-    if lang_code:
-        movies_qs = movies_qs.filter(languages__code=lang_code)
-    paginator = Paginator(movies_qs, 20)
-    page_number = request.GET.get('page', 1)
-    movies = paginator.get_page(page_number)
-    active_movies = Movie.objects.filter(is_deleted=False).exclude(status__in=['archived', 'hidden'])
-    genres = Genre.objects.filter(movies__in=active_movies).distinct()
-    languages = Language.objects.filter(movies__in=active_movies).distinct()
-    return render(request, 'movies/movie_list.html', {
-        'movies': movies,
-        'genres': genres,
-        'languages': languages,
+    from . import discovery
+
+    params = discovery.DiscoveryParams.from_request(request)
+    if not params.city:
+        cookie_city = (request.COOKIES.get('bms_city') or '').strip()
+        if cookie_city in discovery.available_cities():
+            params.city = cookie_city
+    qs = discovery.discover_movies(params)
+    paginator = Paginator(qs, params.per_page)
+    page = paginator.get_page(params.page)
+    page_range = paginator.get_elided_page_range(page.number, on_each_side=2, on_ends=1)
+    qs_base = discovery.querystring(params)
+    prev_page = page.number - 1 if page.has_previous() else 1
+    next_page = page.number + 1 if page.has_next() else page.number
+
+    context = {
+        'movies': page,
+        'paginator': paginator,
+        'page_obj': page,
+        'page_range': page_range,
+        'prev_page': prev_page,
+        'next_page': next_page,
+        'total': paginator.count,
+        'qs_base': qs_base,
+        'params': params,
+        'category_options': [
+            (value, label)
+            for value, label in discovery.CATEGORY_LABELS.items()
+        ],
+    }
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        html = render_to_string('movies/_movie_results.html', context, request=request)
+        return JsonResponse({
+            'ok': True,
+            'html': html,
+            'count': paginator.count,
+            'page': page.number,
+            'pages': paginator.num_pages,
+            'has_prev': page.has_previous(),
+            'has_next': page.has_next(),
+        })
+
+    facets = discovery.facet_data()
+    context.update({
+        'genres': facets['genres'],
+        'languages': facets['languages'],
+        'cities': facets['cities'],
+        'theatres': facets['theatres'],
+        'chips': discovery.chip_data(params, facets),
+        'recommended': discovery.recommended_for_user(request, 8, params.category) if request.user.is_authenticated else [],
     })
+    return render(request, 'movies/movie_list.html', context)
 
 
 def movie_detail(request, movie_id):
@@ -67,17 +104,27 @@ def movie_detail(request, movie_id):
     if movie.status in ['archived', 'hidden']:
         from django.http import Http404
         raise Http404("Movie not available")
-    cast_members = CastMember.objects.filter(movie=movie)
-    gallery = MovieImage.objects.filter(movie=movie)
-    trailers = Trailer.objects.filter(movie=movie)
+    cast_members = movie.cast_members.all()
+    gallery = movie.gallery_images.all()
+    trailers = movie.trailers.all()
     review_base = Review.objects.filter(movie=movie, is_approved=True, is_hidden=False).select_related('user')
-    review_pages = Paginator(review_base, 10)
+    review_pages = Paginator(review_base.annotate(helpful_count=Count('helpful_votes')).order_by('-created_at'), 10)
     page_num = request.GET.get('rpage', 1)
     reviews = review_pages.get_page(page_num)
+    verified_reviews = Review.objects.filter(
+        movie=movie, is_approved=True, is_hidden=False, booking__isnull=False
+    ).select_related('user').annotate(
+        helpful_count=Count('helpful_votes')
+    ).order_by('-rating', '-created_at')[:5]
     user_review = None
+    user_helpful_ids = set()
     has_booked_and_completed = False
     if request.user.is_authenticated:
         user_review = Review.objects.filter(movie=movie, user=request.user).first()
+        user_helpful_ids = set(
+            ReviewHelpful.objects.filter(user=request.user, review__movie=movie)
+            .values_list('review_id', flat=True)
+        )
         user_bookings = Booking.objects.filter(movie=movie, user=request.user).select_related('theater')
         for b in user_bookings:
             duration_hours = (movie.duration or 180) / 60
@@ -87,15 +134,14 @@ def movie_detail(request, movie_id):
                 break
     avg_rating = review_base.aggregate(Avg('rating'))['rating__avg']
     total_reviews = review_base.count()
-    all_reviews = list(review_base)
     rating_dist = {i: 0 for i in range(1, 6)}
-    for r in all_reviews:
-        if r.rating in rating_dist:
-            rating_dist[r.rating] += 1
-    visible_filter = {'is_deleted': False}
-    similar_movies = Movie.objects.filter(genres__in=movie.genres.all(), **visible_filter).exclude(id=movie.id).exclude(status__in=['archived', 'hidden']).distinct()[:6]
-    trending_movies = Movie.objects.filter(**visible_filter).exclude(status__in=['archived', 'hidden']).annotate(booking_count=Count('booking')).exclude(id=movie.id).order_by('-booking_count')[:6]
-    recently_released = Movie.objects.filter(status='now_showing', **visible_filter).exclude(id=movie.id).order_by('-release_date')[:6]
+    for rating, count in review_base.values('rating').annotate(count=Count('rating')):
+        if rating in rating_dist:
+            rating_dist[rating] = count
+    from . import discovery
+    similar_movies = discovery.similar_movies(movie, 6)
+    trending_movies = discovery.trending_movies(6, movie.category)
+    recently_released = discovery.recently_released(6, movie.category)
     theaters = Theater.objects.filter(movie=movie, status='active').order_by('time')
     shows = Show.objects.filter(movie=movie, status='active').select_related('theatre', 'screen').order_by('date', 'time')
     recent_ids = request.session.get('recently_viewed', [])
@@ -105,12 +151,28 @@ def movie_detail(request, movie_id):
     in_wishlist = request.user.is_authenticated and Wishlist.objects.filter(
         user=request.user, movie=movie
     ).exists()
+    crew = []
+    if movie.director:
+        crew.append({'role': 'Director', 'name': movie.director})
+    if movie.producer:
+        crew.append({'role': 'Producer', 'name': movie.producer})
+    if movie.writer:
+        crew.append({'role': 'Writer', 'name': movie.writer})
+    if movie.music_director:
+        crew.append({'role': 'Music Director', 'name': movie.music_director})
+    if movie.cinematographer:
+        crew.append({'role': 'Cinematographer', 'name': movie.cinematographer})
+    if movie.production_company:
+        crew.append({'role': 'Production', 'name': movie.production_company})
     return render(request, 'movies/movie_detail.html', {
         'movie': movie,
         'cast_members': cast_members,
         'gallery': gallery,
         'trailers': trailers,
+        'crew': crew,
         'reviews': reviews,
+        'verified_reviews': verified_reviews,
+        'user_helpful_ids': user_helpful_ids,
         'user_review': user_review,
         'has_booked_and_completed': has_booked_and_completed,
         'avg_rating': round(avg_rating, 1) if avg_rating else None,
@@ -130,8 +192,59 @@ def theater_list(request, movie_id):
     if movie.status in ['archived', 'hidden']:
         from django.http import Http404
         raise Http404("Movie not available")
-    theater = Theater.objects.filter(movie=movie, status='active')
-    return render(request, 'movies/theater_list.html', {'movie': movie, 'theaters': theater})
+
+    today = timezone.now().date()
+    show_dates = [today + timedelta(days=i) for i in range(4)]
+    selected_date = today
+    raw_date = request.GET.get('date')
+    if raw_date:
+        try:
+            parsed = date_type.fromisoformat(raw_date)
+            if parsed in show_dates:
+                selected_date = parsed
+        except ValueError:
+            pass
+
+    theaters = (
+        Theater.objects.filter(
+            movie=movie, status='active', time__date=selected_date
+        )
+        .select_related('admin_show__theatre')
+    )
+    city = (request.GET.get('city') or request.COOKIES.get('bms_city') or '').strip()
+    if city:
+        theaters = theaters.filter(admin_show__theatre__city__iexact=city)
+    if selected_date == today:
+        theaters = theaters.exclude(time__lt=timezone.now())
+    theaters = theaters.order_by('name', 'screen_name', 'time')
+
+    date_tabs = [
+        {
+            'iso': d.isoformat(),
+            'label': 'Today' if d == today else d.strftime('%a'),
+            'day': d.day,
+            'month': d.strftime('%b'),
+            'is_today': d == today,
+            'is_selected': d == selected_date,
+        }
+        for d in show_dates
+    ]
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        html = render_to_string(
+            'movies/_theater_list_results.html',
+            {'movie': movie, 'theaters': theaters, 'selected_date': selected_date, 'city': city},
+            request=request,
+        )
+        return JsonResponse({'html': html, 'count': theaters.count()})
+
+    return render(request, 'movies/theater_list.html', {
+        'movie': movie,
+        'theaters': theaters,
+        'show_dates': date_tabs,
+        'selected_date': selected_date,
+        'city': city,
+    })
 
 
 def _reservation_payload(reservation):
@@ -187,7 +300,24 @@ def _parse_request_params(request):
 
 @login_required(login_url='/login/')
 def book_seats(request, theater_id):
-    show = get_object_or_404(Theater.objects.select_related('movie'), id=theater_id, status='active')
+    show = get_object_or_404(
+        Theater.objects.select_related('movie', 'admin_show__theatre'),
+        id=theater_id, status='active',
+    )
+    if show.time <= timezone.now():
+        messages.error(request, 'This show has already started and can no longer be booked.')
+        return redirect('theater_list', movie_id=show.movie_id)
+    from .services import MAX_TICKET_COUNT
+
+    raw_tickets = request.GET.get('tickets') or request.GET.get('ticket_count')
+    ticket_count = None
+    if raw_tickets:
+        try:
+            ticket_count = int(raw_tickets)
+        except (TypeError, ValueError):
+            ticket_count = None
+        if ticket_count is not None and not (1 <= ticket_count <= MAX_TICKET_COUNT):
+            ticket_count = None
     seat_data = seat_data_for_show(show)
     config = get_pricing_config()
     reservation = None
@@ -198,13 +328,32 @@ def book_seats(request, theater_id):
     active_reservation = None
     if reservation and reservation.expires_at > timezone.now():
         active_reservation = _reservation_payload(reservation)
+        ticket_count = ticket_count or reservation.ticket_count or len(
+            active_reservation['seats']
+        )
     tier_prices = {}
     for item in seat_data:
         tier_prices.setdefault(item['tier'], str(item['price']))
+    layout = seat_layout_for_show(show)
+    section_starts = {
+        section['start_row']: section
+        for section in layout.get('sections', [])
+    }
+    for item in seat_data:
+        if item['row_idx'] in section_starts:
+            item['section_start'] = section_starts[item['row_idx']]
+    num_to_id = {item['number']: item['id'] for item in seat_data}
+    couple_pairs = [
+        [num_to_id[a], num_to_id[b]]
+        for a, b in layout.get('couple_pairs', [])
+        if a in num_to_id and b in num_to_id
+    ]
     return render(request, 'movies/seat_selection.html', {
         'theaters': show,
         'seat_data': seat_data,
         'tier_prices': tier_prices,
+        'layout': layout,
+        'max_tickets': ticket_count or MAX_TICKET_COUNT,
         'show_data': {
             'id': show.id,
             'name': show.name,
@@ -216,6 +365,9 @@ def book_seats(request, theater_id):
             'platform_fee': str(config['platform_fee_per_ticket']),
             'misc_fee': str(config['misc_fee_per_booking']),
             'gst_slabs': gst_slabs(),
+            'layout': layout,
+            'couple_pairs': couple_pairs,
+            'max_tickets': ticket_count or MAX_TICKET_COUNT,
         },
         'reservation_data': active_reservation,
     })
@@ -262,7 +414,12 @@ def reserve_seats_api(request):
     except (TypeError, ValueError):
         return JsonResponse({'error': 'Invalid show.'}, status=400)
     try:
-        reservation = create_reservation(request.user, show_id, param_list('seats'))
+        reservation = create_reservation(
+            request.user,
+            show_id,
+            param_list('seats'),
+            ticket_count=param('ticket_count', None),
+        )
         return JsonResponse({'ok': True, 'reservation': _reservation_payload(reservation)})
     except ReservationError as exc:
         return JsonResponse({'ok': False, 'error': str(exc)}, status=409)
@@ -428,81 +585,6 @@ def payment_webhook(request):
 
 
 @login_required(login_url='/login/')
-def simulate_payment_view(request, token):
-    """Demo checkout path, active only while the gateway is not configured.
-
-    Runs the exact same signature-verified confirmation flow the Razorpay
-    checkout uses, so the demo behaves like production. Never enabled when
-    real gateway keys are present.
-    """
-    if not gateway.demo_mode():
-        messages.error(request, 'Online payments are enabled — use the checkout.')
-        return redirect('payment_page', token=token)
-    if request.method != 'POST':
-        return redirect('payment_page', token=token)
-    reservation = get_object_or_404(
-        Reservation.objects.select_related('show', 'show__movie'), token=token
-    )
-    if reservation.user_id != request.user.id:
-        messages.error(request, 'This reservation does not belong to you.')
-        return redirect('profile')
-    if reservation.status == 'booked':
-        return redirect('booking_confirmation', token=reservation.token)
-    try:
-        tx, _checkout = payments.start_checkout(
-            request.user, token, coupon_code=request.POST.get('coupon_code')
-        )
-    except ReservationError as exc:
-        messages.error(request, str(exc))
-        return redirect(_payment_failure_redirect(token))
-    except PaymentError as exc:
-        messages.error(request, str(exc))
-        return redirect('payment_page', token=token)
-
-    action = request.POST.get('action', 'success')
-    if action == 'fail':
-        payments.record_failure(
-            request.user,
-            token,
-            gateway_order_id=tx.gateway_order_id,
-            gateway_payment_id='pay_DEMO_failed',
-            failure_reason='Simulated payment failure',
-            method=request.POST.get('payment_method') or 'upi',
-        )
-        messages.error(
-            request,
-            'Payment failed. Your seats are still held — you can retry below.',
-        )
-        return redirect('payment_page', token=token)
-
-    gateway_payment_id = 'pay_DEMO{}'.format(secrets.token_hex(8).upper())
-    gateway_signature = gateway.demo_signature(
-        tx.gateway_order_id, gateway_payment_id
-    )
-    try:
-        reservation, bookings = payments.verify_and_confirm(
-            request.user,
-            token,
-            gateway_order_id=tx.gateway_order_id,
-            gateway_payment_id=gateway_payment_id,
-            gateway_signature=gateway_signature,
-            method=request.POST.get('payment_method') or 'upi',
-            demo=True,
-        )
-        send_booking_confirmation(request.user, reservation, bookings)
-        messages.success(
-            request, 'Payment successful! Your tickets are confirmed.'
-        )
-        return redirect('booking_confirmation', token=reservation.token)
-    except ReservationError as exc:
-        messages.error(request, str(exc))
-        return redirect(_payment_failure_redirect(token))
-    except PaymentError as exc:
-        messages.error(request, str(exc))
-        return redirect('payment_page', token=token)
-
-
-@login_required(login_url='/login/')
 def booking_confirmation(request, token):
     reservation = get_object_or_404(
         Reservation.objects.select_related('show', 'show__movie', 'user', 'coupon'),
@@ -529,23 +611,307 @@ def booking_confirmation(request, token):
     })
 
 
-@login_required(login_url='/login/')
-def download_ticket(request, booking_id):
-    booking = get_object_or_404(
-        Booking.objects.select_related('user', 'movie', 'theater', 'seat', 'reservation', 'payment'),
-        id=booking_id,
+def _resolve_ticket_target(booking_ref):
+    """Resolve a booking reference to its (Reservation, Booking) pair.
+
+    Supports the transaction-level booking_ref (BMS39DBA878) as well as
+    legacy per-seat references (Booking.booking_ref or a numeric Booking id)
+    so existing tickets keep working after the model mapping.
+    """
+    reservation = Reservation.objects.filter(booking_ref=booking_ref).select_related(
+        'user', 'show', 'show__movie'
+    ).prefetch_related('bookings__seat', 'bookings__payment').first()
+    if reservation:
+        return reservation, None
+    booking = Booking.objects.filter(booking_ref=booking_ref).select_related(
+        'user', 'movie', 'theater', 'seat', 'reservation', 'payment'
+    ).first()
+    if booking:
+        return None, booking
+    if booking_ref.isdigit():
+        booking = Booking.objects.filter(id=int(booking_ref)).select_related(
+            'user', 'movie', 'theater', 'seat', 'reservation', 'payment'
+        ).first()
+        if booking:
+            return None, booking
+    return None, None
+
+
+def _ticket_context(request, booking_ref, reservation, booking):
+    """Build the shared context used by the redesigned ticket page."""
+    if reservation is not None:
+        bookings = list(
+            reservation.bookings.select_related('seat', 'payment').order_by('seat__seat_number')
+        )
+        movie = reservation.show.movie
+        theater = reservation.show
+        seats = [b.seat.seat_number for b in bookings]
+        ticket_count = reservation.ticket_count or len(seats)
+        booked_for = reservation.user.get_full_name() or reservation.user.username
+        total = reservation.total_amount
+        payment_tx = PaymentTransaction.objects.filter(
+            reservation=reservation, status='captured'
+        ).order_by('-captured_at').first()
+        payment_method = payment_tx.method if payment_tx else 'Online'
+        transaction_id = payment_tx.gateway_payment_id if payment_tx else ''
+        if not transaction_id and bookings and bookings[0].payment:
+            transaction_id = bookings[0].payment.transaction_id or ''
+            payment_method = bookings[0].payment.payment_method or payment_method
+        ref = reservation.booking_ref
+    else:
+        bookings = [booking]
+        movie = booking.movie
+        theater = booking.theater
+        seats = [booking.seat.seat_number]
+        ticket_count = 1
+        booked_for = booking.user.get_full_name() or booking.user.username
+        total = booking.total
+        payment = booking.payment if hasattr(booking, 'payment') else None
+        payment_method = payment.payment_method if payment else 'Online'
+        transaction_id = payment.transaction_id if payment else ''
+        ref = booking.booking_ref
+
+    poster_url = movie.image.url if movie.image else None
+    language_label = ', '.join(m.name for m in movie.languages.all()[:3])
+    qr_payload = build_qr_payload(ref, movie.name, theater.name, seats)
+    ticket_url = request.build_absolute_uri(reverse('download_ticket', args=[ref]))
+    wa_message = (
+        '🎬 {movie}\n'
+        '📍 {theatre}\n'
+        '🕒 {time}\n'
+        '🎟 Seats: {seats}\n\n'
+        'View Ticket: {url}'
+    ).format(
+        movie=movie.name,
+        theatre=theater.name,
+        time=theater.time.strftime('%d %b %Y, %I:%M %p'),
+        seats=', '.join(seats),
+        url=ticket_url,
     )
-    if booking.user_id != request.user.id:
+    return {
+        'booking_ref': ref,
+        'movie_name': movie.name,
+        'theatre_name': theater.name,
+        'screen_name': theater.screen_name or 'Main',
+        'show_time': theater.time,
+        'seats': seats,
+        'ticket_count': ticket_count,
+        'booked_for': booked_for,
+        'total': total,
+        'payment_method': payment_method or 'Online',
+        'transaction_id': transaction_id,
+        'poster_url': poster_url,
+        'language_label': language_label,
+        'format_label': '2D / 4K',
+        'qr_payload': qr_payload,
+        'qr_data_uri': ticket_qr_data_uri(qr_payload),
+        'wa_link': 'https://wa.me/?text=' + quote(wa_message),
+        'wa_web_link': 'https://web.whatsapp.com/send?text=' + quote(wa_message),
+    }
+
+
+@login_required(login_url='/login/')
+def download_ticket(request, booking_ref):
+    reservation, booking = _resolve_ticket_target(booking_ref)
+    if reservation is None and booking is None:
+        messages.error(request, 'This ticket could not be found.')
+        return redirect('profile')
+    owner = reservation.user if reservation else booking.user
+    if owner.id != request.user.id:
+        return render(request, 'movies/ticket.html', {
+            'not_your_ticket': True,
+            'booking_ref': booking_ref,
+        }, status=200)
+    if (reservation and reservation.status != 'booked') or (booking and booking.status != 'confirmed'):
+        messages.error(request, 'This ticket is no longer valid.')
+        return redirect('profile')
+    context = _ticket_context(request, booking_ref, reservation, booking)
+    context['not_your_ticket'] = False
+    _record_ticket_download(request, booking_ref, context.get('movie_name', ''))
+    return render(request, 'movies/ticket.html', context)
+
+
+def _record_ticket_download(request, booking_ref, movie_name=''):
+    """Light-weight audit trail for ticket views/downloads."""
+    try:
+        TicketDownload.objects.create(
+            user=request.user,
+            booking_ref=booking_ref,
+            movie=movie_name,
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
+        )
+    except Exception:
+        pass
+
+
+@login_required(login_url='/login/')
+def ticket_pdf(request, booking_ref):
+    """Stream a server-side generated PDF M-ticket (reportlab, guarded)."""
+    reservation, booking = _resolve_ticket_target(booking_ref)
+    if reservation is None and booking is None:
+        messages.error(request, 'This ticket could not be found.')
+        return redirect('profile')
+    owner = reservation.user if reservation else booking.user
+    if owner.id != request.user.id:
         messages.error(request, 'This ticket does not belong to you.')
         return redirect('profile')
-    seed = (booking.booking_ref + booking.seat.seat_number).encode()
-    digest = hashlib.sha256(seed).digest()
-    width = 16
-    rows = []
-    for r in range(width):
-        line = ''.join('\u2588' if digest[(r * width + c) % 16] & (1 << (c % 8)) else ' ' for c in range(width))
-        rows.append(line + '  ' + line)
-    return render(request, 'movies/ticket.html', {'booking': booking, 'qr_pattern': '\n'.join(rows)})
+    if (reservation and reservation.status != 'booked') or (booking and booking.status != 'confirmed'):
+        messages.error(request, 'This ticket is no longer valid.')
+        return redirect('profile')
+    context = _ticket_context(request, booking_ref, reservation, booking)
+    from .pdf import build_ticket_pdf
+    pdf_bytes = build_ticket_pdf(context)
+    if not pdf_bytes:
+        messages.error(request, 'PDF generation is not available right now. Please use Print Ticket instead.')
+        return redirect('download_ticket', booking_ref=booking_ref)
+    _record_ticket_download(request, booking_ref, context.get('movie_name', ''))
+    filename = 'ticket_{}.pdf'.format(booking_ref)
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="{}"'.format(filename)
+    return response
+
+
+@csrf_exempt
+@require_POST
+def verify_ticket_qr(request):
+    """Gate-scanner validation for a signed ticket QR payload.
+
+    The QR is one-time usable: the first successful scan marks the ticket as
+    scanned and later scans are reported as ``already_scanned`` so the venue
+    can deny re-entry.
+    """
+    from .qr import verify_qr_payload
+    raw = (request.body or b'').decode('utf-8', 'ignore')
+    payload = None
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        payload = None
+    if not verify_qr_payload(payload):
+        return JsonResponse({'valid': False, 'reason': 'invalid_signature'}, status=400)
+    booking_ref = str(payload.get('booking_id') or '')
+
+    reservation = Reservation.objects.filter(booking_ref=booking_ref, status='booked').first()
+    if reservation:
+        return _claim_qr_scan(reservation, payload)
+
+    booking = Booking.objects.filter(booking_ref=booking_ref, status='confirmed').first()
+    if booking:
+        return _claim_qr_scan(booking, payload)
+
+    return JsonResponse({'valid': False, 'reason': 'not_found'})
+
+
+def _claim_qr_scan(target, payload):
+    """Atomically mark a ticket as scanned and return the gate response.
+
+    The first caller that sees ``scanned_at`` unset wins the scan (guarded by
+    an update filter), so simultaneous scans cannot double-claim a ticket.
+    """
+    now = timezone.now()
+    if target.scanned_at:
+        return JsonResponse({
+            'valid': False,
+            'used': True,
+            'reason': 'already_scanned',
+            'scanned_at': target.scanned_at.isoformat(),
+            'scan_count': target.scan_count,
+            'booking_ref': target.booking_ref,
+            'movie': payload.get('movie'),
+            'theatre': payload.get('theatre'),
+            'seats': payload.get('seats'),
+        })
+    claimed = type(target).objects.filter(
+        pk=target.pk, scanned_at__isnull=True
+    ).update(scanned_at=now, scan_count=F('scan_count') + 1)
+    if claimed == 0:
+        target.refresh_from_db(fields=['scanned_at', 'scan_count'])
+        return JsonResponse({
+            'valid': False,
+            'used': True,
+            'reason': 'already_scanned',
+            'scanned_at': target.scanned_at.isoformat() if target.scanned_at else None,
+            'scan_count': target.scan_count,
+            'booking_ref': target.booking_ref,
+            'movie': payload.get('movie'),
+            'theatre': payload.get('theatre'),
+            'seats': payload.get('seats'),
+        })
+    return JsonResponse({
+        'valid': True,
+        'scanned': True,
+        'booking_ref': target.booking_ref,
+        'movie': payload.get('movie'),
+        'theatre': payload.get('theatre'),
+        'seats': payload.get('seats'),
+        'scanned_at': now.isoformat(),
+        'scan_count': target.scan_count + 1,
+    })
+
+
+@login_required(login_url='/login/')
+def booking_invoice(request, booking_ref):
+    """Printable GST invoice for a confirmed transaction-level booking."""
+    reservation, booking = _resolve_ticket_target(booking_ref)
+    if reservation is None and booking is None:
+        messages.error(request, 'This invoice could not be found.')
+        return redirect('profile')
+    owner = reservation.user if reservation else booking.user
+    if owner.id != request.user.id:
+        messages.error(request, 'This invoice does not belong to you.')
+        return redirect('profile')
+    if (reservation and reservation.status != 'booked') or (booking and booking.status != 'confirmed'):
+        messages.error(request, 'An invoice is only available for confirmed bookings.')
+        return redirect('profile')
+
+    if reservation is not None:
+        bookings = list(
+            reservation.bookings.select_related('seat', 'payment').order_by('seat__seat_number')
+        )
+        return render(request, 'movies/invoice.html', {
+            'invoice_number': 'INV-{}'.format(reservation.booking_ref),
+            'booking_ref': reservation.booking_ref,
+            'movie_name': reservation.show.movie.name,
+            'theatre_name': reservation.show.name,
+            'screen_name': reservation.show.screen_name or 'Main',
+            'show_time': reservation.show.time,
+            'seat_labels': [b.seat.seat_number for b in bookings],
+            'ticket_count': reservation.ticket_count or len(bookings),
+            'customer': reservation.user,
+            'booked_at': reservation.updated_at,
+            'subtotal': reservation.subtotal_amount,
+            'platform_fee': reservation.platform_fee,
+            'misc_fee': reservation.misc_fee,
+            'gst_rate': reservation.gst_rate,
+            'gst_amount': reservation.gst_amount,
+            'discount': reservation.discount_amount,
+            'coupon_code': reservation.coupon_code,
+            'total': reservation.total_amount,
+            'payment': bookings[0].payment if bookings else None,
+        })
+    payment = booking.payment if hasattr(booking, 'payment') else None
+    return render(request, 'movies/invoice.html', {
+        'invoice_number': 'INV-{}'.format(booking.booking_ref),
+        'booking_ref': booking.booking_ref,
+        'movie_name': booking.movie.name,
+        'theatre_name': booking.theater.name,
+        'screen_name': booking.theater.screen_name or 'Main',
+        'show_time': booking.theater.time,
+        'seat_labels': [booking.seat.seat_number],
+        'ticket_count': 1,
+        'customer': booking.user,
+        'booked_at': booking.booked_at,
+        'subtotal': booking.ticket_price,
+        'platform_fee': booking.platform_fee,
+        'misc_fee': booking.misc_fee,
+        'gst_rate': booking.gst_rate,
+        'gst_amount': booking.gst_amount,
+        'discount': booking.discount,
+        'coupon_code': '',
+        'total': booking.total,
+        'payment': payment,
+    })
 
 
 @login_required(login_url='/login/')
@@ -554,6 +920,19 @@ def cancel_booking_view(request, booking_id):
         return redirect('profile')
     try:
         cancel_booking(request.user, booking_id)
+        messages.success(request, 'Booking cancelled and your payment has been refunded.')
+    except ReservationError as exc:
+        messages.error(request, str(exc))
+    return redirect('profile')
+
+
+@login_required(login_url='/login/')
+def cancel_booking_ref_view(request, booking_ref):
+    """Cancel an entire transaction-level booking (all seats) by its booking_ref."""
+    if request.method != 'POST':
+        return redirect('profile')
+    try:
+        cancel_reservation_booking(request.user, booking_ref)
         messages.success(request, 'Booking cancelled and your payment has been refunded.')
     except ReservationError as exc:
         messages.error(request, str(exc))
@@ -608,7 +987,31 @@ def report_review(request, review_id):
     if not review.is_reported:
         review.is_reported = True
         review.save(update_fields=['is_reported'])
+        AuditLog.objects.create(
+            user=request.user,
+            action='Review Reported',
+            module='Review',
+            object_id=review.id,
+            details=f'User reported review for {review.movie.name} by {review.user.username}',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
     messages.success(request, 'Review has been reported for moderation.')
+    return redirect('movie_detail', movie_id=review.movie.id)
+
+
+@login_required(login_url='/login/')
+@require_POST
+def helpful_review(request, review_id):
+    review = get_object_or_404(Review, id=review_id)
+    if review.user_id == request.user.id:
+        messages.error(request, 'You cannot vote on your own review.')
+        return redirect('movie_detail', movie_id=review.movie.id)
+    vote, created = ReviewHelpful.objects.get_or_create(review=review, user=request.user)
+    if not created:
+        vote.delete()
+        messages.success(request, 'You removed your helpful vote.')
+    else:
+        messages.success(request, 'Thanks! Your vote helps other viewers.')
     return redirect('movie_detail', movie_id=review.movie.id)
 
 

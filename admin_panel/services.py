@@ -10,7 +10,9 @@ from math import ceil
 
 from django.utils import timezone
 
-from movies.models import Theater, Seat
+from movies.models import Seat, SeatCategory, Theater
+
+from .layouts import build_layout_spec
 
 
 def _row_label(index):
@@ -20,8 +22,61 @@ def _row_label(index):
     return chr(ord('A') + index)
 
 
-def create_seats_for_theater(theater, capacity):
-    """Bulk-create seat rows for a newly created booking-flow theater."""
+def _ensure_categories(band_names):
+    """Create any SeatCategory rows referenced by a layout (idempotent)."""
+    created = []
+    for idx, name in enumerate(band_names):
+        obj, was_created = SeatCategory.objects.get_or_create(
+            name=name,
+            defaults={'display_order': idx},
+        )
+        if was_created:
+            created.append(obj)
+    return created
+
+
+def create_seats_for_theater(theater, capacity, layout_spec=None):
+    """Bulk-create seats for a booking-flow theater.
+
+    When a layout spec is available the seat grid is generated per the
+    geometry (sections, aisles, couple and wheelchair seats, best-view rows).
+    Otherwise a simple grid is used as a fallback.
+    """
+    layout_spec = layout_spec or theater.layout_spec
+    if layout_spec:
+        _ensure_categories({s['category'] for s in layout_spec['seats']})
+        category_lookup = {
+            cat.name: cat for cat in SeatCategory.objects.filter(name__in={
+                s['category'] for s in layout_spec['seats']
+            })
+        }
+        couple_group = 0
+        pair_lookup = {}
+        for pair in layout_spec.get('couple_pairs', []):
+            couple_group += 1
+            for num in pair:
+                pair_lookup[num] = couple_group
+        seats = []
+        for s in layout_spec['seats']:
+            seats.append(Seat(
+                theater=theater,
+                seat_number=s['num'],
+                is_booked=False,
+                seat_type=s['type'],
+                category=category_lookup.get(s['category']),
+                row_label=s['row'],
+                row_idx=s['r'],
+                col_idx=s['c'],
+                side=s['side'],
+                gap_before=s['gap_before'],
+                is_best_view=s['best_view'],
+                couple_group=pair_lookup.get(s['num'], 0),
+            ))
+        Seat.objects.bulk_create(seats, ignore_conflicts=True)
+        theater.layout_spec = layout_spec
+        theater.save(update_fields=['layout_spec'])
+        return len(seats)
+
     if not capacity or capacity <= 0:
         return 0
     seats_per_row = 30 if capacity >= 450 else 20
@@ -43,9 +98,10 @@ def sync_theater_from_show(show):
     """Create or update the ``movies.Theater`` row backing an admin ``Show``.
 
     Returns the linked Theater instance. On first creation, seats are generated
-    from the screen capacity so the show is immediately bookable.
+    from the screen layout so the show is immediately bookable.
     """
     show_datetime = _show_datetime(show)
+    layout_spec = show.screen.get_layout_spec() if show.screen else {}
     if show.theater_id is None:
         theater = Theater.objects.create(
             name=show.theatre.name,
@@ -54,10 +110,11 @@ def sync_theater_from_show(show):
             screen_name=show.screen.name,
             ticket_price=show.ticket_price,
             status=show.status,
+            layout_spec=layout_spec,
         )
         show.theater = theater
         show.save(update_fields=['theater'])
-        create_seats_for_theater(theater, show.screen.capacity)
+        create_seats_for_theater(theater, show.screen.capacity, layout_spec=layout_spec)
         return theater
 
     Theater.objects.filter(pk=show.theater_id).update(
@@ -67,6 +124,7 @@ def sync_theater_from_show(show):
         screen_name=show.screen.name,
         ticket_price=show.ticket_price,
         status=show.status,
+        layout_spec=layout_spec,
     )
     return Theater.objects.get(pk=show.theater_id)
 

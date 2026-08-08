@@ -88,42 +88,120 @@
             </ul>
           </div>
           <div class="card-body p-4">
-            {% if bookings %}
+            {% if booking_groups %}
               <div class="d-flex flex-column gap-3">
-                {% for booking in bookings %}
-                  <article class="booking-ticket">
-                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2 flex-wrap">
-                      <h3 class="h5 fw-bold mb-0" style="color: var(--text-primary);">{{ booking.movie.name }}</h3>
-                      <span class="badge" style="background: rgba(220,38,38,0.15); color: var(--accent-primary); font-size: 0.85rem; padding: 0.35rem 0.75rem; border-radius: var(--radius-full);">
-                        Seat {{ booking.seat.seat_number }}
-                      </span>
-                    </div>
-                    <div class="d-flex flex-wrap gap-3 text-muted small mb-2">
-                      <span><i class="bi bi-building me-1"></i>{{ booking.theater.name }}</span>
-                      <span><i class="bi bi-calendar-event me-1"></i>{{ booking.theater.time|date:"g:i A, D M d" }}</span>
-                    </div>
-                    <div class="d-flex flex-wrap gap-3 text-muted small mb-2">
-                      <span><i class="bi bi-receipt me-1"></i>Ref: {{ booking.booking_ref }}</span>
-                      <span><i class="bi bi-ticket-perforated me-1"></i>₹{{ booking.payment.amount }}</span>
-                    </div>
-                    <div class="pt-2 border-top d-flex justify-content-between align-items-center gap-2 flex-wrap" style="border-color: var(--border-color) !important;">
-                      <span class="small text-muted"><i class="bi bi-qr-code-scan me-1"></i>M-Ticket Valid</span>
-                      <div class="d-flex gap-2">
-                        <a href="{% url 'download_ticket' booking.id %}" class="btn btn-sm btn-bms-outline fw-semibold">
-                          <i class="bi bi-ticket-perforated me-1"></i> Ticket
-                        </a>
-                        {% if booking.cancel_allowed %}
-                        <form method="post" action="{% url 'cancel_booking' booking.id %}"
-                              onsubmit="return confirm('Cancel this booking? Your payment will be refunded.');">
-                          {% csrf_token %}
-                          <button type="submit" class="btn btn-sm btn-bms-outline-danger fw-semibold">
-                            <i class="bi bi-x-circle me-1"></i> Cancel
-                          </button>
-                        </form>
-                        {% endif %}
+                {% for group in booking_groups %}
+                  <article class="booking-ticket{% if group.cancelled %} booking-ticket--cancelled{% endif %}">
+                    <div class="d-flex gap-3 align-items-start flex-wrap">
+                      {% if group.poster_url %}
+                      <img src="{{ group.poster_url }}" alt="{{ group.primary.movie.name }}"
+                           class="rounded-3" style="width:64px; height:96px; object-fit:cover; flex-shrink:0;" loading="lazy">
+                      {% else %}
+                      <div class="d-flex align-items-center justify-content-center rounded-3"
+                           style="width:64px; height:96px; flex-shrink:0; background: var(--bg-tertiary); color: var(--text-secondary);">
+                        <i class="bi bi-film"></i>
+                      </div>
+                      {% endif %}
+                      <div class="flex-grow-1" style="min-width: 200px;">
+                        <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                          <div>
+                            <h3 class="h5 fw-bold mb-1" style="color: var(--text-primary);">{{ group.primary.movie.name }}</h3>
+                            {% if group.language_label %}
+                            <span class="badge me-1" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); font-weight:600;">{{ group.language_label }}</span>
+                            {% endif %}
+                            <span class="badge" style="background: rgba(212,175,55,0.15); color: var(--accent-gold); border: 1px solid rgba(212,175,55,0.35); font-weight:600;">2D / 4K</span>
+                            {% if group.cancelled %}
+                            <span class="badge ms-1" style="background: rgba(220,38,38,0.15); color: var(--accent-primary); font-weight:600;">Cancelled</span>
+                            {% endif %}
+                          </div>
+                          <div class="text-end">
+                            <div class="h6 fw-bold mb-1" style="color: var(--text-primary);">₹{{ group.total }}</div>
+                            <div class="small text-muted">{{ group.ticket_count }} Ticket{{ group.ticket_count|pluralize }}</div>
+                          </div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-3 text-muted small mt-1">
+                          <span><i class="bi bi-building me-1"></i>{{ group.primary.theater.name }}</span>
+                          <span><i class="bi bi-calendar-event me-1"></i>{{ group.primary.theater.time|date:"g:i A, D M d" }}</span>
+                          <span><i class="bi bi-seat me-1"></i>{{ group.seat_label }}</span>
+                        </div>
+                        <div class="d-flex flex-wrap gap-3 text-muted small mt-1">
+                          <span class="d-inline-flex align-items-baseline gap-1" style="min-width: 0;">
+                            <i class="bi bi-receipt me-1"></i>
+                            <span class="text-muted">Ref:</span>
+                            <span class="booking-ref" data-fit-text>{{ group.booking_ref }}</span>
+                          </span>
+                        </div>
                       </div>
                     </div>
+                    <div class="pt-3 mt-3 border-top d-flex justify-content-between align-items-center gap-2 flex-wrap" style="border-color: var(--border-color) !important;">
+                      <div class="small text-muted">
+                        {% if group.cancelled %}
+                          <i class="bi bi-x-circle me-1"></i>This booking has been cancelled.
+                        {% elif group.scanned %}
+                          <i class="bi bi-check2-circle me-1" style="color: var(--accent-success);"></i>M-Ticket Used
+                          <span class="d-inline-block ms-2">· Scanned {{ group.scanned_at|date:"d M Y, g:i A" }}</span>
+                        {% else %}
+                          <i class="bi bi-qr-code-scan me-1" style="color: var(--accent-success);"></i>M-Ticket Valid
+                        {% endif %}
+                      </div>
+                      {% if group.any_confirmed and not group.cancelled %}
+                      <div class="d-flex gap-2 flex-wrap">
+                        <a href="{% url 'download_ticket' group.booking_ref %}" class="btn btn-sm btn-bms-outline fw-semibold">
+                          <i class="bi bi-ticket-perforated me-1"></i> View
+                        </a>
+                        <button type="button" class="btn btn-sm btn-bms-outline fw-semibold btn-share"
+                                data-wa-link="https://wa.me/?text={{ group.wa_text|urlencode }}">
+                          <i class="bi bi-whatsapp me-1"></i> Share
+                        </button>
+                        <a href="{% url 'booking_invoice' group.booking_ref %}" class="btn btn-sm btn-bms-outline fw-semibold">
+                          <i class="bi bi-receipt me-1"></i> Invoice
+                        </a>
+                        {% if group.cancel_allowed %}
+                        <button type="button" class="btn btn-sm btn-bms-outline-danger fw-semibold"
+                                data-bs-toggle="modal" data-bs-target="#cancelBookingModal{{ forloop.counter }}">
+                          <i class="bi bi-x-circle me-1"></i> Cancel
+                        </button>
+                        {% endif %}
+                      </div>
+                      {% endif %}
+                    </div>
                   </article>
+
+                  {% if group.cancel_allowed %}
+                  <div class="modal fade" id="cancelBookingModal{{ forloop.counter }}" tabindex="-1"
+                       aria-labelledby="cancelBookingModalLabel{{ forloop.counter }}" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                      <div class="modal-content" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color);">
+                        <div class="modal-header border-0">
+                          <h5 class="modal-title fw-bold" style="color: var(--text-primary);" id="cancelBookingModalLabel{{ forloop.counter }}">
+                            Cancel Booking
+                          </h5>
+                          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body" style="color: var(--text-secondary);">
+                          <p>
+                            Cancel your booking for <strong style="color: var(--text-primary);">{{ group.primary.movie.name }}</strong>
+                            — seats <strong style="color: var(--text-primary);">{{ group.seat_label }}</strong>?
+                          </p>
+                          <p class="small mb-0">
+                            <i class="bi bi-info-circle me-1"></i>
+                            All {{ group.ticket_count }} ticket{{ group.ticket_count|pluralize }} will be cancelled and your payment
+                            (₹{{ group.total }}) will be refunded to the original payment method.
+                          </p>
+                        </div>
+                        <div class="modal-footer border-0">
+                          <button type="button" class="btn btn-bms-outline" data-bs-dismiss="modal">Keep Booking</button>
+                          <form method="post" action="{% url 'cancel_booking_ref' group.booking_ref %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-bms-outline-danger">
+                              <i class="bi bi-x-circle me-1"></i> Yes, Cancel &amp; Refund
+                            </button>
+                          </form>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {% endif %}
                 {% endfor %}
               </div>
             {% else %}
@@ -132,6 +210,53 @@
                 <h3 class="empty-state__title">No bookings yet</h3>
                 <p class="empty-state__text">Ready for movie night? Explore available showtimes and book your tickets.</p>
                 <a href="{% url 'movie_list' %}" class="btn btn-bms-primary">Browse Movies</a>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Pending Payment Section -->
+        <div class="card h-100 border-0 shadow-sm mt-4" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
+          <div class="card-header bg-transparent border-bottom p-4" style="border-color: var(--border-color) !important;">
+            <h2 class="h5 fw-bold mb-0"><i class="bi bi-hourglass-split me-2 text-danger"></i>Pending Payments</h2>
+          </div>
+          <div class="card-body p-4">
+            {% if active_reservations %}
+              <div class="d-flex flex-column gap-3">
+                {% for reservation in active_reservations %}
+                  <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                    <div>
+                      <div class="fw-semibold" style="color: var(--text-primary);">
+                        {{ reservation.show.movie.name }}
+                        <span class="small text-muted">· {{ reservation.show.name }}</span>
+                      </div>
+                      <div class="small text-muted">
+                        <i class="bi bi-seat me-1"></i>{{ reservation.seat_numbers|join:", " }}
+                        · {{ reservation.show.time|date:"g:i A, D M d" }}
+                        · ₹{{ reservation.total_amount|default:"—" }}
+                      </div>
+                      {% if reservation.payment_status == 'failed' %}
+                      <div class="small" style="color: #d97706;">
+                        <i class="bi bi-exclamation-triangle me-1"></i>A previous payment attempt failed. Your seats are still held.
+                      </div>
+                      {% endif %}
+                    </div>
+                    <div class="text-end">
+                      <div class="small text-muted mb-1">Hold expires in
+                        <span class="fw-semibold text-monospace" data-countdown="{{ reservation.expires_at|date:"c" }}">{{ reservation.remaining_seconds }}s</span>
+                      </div>
+                      <a href="{% url 'payment_page' reservation.token %}" class="btn btn-sm btn-bms-primary fw-semibold">
+                        <i class="bi bi-credit-card me-1"></i>Complete Payment
+                      </a>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="empty-state py-4">
+                <div class="empty-state__icon"><i class="bi bi-hourglass-split"></i></div>
+                <h3 class="empty-state__title">Nothing pending</h3>
+                <p class="empty-state__text">No active reservations waiting for payment.</p>
               </div>
             {% endif %}
           </div>
@@ -178,8 +303,71 @@
             {% endif %}
           </div>
         </div>
+
+        <!-- Ticket Downloads Section -->
+        <div class="card h-100 border-0 shadow-sm mt-4" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
+          <div class="card-header bg-transparent border-bottom p-4" style="border-color: var(--border-color) !important;">
+            <h2 class="h5 fw-bold mb-0"><i class="bi bi-download me-2 text-danger"></i>Recent Ticket Downloads</h2>
+          </div>
+          <div class="card-body p-4">
+            {% if ticket_downloads %}
+              <div class="d-flex flex-column gap-2">
+                {% for dl in ticket_downloads %}
+                  <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                    <div>
+                      <div class="fw-semibold small" style="color: var(--text-primary);">
+                        <i class="bi bi-ticket-perforated me-1"></i>{{ dl.booking_ref }}
+                        {% if dl.movie %}<span class="text-muted">· {{ dl.movie }}</span>{% endif %}
+                      </div>
+                    </div>
+                    <div class="text-end">
+                      <span class="small text-muted">{{ dl.downloaded_at|date:"d M Y, g:i A" }}</span>
+                      <a href="{% url 'ticket_pdf' dl.booking_ref %}" class="btn btn-sm btn-bms-outline ms-2 fw-semibold">
+                        <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+                      </a>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="empty-state py-4">
+                <div class="empty-state__icon"><i class="bi bi-download"></i></div>
+                <h3 class="empty-state__title">No downloads yet</h3>
+                <p class="empty-state__text">Viewing or downloading a ticket from your booking will appear here.</p>
+              </div>
+            {% endif %}
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function () {
+    'use strict';
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function tick() {
+      document.querySelectorAll('[data-countdown]').forEach(function (el) {
+        var expiry = new Date(el.getAttribute('data-countdown')).getTime();
+        var remaining = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
+        el.textContent = pad(Math.floor(remaining / 60)) + ':' + pad(remaining % 60);
+        if (remaining <= 0) {
+          el.closest('.d-flex') && el.closest('.d-flex').remove();
+        }
+      });
+    }
+    tick();
+    setInterval(tick, 1000);
+  })();
+
+  document.querySelectorAll('.btn-share').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var link = btn.getAttribute('data-wa-link');
+      if (link) window.open(link, '_blank', 'noopener');
+    });
+  });
+</script>
 {% endblock %}

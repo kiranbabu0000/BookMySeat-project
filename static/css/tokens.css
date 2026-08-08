@@ -56,7 +56,20 @@
   --seat-booked: #cbd5e1;
   --seat-vip: #d97706;
   --seat-wheelchair: #2563eb;
+  --seat-couple: #d97706;
+  --seat-best: #d97706;
   --screen-bg: linear-gradient(180deg, #e2e8f0 0%, #cbd5e1 100%);
+  --tier-economy: #64748b;
+  --tier-classic: #0284c7;
+  --tier-premium: #d97706;
+  --tier-platinum: #7c5cd6;
+  --tier-recliner: #e11d48;
+  --tier-vip: #b45309;
+  --tier-lounge: #0d9488;
+  --showtime-morning: #f59e0b;
+  --showtime-afternoon: #38bdf8;
+  --showtime-evening: #a78bfa;
+  --showtime-night: #6366f1;
 }
 
 [data-theme="dark"] {
@@ -97,7 +110,20 @@
   --seat-booked: #2c3850;
   --seat-vip: #d4af37;
   --seat-wheelchair: #4f8ef7;
+  --seat-couple: #e2b24a;
+  --seat-best: #f0c14b;
   --screen-bg: linear-gradient(180deg, #2c3850 0%, #1a2334 100%);
+  --tier-economy: #94a3b8;
+  --tier-classic: #38bdf8;
+  --tier-premium: #f0c14b;
+  --tier-platinum: #a78bfa;
+  --tier-recliner: #fb7185;
+  --tier-vip: #e2b24a;
+  --tier-lounge: #2dd4bf;
+  --showtime-morning: #fbbf24;
+  --showtime-afternoon: #38bdf8;
+  --showtime-evening: #c4b5fd;
+  --showtime-night: #818cf8;
 }
 
 /* ============================================================

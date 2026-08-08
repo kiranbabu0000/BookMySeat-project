@@ -95,6 +95,39 @@ class LoginSeparationTests(TestCase):
         self.assertEqual(client.session.get('admin_user_id'), self.super.id)
 
 
+class UserListTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass123', is_staff=True)
+        AdminProfile.objects.create(user=self.admin, role='admin', is_active=True)
+        self.customer = User.objects.create_user(
+            username='customer', password='customerpass123')
+        self.movie = Movie.objects.create(
+            name='UserList Movie', rating=8.0, cast='Actor', status='now_showing')
+        self.show = Theater.objects.create(
+            name='PVR', movie=self.movie,
+            time=timezone.now() + timedelta(days=1), status='active', ticket_price=250)
+        self.seat = Seat.objects.create(
+            theater=self.show, seat_number='A1', row_idx=0, col_idx=0)
+        self.booking = Booking.objects.create(
+            user=self.customer, seat=self.seat, movie=self.movie,
+            theater=self.show, status='confirmed',
+            booking_ref='BMSUSERLIST', total=Decimal('275.00'))
+
+    def _admin_login(self, client):
+        return client.post('/admin-login/', {
+            'username': 'admin', 'password': 'adminpass123'})
+
+    def test_user_list_page_loads_with_booking_count(self):
+        self._admin_login(self.client)
+        response = self.client.get(reverse('admin_user_list'))
+        self.assertEqual(response.status_code, 200)
+        users = response.context['users']
+        customer_row = next(u for u in users if u.username == 'customer')
+        self.assertEqual(customer_row.booking_count, 1)
+        self.assertContains(response, '<span class="badge-bms-info">1</span>')
+
+
 class AdminCrashPathTests(TestCase):
     def setUp(self):
         self.admin = User.objects.create_user(
@@ -504,7 +537,10 @@ class ShowTheaterSyncTests(TestCase):
         self.assertEqual(theater.time.time().strftime('%H:%M'), self.show_time)
         self.assertGreater(theater.seats.count(), 0)
 
-        public = self.client.get(reverse('theater_list', args=[self.movie.id]))
+        public = self.client.get(
+            reverse('theater_list', args=[self.movie.id]),
+            {'date': self.show_date.isoformat()},
+        )
         self.assertContains(public, self.theatre.name)
 
         self.client.force_login(self.customer)

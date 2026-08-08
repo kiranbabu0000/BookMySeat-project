@@ -1,6 +1,7 @@
 {% extends "base.html" %}
+{% load movie_extras %}
 
-{% block title %}{{ movie.name }} — Theaters{% endblock %}
+{% block title %}{{ movie.name }} — {% if movie.category == 'movie' %}Theaters{% else %}Venues{% endif %}{% endblock %}
 
 {% block content %}
 <section class="page-section">
@@ -9,7 +10,10 @@
     <nav aria-label="breadcrumb">
       <ol class="breadcrumb breadcrumb-bms">
         <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
-        <li class="breadcrumb-item"><a href="{% url 'movie_list' %}">Movies</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'movie_list' %}{% if movie.category != 'movie' %}?category={{ movie.category }}{% endif %}">
+          {% if movie.category == 'laughing_therapy' %}Laughing Therapy
+          {% elif movie.category == 'live_concert' %}Live Concerts
+          {% else %}Movies{% endif %}</a></li>
         <li class="breadcrumb-item active" aria-current="page">{{ movie.name }}</li>
       </ol>
     </nav>
@@ -36,43 +40,184 @@
 
     <div class="section-header">
       <div>
-        <h2 class="section-title">Select Theater &amp; Showtime</h2>
-        <p class="section-subtitle text-muted mb-0">Choose your preferred venue and time</p>
+        <h2 class="section-title">{% if movie.category == 'movie' %}Select Theater &amp; Showtime{% else %}Select Venue &amp; Showtime{% endif %}</h2>
+        <p class="section-subtitle text-muted mb-0">
+          Choose a date and your preferred venue and time
+          {% if city %} in <strong>{{ city }}</strong>{% endif %}
+        </p>
       </div>
+      {% if city %}
+      <a href="?date={{ selected_date.isoformat }}" class="btn btn-bms-outline btn-sm"
+         data-city-clear>
+        <i class="bi bi-x-circle me-1" aria-hidden="true"></i>All Cities
+      </a>
+      {% endif %}
     </div>
 
-    {% if theaters %}
-      {% for theater in theaters %}
-      <article class="theater-card animate-fade-up">
-        <h3 class="theater-card__name">{{ theater.name }}</h3>
-        <div class="theater-amenities" aria-label="Theater amenities">
-          <span class="amenity-badge"><i class="bi bi-phone"></i> M-Ticket</span>
-          <span class="amenity-badge"><i class="bi bi-cup-straw"></i> F&amp;B</span>
-          <span class="amenity-badge"><i class="bi bi-p-square"></i> Parking</span>
-          <span class="amenity-badge"><i class="bi bi-universal-access"></i> Accessible</span>
-          <span class="amenity-badge"><i class="bi bi-badge-3d"></i> 3D</span>
-        </div>
-        <div class="showtime-grid">
-          <a href="{% url 'book_seats' theater.id %}" class="showtime-btn">
-            {{ theater.time|date:"g:i A" }}
-            <small>{{ theater.time|date:"D, M d" }}</small>
-          </a>
-        </div>
-      </article>
+    <!-- Date tabs -->
+    <div class="date-tabs" id="dateTabs" role="tablist" aria-label="Show dates">
+      {% for tab in show_dates %}
+      <a href="?date={{ tab.iso }}{% if city %}&city={{ city }}{% endif %}" role="tab"
+         class="date-tab{% if tab.is_selected %} is-active{% endif %}"
+         data-date="{{ tab.iso }}"
+         aria-selected="{% if tab.is_selected %}true{% else %}false{% endif %}">
+        <span class="date-tab__label">{{ tab.label }}</span>
+        <span class="date-tab__day">{{ tab.day }}</span>
+        <span class="date-tab__month">{{ tab.month }}</span>
+      </a>
       {% endfor %}
-
-      <p class="text-muted small mt-4">
-        <i class="bi bi-info-circle me-1"></i>
-        <span class="text-warning">●</span> Non-cancellable tickets
-      </p>
-    {% else %}
-    <div class="empty-state">
-      <div class="empty-state__icon"><i class="bi bi-building"></i></div>
-      <h2 class="empty-state__title">No theaters available</h2>
-      <p class="empty-state__text">Sorry, no showtimes are available for this movie right now.</p>
-      <a href="{% url 'movie_list' %}" class="btn btn-bms-primary">Browse Other Movies</a>
     </div>
-    {% endif %}
+
+    <!-- Results (server-rendered on first load, swapped via AJAX) -->
+    <div id="theaterResults">
+      {% include 'movies/_theater_list_results.html' %}
+    </div>
   </div>
 </section>
+
+<!-- Bottom sheet: ticket count picker (1-10) -->
+<div class="ticket-count-sheet" id="ticketCountSheet" aria-hidden="true">
+  <div class="ticket-count-sheet__backdrop" data-tc-close></div>
+  <div class="ticket-count-sheet__panel" role="dialog" aria-modal="true" aria-label="Select number of tickets">
+    <div class="ticket-count-sheet__handle"></div>
+    <div class="ticket-count-sheet__head">
+      <div>
+        <h4 class="ticket-count-sheet__title mb-0">{{ movie.name }}</h4>
+        <p class="ticket-count-sheet__subtitle text-muted mb-0">How many tickets would you like to book?</p>
+      </div>
+      <button type="button" class="ticket-count-sheet__close" data-tc-close aria-label="Close">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div class="ticket-count-grid" role="radiogroup" aria-label="Ticket count">
+      {% for n in "1 2 3 4 5 6 7 8 9 10"|split_items:" " %}
+      <button type="button" class="ticket-count-chip{% if forloop.first %} is-active{% endif %}"
+              role="radio" aria-checked="{% if forloop.first %}true{% else %}false{% endif %}"
+              data-ticket-count="{{ n }}">
+        {{ n }}
+      </button>
+      {% endfor %}
+    </div>
+    <div class="ticket-count-sheet__footer">
+      <button type="button" class="btn btn-bms-primary w-100 justify-content-center" id="ticketCountContinue">
+        Continue <i class="bi bi-arrow-right ms-1"></i>
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<style>
+  .ticket-count-sheet { position: fixed; inset: 0; z-index: 1080; display: none; }
+  .ticket-count-sheet.is-open { display: block; }
+  .ticket-count-sheet__backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.55); animation: tcFade 0.2s ease; }
+  .ticket-count-sheet__panel {
+    position: absolute; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto;
+    background: var(--bg-card, #fff); color: var(--text-primary, #111);
+    border-radius: 18px 18px 0 0; padding: 0.75rem 1.25rem 1.25rem;
+    box-shadow: 0 -12px 40px rgba(0,0,0,0.25);
+    animation: tcUp 0.25s ease;
+  }
+  .ticket-count-sheet__handle { width: 44px; height: 5px; border-radius: 999px; background: var(--border-color, #ddd); margin: 0 auto 0.75rem; }
+  .ticket-count-sheet__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
+  .ticket-count-sheet__title { font-weight: 800; }
+  .ticket-count-sheet__subtitle { font-size: 0.85rem; }
+  .ticket-count-sheet__close { background: transparent; border: 0; color: var(--text-secondary, #666); font-size: 1.2rem; }
+  .ticket-count-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.6rem; margin-bottom: 1.25rem; }
+  .ticket-count-chip {
+    border: 1px solid var(--border-color, #ddd); border-radius: 12px; background: transparent;
+    color: var(--text-primary, #111); font-weight: 700; padding: 0.65rem 0; transition: all 0.15s ease;
+  }
+  .ticket-count-chip:hover { border-color: var(--accent-primary, #e11d48); }
+  .ticket-count-chip.is-active { background: var(--accent-primary, #e11d48); border-color: var(--accent-primary, #e11d48); color: #fff; }
+  @keyframes tcUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @keyframes tcFade { from { opacity: 0; } to { opacity: 1; } }
+</style>
+<script>
+(function () {
+  var sheet = document.getElementById('ticketCountSheet');
+  if (!sheet) return;
+  var targetUrl = null;
+  var selected = 1;
+  var chips = Array.prototype.slice.call(document.querySelectorAll('[data-ticket-count]'));
+  var continueBtn = document.getElementById('ticketCountContinue');
+
+  function setActive(n) {
+    selected = n;
+    chips.forEach(function (chip) {
+      var active = Number(chip.getAttribute('data-ticket-count')) === n;
+      chip.classList.toggle('is-active', active);
+      chip.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+  }
+
+  function open(url) {
+    targetUrl = url;
+    setActive(1);
+    sheet.classList.add('is-open');
+    sheet.setAttribute('aria-hidden', 'false');
+  }
+
+  function close() {
+    sheet.classList.remove('is-open');
+    sheet.setAttribute('aria-hidden', 'true');
+  }
+
+  document.addEventListener('click', function (e) {
+    var opener = e.target.closest('[data-book-url]');
+    if (opener) {
+      e.preventDefault();
+      open(opener.getAttribute('data-book-url'));
+      return;
+    }
+    if (e.target.closest('[data-tc-close]')) close();
+    var chip = e.target.closest('[data-ticket-count]');
+    if (chip) setActive(Number(chip.getAttribute('data-ticket-count')));
+  });
+
+  continueBtn.addEventListener('click', function () {
+    if (!targetUrl) return;
+    var sep = targetUrl.indexOf('?') === -1 ? '?' : '&';
+    window.location.href = targetUrl + sep + 'tickets=' + selected;
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && sheet.classList.contains('is-open')) close();
+  });
+})();
+
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('#dateTabs .date-tab'));
+  var results = document.getElementById('theaterResults');
+  if (!tabs.length || !results) return;
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function (e) {
+      if (tab.classList.contains('is-active')) return;
+      e.preventDefault();
+      var url = tab.getAttribute('href');
+      tabs.forEach(function (t) {
+        t.classList.remove('is-active');
+        t.setAttribute('aria-selected', 'false');
+      });
+      tab.classList.add('is-active');
+      tab.setAttribute('aria-selected', 'true');
+      results.classList.add('is-loading');
+      fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          results.innerHTML = data.html;
+          results.classList.remove('is-loading');
+          history.replaceState(null, '', url);
+          window.scrollTo({ top: results.offsetTop - 100, behavior: 'smooth' });
+        })
+        .catch(function () {
+          results.classList.remove('is-loading');
+          window.location.href = url;
+        });
+    });
+  });
+})();
+</script>
 {% endblock %}

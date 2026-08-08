@@ -7,6 +7,7 @@ returns HTTP 403 for unauthorized access and validates every request parameter.
 from datetime import date, datetime
 
 from django.contrib import messages
+from django.core.cache import cache
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -43,6 +44,22 @@ DATA_FUNCS = {
 }
 
 PALETTE = ['#dc2626', '#2563eb', '#d97706', '#16a34a', '#9333ea', '#0891b2', '#db2777', '#65a30d']
+
+ANALYTICS_CACHE_TTL = 300
+
+
+def _analytics_cache_key(area, rng):
+    return f'analytics:{area}:{rng.start_date.isoformat()}:{rng.end_date.isoformat()}'
+
+
+def _load_data(area, rng):
+    """Return the analytics payload for an area/range, cached for 5 minutes."""
+    key = _analytics_cache_key(area, rng)
+    data = cache.get(key)
+    if data is None:
+        data = DATA_FUNCS[area](rng)
+        cache.set(key, data, ANALYTICS_CACHE_TTL)
+    return data
 
 
 def _parse_date(value):
@@ -242,7 +259,7 @@ class AnalyticsBaseView(AdminSessionMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         rng = resolve_range(self.request)
-        data = DATA_FUNCS[self.active_section](rng)
+        data = _load_data(self.active_section, rng)
         context['analytics_section'] = self.active_section
         context['area_title'] = self.area_title or AREA_TITLES[self.active_section]
         context['range'] = rng
@@ -318,7 +335,7 @@ def analytics_data_json(request, area):
     if area not in DATA_FUNCS:
         return JsonResponse({'error': 'Unknown analytics area.'}, status=400)
     rng = resolve_range(request)
-    data = DATA_FUNCS[area](rng)
+    data = dict(_load_data(area, rng))
     data['range'] = {
         'label': rng.label,
         'start': rng.start_date.isoformat(),

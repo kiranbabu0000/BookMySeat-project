@@ -8,11 +8,12 @@ from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.contrib.auth.models import User
 from django.utils import timezone
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
-from admin_panel.models import Notification
+from admin_panel.models import Notification, Review, ReviewHelpful
 
-from .models import Movie, Theater, Seat, SeatCategory, ShowPrice, Reservation, ReservedSeat, Booking, Wishlist
+from .models import Movie, Theater, Seat, SeatCategory, ShowPrice, Reservation, ReservedSeat, Booking, Wishlist, EmailOutbox
+from .testutils import DEMO_RAZORPAY
 from .services import (
     ReservationError,
     cancel_booking,
@@ -80,6 +81,18 @@ class ReservationServiceTests(TestCase):
         states = seat_states_for_show(self.show)
         self.assertEqual(states[str(self.seats[0].id)], 'reserved')
         self.assertEqual(states[str(self.seats[2].id)], 'available')
+
+    def test_reservation_hold_is_five_minutes(self):
+        from .models import RESERVATION_HOLD_SECONDS
+
+        self.assertEqual(RESERVATION_HOLD_SECONDS, 300)
+        reservation = create_reservation(
+            self.user, self.show.id, [self.seats[0].id]
+        )
+        expected = timezone.now() + timedelta(seconds=RESERVATION_HOLD_SECONDS)
+        self.assertLessEqual(
+            abs((reservation.expires_at - expected).total_seconds()), 5
+        )
 
     def test_create_reservation_reuses_existing_active_reservation(self):
         first = create_reservation(self.user, self.show.id, [self.seats[0].id])
@@ -465,6 +478,7 @@ class ReservationServiceTests(TestCase):
         self.assertEqual(after, before + 1)
 
 
+@DEMO_RAZORPAY
 class ReservationApiTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user('alice', 'alice@example.com', 'password123')
@@ -477,6 +491,27 @@ class ReservationApiTests(TestCase):
         return self.client.post(
             reverse('api_reserve'),
             data={'show_id': self.show.id, 'seats': [str(s) for s in seat_ids]},
+            content_type='application/json',
+        )
+
+    def _pay(self, token):
+        start = self.client.post(
+            reverse('payment_start', args=[token]),
+            data={'coupon_code': ''},
+            content_type='application/json',
+        )
+        self.assertEqual(start.status_code, 200)
+        checkout = start.json()['checkout']
+        self.assertTrue(checkout['demo'])
+        return self.client.post(
+            reverse('payment_verify', args=[token]),
+            data={
+                'razorpay_order_id': checkout['order_id'],
+                'razorpay_payment_id': 'pay_DEMO_pending',
+                'razorpay_signature': checkout['demo_signature'],
+                'payment_method': 'upi',
+                'demo': 'true',
+            },
             content_type='application/json',
         )
 
@@ -560,15 +595,17 @@ class ReservationApiTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('profile'))
 
-    def test_simulate_payment_success_confirms_booking(self):
+    def test_demo_checkout_confirms_booking(self):
         reservation = self._reserve(self.seats[0].id).json()['reservation']
-        response = self.client.post(
-            reverse('simulate_payment', args=[reservation['token']]),
-            data={'action': 'success', 'transaction_id': 'TXN-WEB'},
-        )
-        self.assertRedirects(
-            response, reverse('booking_confirmation', args=[reservation['token']])
-        )
+        token = reservation['token']
+        page = self.client.get(reverse('payment_page', args=[token]))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'Secure Checkout')
+        verify = self._pay(token)
+        self.assertEqual(verify.status_code, 200)
+        body = verify.json()
+        self.assertTrue(body['ok'])
+        self.assertEqual(body['confirmation_url'], reverse('booking_confirmation', args=[token]))
         self.seats[0].refresh_from_db()
         self.assertTrue(self.seats[0].is_booked)
 
@@ -592,10 +629,7 @@ class ReservationApiTests(TestCase):
 
     def test_booking_confirmation_page_accessible_to_owner(self):
         reservation = self._reserve(self.seats[0].id).json()['reservation']
-        self.client.post(
-            reverse('simulate_payment', args=[reservation['token']]),
-            data={'action': 'success', 'transaction_id': 'TXN-WEB'},
-        )
+        self._pay(reservation['token'])
         response = self.client.get(
             reverse('booking_confirmation', args=[reservation['token']])
         )
@@ -604,25 +638,196 @@ class ReservationApiTests(TestCase):
 
     def test_ticket_page_accessible_to_owner(self):
         reservation = self._reserve(self.seats[0].id).json()['reservation']
-        self.client.post(
-            reverse('simulate_payment', args=[reservation['token']]),
-            data={'action': 'success', 'transaction_id': 'TXN-WEB'},
-        )
+        self._pay(reservation['token'])
         booking = Booking.objects.get(reservation__token=reservation['token'])
         response = self.client.get(reverse('download_ticket', args=[booking.id]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, booking.booking_ref)
         self.client.force_login(self.other)
         response = self.client.get(reverse('download_ticket', args=[booking.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Not Your Ticket')
+
+    def test_ticket_page_accessible_by_booking_ref(self):
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        self._pay(reservation['token'])
+        reservation_obj = Reservation.objects.get(token=reservation['token'])
+        self.assertTrue(reservation_obj.booking_ref)
+        response = self.client.get(
+            reverse('download_ticket', args=[reservation_obj.booking_ref])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reservation_obj.booking_ref)
+        self.assertContains(response, 'data:image/png;base64,')
+
+    def test_ticket_has_scannable_qr(self):
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        self._pay(reservation['token'])
+        booking = Booking.objects.get(reservation__token=reservation['token'])
+        response = self.client.get(reverse('download_ticket', args=[booking.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data:image/png;base64,')
+        self.assertContains(response, booking.booking_ref)
+
+    def test_ticket_hidden_after_cancellation(self):
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        self._pay(reservation['token'])
+        booking = Booking.objects.get(reservation__token=reservation['token'])
+        cancel_booking(self.user, booking.id)
+        response = self.client.get(reverse('download_ticket', args=[booking.id]))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('profile'))
 
+    def test_invoice_page_renders(self):
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        self._pay(reservation['token'])
+        booking = Booking.objects.get(reservation__token=reservation['token'])
+        response = self.client.get(reverse('booking_invoice', args=[booking.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'INV-{}'.format(booking.booking_ref))
+        self.assertContains(response, 'Total Paid')
+        self.assertContains(response, booking.movie.name)
+
+    def test_invoice_hidden_from_other_users(self):
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        self._pay(reservation['token'])
+        booking = Booking.objects.get(reservation__token=reservation['token'])
+        self.client.force_login(self.other)
+        response = self.client.get(reverse('booking_invoice', args=[booking.id]))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('profile'))
+
+    def test_ticket_pdf_endpoint_returns_pdf(self):
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        self._pay(reservation['token'])
+        reservation_obj = Reservation.objects.get(token=reservation['token'])
+        response = self.client.get(reverse('ticket_pdf', args=[reservation_obj.booking_ref]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertTrue(response.content.startswith(b'%PDF'))
+
+    def test_ticket_pdf_hidden_from_other_users(self):
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        self._pay(reservation['token'])
+        reservation_obj = Reservation.objects.get(token=reservation['token'])
+        self.client.force_login(self.other)
+        response = self.client.get(reverse('ticket_pdf', args=[reservation_obj.booking_ref]))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('profile'))
+
+    def test_viewing_ticket_records_download_history(self):
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        self._pay(reservation['token'])
+        reservation_obj = Reservation.objects.get(token=reservation['token'])
+        self.client.get(reverse('download_ticket', args=[reservation_obj.booking_ref]))
+        self.client.get(reverse('ticket_pdf', args=[reservation_obj.booking_ref]))
+        from movies.models import TicketDownload
+        history = TicketDownload.objects.filter(user=self.user)
+        self.assertEqual(history.count(), 2)
+        self.assertEqual(history.first().booking_ref, reservation_obj.booking_ref)
+
+    def test_verify_ticket_qr_accepts_signed_payload(self):
+        import json as _json
+        from movies.qr import build_qr_payload
+
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        self._pay(reservation['token'])
+        reservation_obj = Reservation.objects.get(token=reservation['token'])
+        payload = build_qr_payload(
+            reservation_obj.booking_ref,
+            reservation_obj.show.movie.name,
+            reservation_obj.show.name,
+            ['A1'],
+        )
+        response = self.client.post(
+            reverse('verify_ticket_qr'),
+            data=_json.dumps(payload),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['valid'])
+
+        tampered = dict(payload)
+        tampered['booking_id'] = 'BMS-TAMPERED'
+        response = self.client.post(
+            reverse('verify_ticket_qr'),
+            data=_json.dumps(tampered),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.json()['valid'])
+
+    def test_verify_ticket_qr_is_one_time(self):
+        import json as _json
+        from movies.qr import build_qr_payload
+
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        self._pay(reservation['token'])
+        reservation_obj = Reservation.objects.get(token=reservation['token'])
+        payload = build_qr_payload(
+            reservation_obj.booking_ref,
+            reservation_obj.show.movie.name,
+            reservation_obj.show.name,
+            ['A1'],
+        )
+        url = reverse('verify_ticket_qr')
+        first = self.client.post(
+            url, data=_json.dumps(payload), content_type='application/json'
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertTrue(first.json()['valid'])
+        self.assertTrue(first.json()['scanned'])
+
+        reservation_obj.refresh_from_db()
+        self.assertIsNotNone(reservation_obj.scanned_at)
+        self.assertEqual(reservation_obj.scan_count, 1)
+
+        second = self.client.post(
+            url, data=_json.dumps(payload), content_type='application/json'
+        )
+        self.assertEqual(second.status_code, 200)
+        body = second.json()
+        self.assertFalse(body['valid'])
+        self.assertTrue(body['used'])
+        self.assertEqual(body['reason'], 'already_scanned')
+
+        reservation_obj.refresh_from_db()
+        self.assertEqual(reservation_obj.scan_count, 1)
+
+    def test_confirmation_email_attaches_ticket_pdf_with_qr(self):
+        from django.core import mail
+        from django.core.management import call_command
+
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        self._pay(reservation['token'])
+
+        # Emails are enqueued asynchronously — drain the outbox like the worker.
+        self.assertTrue(EmailOutbox.objects.filter(status='pending').exists(),
+                        'a confirmation email must be enqueued after payment')
+        self.assertEqual(mail.outbox, [], 'email must NOT be sent synchronously')
+        call_command('process_email_outbox', verbosity=0)
+
+        self.assertTrue(mail.outbox, 'expected a confirmation email to be sent')
+        message = mail.outbox[0]
+        pdf_attachments = [
+            a for a in message.attachments
+            if a[0].startswith('ticket_') and a[2] == 'application/pdf'
+        ]
+        self.assertTrue(pdf_attachments, 'confirmation email must carry a PDF ticket')
+        self.assertIn('Booking confirmed', message.subject)
+        pdf_bytes = pdf_attachments[0][1]
+        self.assertTrue(pdf_bytes.startswith(b'%PDF'))
+        html_parts = [a[0] for a in message.alternatives if a[1] == 'text/html']
+        self.assertTrue(html_parts, 'confirmation email must include an HTML body')
+        self.assertIn('data:image/png;base64,', html_parts[0])
+        self.assertEqual(
+            EmailOutbox.objects.filter(status='sent').count(), 1,
+            'the enqueued message must be marked sent after delivery',
+        )
+
     def test_cancel_booking_via_web_redirects_to_profile(self):
         reservation = self._reserve(self.seats[0].id).json()['reservation']
-        self.client.post(
-            reverse('simulate_payment', args=[reservation['token']]),
-            data={'action': 'success', 'transaction_id': 'TXN-WEB'},
-        )
+        self._pay(reservation['token'])
         booking = Booking.objects.get(reservation__token=reservation['token'])
         response = self.client.post(reverse('cancel_booking', args=[booking.id]))
         self.assertRedirects(response, reverse('profile'))
@@ -630,6 +835,26 @@ class ReservationApiTests(TestCase):
         self.assertEqual(booking.status, 'cancelled')
         self.seats[0].refresh_from_db()
         self.assertFalse(self.seats[0].is_booked)
+
+    def test_cancel_booking_ref_cancels_entire_transaction(self):
+        reservation_data = self._reserve(
+            self.seats[0].id, self.seats[1].id
+        ).json()['reservation']
+        self._pay(reservation_data['token'])
+        reservation = Reservation.objects.get(token=reservation_data['token'])
+        self.assertEqual(reservation.status, 'booked')
+        response = self.client.post(
+            reverse('cancel_booking_ref', args=[reservation.booking_ref])
+        )
+        self.assertRedirects(response, reverse('profile'))
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.status, 'cancelled')
+        for booking in Booking.objects.filter(reservation=reservation):
+            self.assertEqual(booking.status, 'cancelled')
+        self.seats[0].refresh_from_db()
+        self.seats[1].refresh_from_db()
+        self.assertFalse(self.seats[0].is_booked)
+        self.assertFalse(self.seats[1].is_booked)
 
     def test_coupon_validate_api(self):
         from admin_panel.models import Coupon
@@ -846,3 +1071,138 @@ class WishlistAndNotificationsTests(TestCase):
         response = self.client.get(reverse('home'))
         self.assertContains(response, 'Recently Viewed')
         self.assertContains(response, self.movie.name)
+
+
+class ReviewHelpfulTests(TestCase):
+    def setUp(self):
+        self.author = User.objects.create_user('author', 'author@example.com', 'password123')
+        self.voter = User.objects.create_user('voter', 'voter@example.com', 'password123')
+        self.movie = Movie.objects.create(
+            name='Helpful Test Movie', rating=8.0, cast='Actor', status='now_showing'
+        )
+        self.review = Review.objects.create(
+            movie=self.movie, user=self.author, rating=5, comment='Great film!',
+            is_approved=True,
+        )
+
+    def test_helpful_vote_adds_and_toggles(self):
+        self.client.force_login(self.voter)
+        url = reverse('helpful_review', args=[self.review.pk])
+        self.client.post(url)
+        self.assertTrue(
+            ReviewHelpful.objects.filter(review=self.review, user=self.voter).exists()
+        )
+        self.client.post(url)
+        self.assertFalse(
+            ReviewHelpful.objects.filter(review=self.review, user=self.voter).exists()
+        )
+
+    def test_helpful_requires_login(self):
+        response = self.client.post(reverse('helpful_review', args=[self.review.pk]))
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_cannot_vote_on_own_review(self):
+        self.client.force_login(self.author)
+        self.client.post(reverse('helpful_review', args=[self.review.pk]))
+        self.assertFalse(
+            ReviewHelpful.objects.filter(review=self.review, user=self.author).exists()
+        )
+
+
+class TheaterListDateTests(TestCase):
+    """Multi-day show booking: theater_list date tabs and filters."""
+
+    def setUp(self):
+        self.movie = Movie.objects.create(
+            name='Date Test Movie', rating=7.0, cast='Cast', status='now_showing'
+        )
+        self.today = timezone.now().date()
+        self.tomorrow = self.today + timedelta(days=1)
+        self.day3 = self.today + timedelta(days=3)
+        # Today: one upcoming, one already-started show.
+        self.ava = self._mk('Ava Hall', timezone.now() + timedelta(minutes=30))
+        self.beta = self._mk('Beta Hall', timezone.now() - timedelta(minutes=30))
+        # Tomorrow and +3 days: fixed slots.
+        self.gamma = self._mk('Gamma Hall', self._dt(self.tomorrow, 10, 30))
+        self.delta = self._mk('Delta Hall', self._dt(self.day3, 18, 30))
+
+    def _dt(self, day, hour, minute):
+        return timezone.make_aware(datetime.combine(day, time(hour, minute)))
+
+    def _mk(self, name, dt, screen='Screen 1'):
+        return Theater.objects.create(
+            name=name, movie=self.movie, time=dt, screen_name=screen,
+            ticket_price=Decimal('200.00'),
+        )
+
+    def _get(self, **params):
+        return self.client.get(reverse('theater_list', args=[self.movie.id]), params)
+
+    def test_default_shows_only_upcoming_today_shows(self):
+        response = self._get()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Ava Hall')
+        self.assertNotContains(response, 'Beta Hall')
+        self.assertNotContains(response, 'Gamma Hall')
+        self.assertNotContains(response, 'Delta Hall')
+
+    def test_date_param_filters_to_that_day(self):
+        response = self._get(date=self.tomorrow.isoformat())
+        self.assertContains(response, 'Gamma Hall')
+        self.assertNotContains(response, 'Ava Hall')
+        self.assertNotContains(response, 'Delta Hall')
+
+    def test_third_day_tab_has_shows(self):
+        response = self._get(date=self.day3.isoformat())
+        self.assertContains(response, 'Delta Hall')
+        self.assertNotContains(response, 'Ava Hall')
+
+    def test_invalid_date_falls_back_to_today(self):
+        response = self._get(date='not-a-date')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Ava Hall')
+        self.assertNotContains(response, 'Gamma Hall')
+
+    def test_date_outside_window_falls_back_to_today(self):
+        response = self._get(date=(self.today + timedelta(days=40)).isoformat())
+        self.assertContains(response, 'Ava Hall')
+
+    def test_date_tabs_rendered(self):
+        response = self._get()
+        self.assertContains(response, 'id="dateTabs"')
+        self.assertContains(response, 'Today')
+        self.assertContains(response, 'date-tab')
+        self.assertEqual(response.context['show_dates'][0]['is_selected'], True)
+        self.assertEqual(len(response.context['show_dates']), 4)
+
+    def test_ajax_returns_partial_html_and_count(self):
+        response = self.client.get(
+            reverse('theater_list', args=[self.movie.id]),
+            {'date': self.tomorrow.isoformat()},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body['count'], 1)
+        self.assertIn('Gamma Hall', body['html'])
+        self.assertNotIn('Ava Hall', body['html'])
+
+    def test_date_with_no_shows_renders_empty_state(self):
+        no_show_date = self.today + timedelta(days=2)
+        response = self._get(date=no_show_date.isoformat())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No shows on')
+        self.assertNotContains(response, 'Ava Hall')
+
+    def test_book_seats_redirects_past_show(self):
+        user = User.objects.create_user('tester', 't@example.com', 'pw123')
+        self.client.force_login(user)
+        response = self.client.get(reverse('book_seats', args=[self.beta.id]))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('theaters', response.url)
+
+    def test_book_seats_allows_upcoming_show(self):
+        user = User.objects.create_user('tester', 't@example.com', 'pw123')
+        self.client.force_login(user)
+        response = self.client.get(reverse('book_seats', args=[self.ava.id]))
+        self.assertEqual(response.status_code, 200)

@@ -1,3 +1,4 @@
+{% load static %}
 <nav class="navbar navbar-expand-lg navbar-bms" aria-label="Main navigation">
   <div class="container-bms w-100 d-flex align-items-center">
     <!-- Mobile: hamburger left -->
@@ -9,9 +10,43 @@
 
     <!-- Logo (kept left on desktop; next to hamburger on mobile) -->
     <a class="navbar-brand me-auto me-lg-0" href="{% url 'home' %}" aria-label="BookMySeat Home">
-      <span class="brand-icon" aria-hidden="true"><i class="bi bi-film"></i></span>
-      BookMySeat
+      <img src="{% static 'img/logo.png' %}" alt="" class="brand-logo">
+      <span class="brand-text-wrap">
+        <span class="brand-title">
+          <span class="brand-book">Book</span><span class="brand-my">My</span><span class="brand-seat">Seat</span>
+        </span>
+        <span class="brand-tagline" aria-hidden="true">
+          <span class="brand-tagline-line">&mdash;</span>
+          Your Show <span class="brand-tagline-dot">.</span> Your Seat
+          <span class="brand-tagline-line">&mdash;</span>
+        </span>
+      </span>
     </a>
+
+    <!-- City selector (all breakpoints) -->
+    <div class="city-selector dropdown" id="citySelector"
+         data-movies-url="{% url 'movie_list' %}">
+      <button class="city-selector__btn dropdown-toggle" type="button" id="citySelectorBtn"
+              data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">
+        <i class="bi bi-geo-alt-fill city-selector__pin" aria-hidden="true"></i>
+        <span class="city-selector__name" data-city-label>
+          {% if current_city %}{{ current_city }}{% else %}Select City{% endif %}
+        </span>
+        <i class="bi bi-chevron-down city-selector__caret" aria-hidden="true"></i>
+      </button>
+      <div class="dropdown-menu city-selector__menu" aria-labelledby="citySelectorBtn">
+        <h6 class="dropdown-header city-selector__header">Select City</h6>
+        {% for city in all_cities %}
+        <button type="button" class="dropdown-item city-selector__item{% if city == current_city %} is-active{% endif %}"
+                data-city="{{ city }}" data-bs-auto-close="true">
+          <span class="city-selector__item-name">{{ city }}</span>
+          {% if city == current_city %}<i class="bi bi-check-lg city-selector__check" aria-hidden="true"></i>{% endif %}
+        </button>
+        {% empty %}
+        <span class="dropdown-item disabled">No cities available</span>
+        {% endfor %}
+      </div>
+    </div>
 
     <!-- Mobile right: login/register on the right only on mobile -->
     <div class="d-flex align-items-center d-lg-none ms-auto">
@@ -39,7 +74,7 @@
       </form>
 
       <!-- Desktop navigation: visible on lg and up only -->
-      <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-1 d-none d-lg-flex">
+      <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-3 d-none d-lg-flex">
         <li class="nav-item">
           <a class="nav-link" href="{% url 'home' %}">Home</a>
         </li>

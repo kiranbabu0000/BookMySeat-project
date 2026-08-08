@@ -9,7 +9,8 @@
   'use strict';
 
   var POLL_INTERVAL = 5000;
-  var MAX_SEATS = 12;
+  var MAX_SEATS = 10;
+  var MAX_SEATS_DEFAULT = 10;
 
   var layout = null;
   var csrfToken = '';
@@ -17,6 +18,7 @@
   var els = {};
   var seatEls = new Map();
   var prices = {};
+  var coupleMap = {};
   var state = {
     booked: new Set(),
     reserved: new Set(),
@@ -31,6 +33,13 @@
   var pollHandle = null;
   var lastEtag = null;
   var busy = false;
+
+  /* Seat-map zoom */
+  var MIN_ZOOM = 60;
+  var MAX_ZOOM = 150;
+  var ZOOM_STEP = 10;
+  var zoomLevel = 100;
+  var baseSeatSize = 34;
 
   function parseJson(input, fallback) {
     if (!input) return fallback;
@@ -47,6 +56,12 @@
 
   function round2(value) {
     return Math.round(Number(value) * 100) / 100;
+  }
+
+  function esc(value) {
+    return String(value).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
   }
 
   function gstRateFor(taxable) {
@@ -93,18 +108,37 @@
     els.holdActions = document.getElementById('reservationModeActions');
     els.processing = document.getElementById('processingState');
     els.processingText = document.getElementById('processingText');
+    els.zoomIn = document.getElementById('zoomInBtn');
+    els.zoomOut = document.getElementById('zoomOutBtn');
+    els.zoomReset = document.getElementById('zoomResetBtn');
+    els.zoomLevel = document.getElementById('zoomLevel');
+    els.tierBreakdown = document.getElementById('summaryTierBreakdown');
+    els.mobileBar = document.getElementById('mobileActionBar');
+    els.mobileTotal = document.getElementById('mobileTotal');
+    els.mobileSeatCount = document.getElementById('mobileSeatCount');
+    els.mobilePrimary = document.getElementById('mobilePrimaryBtn');
+    els.mobilePrimaryLabel = document.getElementById('mobilePrimaryLabel');
+    els.mobileRelease = document.getElementById('mobileReleaseBtn');
 
     show = parseJson(document.getElementById('showData').textContent, {});
     if (!show.ticket_price) show.ticket_price = '250';
     if (show.platform_fee === undefined || show.platform_fee === null) show.platform_fee = 5;
     if (show.misc_fee === undefined || show.misc_fee === null) show.misc_fee = 2.5;
+    MAX_SEATS = Number(show.max_tickets) || MAX_SEATS_DEFAULT;
     if (show.prices) {
       Object.keys(show.prices).forEach(function (id) {
         prices[id] = Number(show.prices[id]);
       });
     }
+    (show.couple_pairs || []).forEach(function (pair) {
+      if (pair && pair.length === 2) {
+        coupleMap[String(pair[0])] = String(pair[1]);
+        coupleMap[String(pair[1])] = String(pair[0]);
+      }
+    });
 
     collectSeatEls();
+    initZoom();
 
     var savedRes = parseJson(document.getElementById('reservationData').textContent, null);
     if (savedRes && savedRes.token && new Date(savedRes.expires_at) > new Date()) {
@@ -132,6 +166,21 @@
       window.location.href = url;
     });
 
+    if (els.mobilePrimary) {
+      els.mobilePrimary.addEventListener('click', function () {
+        if (state.mode === 'hold') {
+          els.proceedPayBtn.click();
+        } else {
+          els.continueBtn.click();
+        }
+      });
+    }
+    if (els.mobileRelease) {
+      els.mobileRelease.addEventListener('click', function () {
+        els.releaseBtn.click();
+      });
+    }
+
     if (state.mode === 'hold') startTimer();
     startPolling();
   }
@@ -144,6 +193,32 @@
       if (el.classList.contains('seat--booked')) state.booked.add(id);
       else if (el.classList.contains('seat--reserved')) state.reserved.add(id);
     });
+  }
+
+  /* ---------- seat-map zoom ---------- */
+
+  function initZoom() {
+    var grid = document.getElementById('seatGrid');
+    if (!grid) return;
+    baseSeatSize = parseFloat(getComputedStyle(grid).getPropertyValue('--seat-size')) || 34;
+    if (els.zoomIn) {
+      els.zoomIn.addEventListener('click', function () { applyZoom(zoomLevel + ZOOM_STEP); });
+      els.zoomOut.addEventListener('click', function () { applyZoom(zoomLevel - ZOOM_STEP); });
+      els.zoomReset.addEventListener('click', function () { applyZoom(100); });
+    }
+    window.addEventListener('resize', function () {
+      if (zoomLevel !== 100) return;
+      grid.style.removeProperty('--seat-size');
+    });
+  }
+
+  function applyZoom(level) {
+    var grid = document.getElementById('seatGrid');
+    if (!grid) return;
+    zoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, level));
+    var px = baseSeatSize * zoomLevel / 100;
+    grid.style.setProperty('--seat-size', px.toFixed(2) + 'px');
+    if (els.zoomLevel) els.zoomLevel.textContent = zoomLevel + '%';
   }
 
   function renderSeats() {
@@ -212,6 +287,45 @@
     if (els.gstLabel) els.gstLabel.textContent = 'GST (' + Math.round(gstRate * 100) + '%)';
     els.total.textContent = fmtCurrency(total);
     els.continueBtn.disabled = ids.size === 0 || state.mode === 'hold';
+    renderTierBreakdown(ids);
+    if (els.mobileTotal) els.mobileTotal.textContent = fmtCurrency(total);
+    if (els.mobileSeatCount) {
+      els.mobileSeatCount.innerHTML = '<i class="bi bi-ticket-perforated me-1"></i>' + ids.size;
+    }
+    if (els.mobilePrimary) els.mobilePrimary.disabled = ids.size === 0;
+  }
+
+  function renderTierBreakdown(ids) {
+    var container = els.tierBreakdown;
+    if (!container) return;
+    if (!ids.size) {
+      container.classList.add('d-none');
+      container.innerHTML = '';
+      return;
+    }
+    var groups = {};
+    var order = [];
+    ids.forEach(function (id) {
+      var el = seatEls.get(id);
+      var tier = (el && el.dataset.tier) || 'General';
+      if (!(tier in groups)) {
+        groups[tier] = { count: 0, subtotal: 0 };
+        order.push(tier);
+      }
+      groups[tier].count += 1;
+      groups[tier].subtotal += prices[String(id)] || Number(show.ticket_price) || 0;
+    });
+    var html = order.map(function (tier) {
+      var g = groups[tier];
+      var cls = tier.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      return '<div class="summary-tier-breakdown__row">' +
+        '<span class="tier-legend__dot tier-legend__dot--' + cls + '"></span>' +
+        '<span class="summary-tier-breakdown__label">' + esc(tier) + ' × ' + g.count + '</span>' +
+        '<span class="summary-tier-breakdown__amount">' + fmtCurrency(g.subtotal) + '</span>' +
+        '</div>';
+    }).join('');
+    container.classList.remove('d-none');
+    container.innerHTML = html;
   }
 
   function renderMode() {
@@ -219,6 +333,12 @@
     els.selActions.classList.toggle('d-none', hold);
     els.holdActions.classList.toggle('d-none', !hold);
     els.timerBar.classList.toggle('d-none', !hold);
+    if (els.mobilePrimaryLabel) {
+      els.mobilePrimaryLabel.innerHTML = hold
+        ? '<i class="bi bi-credit-card me-1"></i> Proceed to Pay'
+        : '<i class="bi bi-calendar2-check me-1"></i> Continue';
+    }
+    if (els.mobileRelease) els.mobileRelease.classList.toggle('d-none', !hold);
   }
 
   /* ---------- seat interaction ---------- */
@@ -241,16 +361,32 @@
       return;
     }
     if (state.selected.has(id)) {
-      state.selected.delete(id);
+      removeSelection(id);
     } else {
-      if (state.selected.size >= MAX_SEATS) {
-        flashMessage('You can select a maximum of ' + MAX_SEATS + ' seats.', 'danger');
+      var extra = partnerOf(id);
+      if (state.selected.size + (extra ? 1 : 0) > MAX_SEATS) {
+        flashMessage('You can only select ' + MAX_SEATS + ' seats.', 'danger');
+        return;
+      }
+      if (extra && (state.booked.has(extra) || state.reserved.has(extra))) {
+        flashMessage('This couple seat is only available with its partner.', 'danger');
         return;
       }
       state.selected.add(id);
+      if (extra && !state.selected.has(extra)) {
+        state.selected.add(extra);
+        var extraEl = seatEls.get(extra);
+        if (extraEl) extraEl.classList.add('seat--selected');
+      }
     }
     renderSeats();
     updateSummary();
+  }
+
+  function removeSelection(id) {
+    state.selected.delete(id);
+    var extra = partnerOf(id);
+    if (extra) state.selected.delete(extra);
   }
 
   function handleHoldSeatClick(el) {
@@ -258,16 +394,26 @@
     var id = el.dataset.seatId;
     if (state.booked.has(id)) return;
     if (state.held.has(id)) {
-      doModify({ remove: [id] });
+      var extra = partnerOf(id);
+      doModify(extra && state.held.has(extra) ? { remove: [id, extra] } : { remove: [id] });
     } else if (state.reserved.has(id)) {
       flashMessage('This seat has just been reserved by another user.', 'danger');
     } else {
-      if (state.held.size >= MAX_SEATS) {
-        flashMessage('You can hold a maximum of ' + MAX_SEATS + ' seats.', 'danger');
+      var extra = partnerOf(id);
+      if (state.held.size + (extra ? 1 : 0) > MAX_SEATS) {
+        flashMessage('You can only hold ' + MAX_SEATS + ' seats.', 'danger');
         return;
       }
-      doModify({ add: [id] });
+      if (extra && (state.booked.has(extra) || state.reserved.has(extra))) {
+        flashMessage('This couple seat is only available with its partner.', 'danger');
+        return;
+      }
+      doModify(extra ? { add: [id, extra] } : { add: [id] });
     }
+  }
+
+  function partnerOf(id) {
+    return coupleMap[String(id)] || null;
   }
 
   /* ---------- actions ---------- */
@@ -288,7 +434,7 @@
       setProcessing(false);
       if (data.ok) {
         applyReservation(data.reservation);
-        flashMessage('Your seats are held for 2 minutes.', 'success');
+        flashMessage('Your seats are held for 5 minutes.', 'success');
       } else {
         flashMessage(data.error || 'Unable to reserve seats.', 'danger');
         refreshSeats();

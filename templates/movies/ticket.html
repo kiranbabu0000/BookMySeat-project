@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Ticket — {{ booking.movie.name }}{% endblock %}
+{% block title %}Ticket — {{ movie_name|default:"BookMySeat" }}{% endblock %}
 
 {% block extra_css %}
 <style>
   .ticket-page { padding: 3rem 0; }
   .ticket-card {
-    max-width: 620px; margin: 0 auto;
+    max-width: 720px; margin: 0 auto;
     background: #fff; color: #111;
     border-radius: 18px; overflow: hidden;
     box-shadow: 0 20px 50px rgba(0,0,0,0.25);
@@ -18,9 +18,15 @@
   }
   .ticket-body { padding: 1.75rem; }
   .ticket-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.25rem; }
-  .ticket-movie { font-size: 1.5rem; font-weight: 800; margin: 0; color: #111; }
+  .ticket-movie { font-size: 1.5rem; font-weight: 800; margin: 0; color: #111; line-height: 1.2; }
+  .ticket-meta { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+  .badge-bms { background: #e11d48; color: #fff; font-size: 0.7rem; font-weight: 700; padding: 0.25rem 0.6rem; border-radius: 999px; }
+  .badge-bms-outline { background: transparent; border: 1px solid #e11d48; color: #e11d48; font-size: 0.7rem; font-weight: 700; padding: 0.25rem 0.6rem; border-radius: 999px; }
   .ticket-ref { font-size: 0.85rem; color: #555; }
   .ticket-ref strong { font-size: 0.95rem; color: #111; letter-spacing: 0.5px; }
+  .ticket-showcase { display: flex; gap: 1rem; align-items: center; background: #f8fafc; border: 1px solid #eef2f7; border-radius: 12px; padding: 0.9rem; margin-bottom: 1.25rem; }
+  .ticket-poster { width: 74px; height: 108px; object-fit: cover; border-radius: 8px; background: #e2e8f0; flex-shrink: 0; }
+  .ticket-poster-placeholder { width: 74px; height: 108px; border-radius: 8px; background: linear-gradient(135deg, #e11d48, #be123c); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 2rem; flex-shrink: 0; }
   .ticket-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1.5rem; margin-bottom: 1.25rem; }
   .ticket-details .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.8px; color: #888; margin-bottom: 2px; }
   .ticket-details .value { font-weight: 700; color: #111; }
@@ -28,17 +34,16 @@
     display: flex; align-items: center; justify-content: center; gap: 1.25rem;
     border-top: 2px dashed #ddd; padding-top: 1.25rem;
   }
-  .qr-grid {
-    font-family: monospace; font-size: 8px; line-height: 8px;
-    color: #111; letter-spacing: 0; white-space: pre;
-  }
+  .qr-img { width: 130px; height: 130px; border-radius: 6px; background: #fff; border: 1px solid #ddd; }
   .ticket-actions { text-align: center; margin-top: 1.5rem; }
+  .ticket-footer { display: flex; justify-content: space-between; align-items: center; padding: 0.85rem 1.75rem; background: #f1f5f9; font-size: 0.75rem; color: #64748b; }
+  .not-yours { max-width: 560px; margin: 0 auto; text-align: center; padding: 3rem 1.5rem; }
   @media print {
     body { background: #fff !important; }
     header, footer, .offcanvas, .navbar, .skip-link, .ticket-actions { display: none !important; }
     .ticket-page { padding: 0; }
     .ticket-card { box-shadow: none; border: 1px solid #ccc; }
-    .qr-grid { font-size: 10px; line-height: 10px; }
+    .qr-img { width: 140px; height: 140px; }
   }
 </style>
 {% endblock %}
@@ -46,13 +51,43 @@
 {% block content %}
 <section class="page-section ticket-page">
   <div class="container-bms">
+
+    {% if not_your_ticket %}
+    <div class="not-yours ticket-card" style="padding:0;">
+      <div class="ticket-strip"></div>
+      <div class="ticket-body">
+        <i class="bi bi-shield-exclamation" style="font-size:3rem; color:#e11d48;"></i>
+        <h1 class="ticket-movie mt-3" style="font-size:1.25rem;">Not Your Ticket</h1>
+        <p style="color:#64748b; margin-top:0.75rem;">
+          This ticket does not belong to you, so its details and QR code are hidden for privacy.
+        </p>
+        <p style="color:#94a3b8; font-size:0.85rem; margin-bottom:0;">
+          Booking reference <strong>{{ booking_ref }}</strong>
+        </p>
+      </div>
+      <div class="ticket-strip"></div>
+    </div>
+    <div class="ticket-actions">
+      <a href="{% url 'profile' %}" class="btn btn-bms-outline justify-content-center">
+        <i class="bi bi-arrow-left me-1"></i> Back to Profile
+      </a>
+    </div>
+    {% else %}
+
     <div class="ticket-card" id="ticketCard">
       <div class="ticket-strip"></div>
       <div class="ticket-body">
         <div class="ticket-head">
           <div>
-            <h1 class="ticket-movie">{{ booking.movie.name }}</h1>
-            <div class="ticket-ref">Booking Ref: <strong>{{ booking.booking_ref }}</strong></div>
+            <h1 class="ticket-movie">{{ movie_name }}</h1>
+            <div class="ticket-meta">
+              <span class="badge-bms">{{ format_label|default:"2D / 4K" }}</span>
+              {% if language_label %}<span class="badge-bms-outline">{{ language_label }}</span>{% endif %}
+            </div>
+            <div class="ticket-ref mt-2 d-flex align-items-center" style="gap: 6px;">
+              <span>Booking Ref:</span>
+              <strong class="booking-ref">{{ booking_ref }}</strong>
+            </div>
           </div>
           <div class="text-end">
             <div style="font-weight: 800; color: #e11d48; font-size: 1.1rem;">BookMySeat</div>
@@ -60,50 +95,92 @@
           </div>
         </div>
 
+        <div class="ticket-showcase">
+          {% if poster_url %}
+          <img class="ticket-poster" src="{{ poster_url }}" alt="{{ movie_name }} poster">
+          {% else %}
+          <div class="ticket-poster-placeholder"><i class="bi bi-film"></i></div>
+          {% endif %}
+          <div style="flex:1; min-width:0;">
+            <div class="label" style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; margin-bottom:2px;">Cinema</div>
+            <div class="value" style="font-weight:800; color:#111;">{{ theatre_name }}</div>
+            <div style="font-size:0.85rem; color:#555;">{{ screen_name|default:"Main" }} Screen</div>
+            <div style="font-size:0.85rem; color:#e11d48; font-weight:700; margin-top:2px;">{{ show_time|date:"g:i A, D M d Y" }}</div>
+          </div>
+          <div class="text-end">
+            <div class="label" style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; margin-bottom:2px;">Tickets</div>
+            <div style="font-weight:800; font-size:1.3rem; color:#111;">{{ ticket_count }}</div>
+            <div style="font-size:0.8rem; color:#555;">{{ seats|join:", " }}</div>
+          </div>
+        </div>
+
         <div class="ticket-details">
           <div>
-            <div class="label">Cinema</div>
-            <div class="value">{{ booking.theater.name }}</div>
-          </div>
-          <div>
-            <div class="label">Show Time</div>
-            <div class="value">{{ booking.theater.time|date:"g:i A, D M d Y" }}</div>
-          </div>
-          <div>
-            <div class="label">Screen / Seat</div>
-            <div class="value">{{ booking.theater.screen_name|default:"Main" }} · {{ booking.seat.seat_number }}</div>
+            <div class="label">Seats</div>
+            <div class="value">{{ seats|join:", " }}</div>
           </div>
           <div>
             <div class="label">Booked For</div>
-            <div class="value">{{ booking.user.username }}</div>
+            <div class="value">{{ booked_for }}</div>
+          </div>
+          <div>
+            <div class="label">Payment Method</div>
+            <div class="value">{{ payment_method|default:"Online"|upper }}</div>
           </div>
           <div>
             <div class="label">Payment ID</div>
-            <div class="value" style="word-break: break-all;">{{ booking.payment.transaction_id|default:"—" }}</div>
+            <div class="value" style="word-break: break-all;">{{ transaction_id|default:"—" }}</div>
           </div>
         </div>
 
         <div class="ticket-qr">
-          <div class="qr-grid">{{ qr_pattern }}</div>
+          {% if qr_data_uri %}
+          <img class="qr-img" src="{{ qr_data_uri }}" alt="Booking QR code">
+          {% else %}
+          <div style="font-family:monospace; font-size:8px; color:#111;">QR unavailable</div>
+          {% endif %}
           <div>
             <div class="label" style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; margin-bottom:2px;">Amount Paid</div>
-            <div style="font-weight:800; font-size:1.15rem; color:#111;">₹{{ booking.payment.amount }}</div>
-            <div class="label" style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; margin-top:6px;">Payment</div>
-            <div style="font-size:0.85rem; color:#111;">{{ booking.payment.payment_method|default:"UPI"|upper }} · Paid</div>
+            <div style="font-weight:800; font-size:1.15rem; color:#111;">₹{{ total }}</div>
+            <div class="label" style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.8px; color:#888; margin-top:6px;">Status</div>
+            <div style="font-size:0.85rem; color:#111;">BOOKED · Paid</div>
           </div>
         </div>
       </div>
       <div class="ticket-strip"></div>
+      <div class="ticket-footer">
+        <span><i class="bi bi-ticket-perforated me-1"></i>E-ticket — present this QR at the venue</span>
+        <span>BookMySeat</span>
+      </div>
     </div>
 
     <div class="ticket-actions">
       <button class="btn btn-bms-primary justify-content-center" onclick="window.print()">
         <i class="bi bi-printer me-1"></i> Print Ticket
       </button>
+      <a href="{% url 'ticket_pdf' booking_ref %}" class="btn btn-bms-primary justify-content-center">
+        <i class="bi bi-file-earmark-pdf me-1"></i> Download PDF
+      </a>
+      {% if wa_link %}
+      <button class="btn btn-bms-outline justify-content-center" onclick="openWhatsApp()">
+        <i class="bi bi-whatsapp me-1"></i> Share on WhatsApp
+      </button>
+      {% endif %}
+      <a href="{% url 'booking_invoice' booking_ref %}" class="btn btn-bms-outline justify-content-center">
+        <i class="bi bi-receipt me-1"></i> View Invoice
+      </a>
       <a href="{% url 'profile' %}" class="btn btn-bms-outline justify-content-center">
         <i class="bi bi-arrow-left me-1"></i> Back to Profile
       </a>
     </div>
+
+    <script>
+      function openWhatsApp() {
+        var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        window.open(isMobile ? '{{ wa_link|safe }}' : '{{ wa_web_link|safe }}', '_blank', 'noopener,noreferrer');
+      }
+    </script>
+    {% endif %}
   </div>
 </section>
 {% endblock %}

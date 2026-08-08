@@ -189,24 +189,30 @@ class DashboardView(AdminSessionMixin, TemplateView):
             {'label': 'Occupancy', 'value': f"{context['occupancy_rate']}%"},
         ])
 
-        labels = []
-        data = []
+        months = []
         for k in range(5, -1, -1):
             yr = today.year
             mth = today.month - k
             while mth <= 0:
                 mth += 12
                 yr -= 1
-            month_start = date(yr, mth, 1)
-            if mth == 12:
-                month_end = date(yr + 1, 1, 1)
-            else:
-                month_end = date(yr, mth + 1, 1)
-            count = Booking.objects.filter(booked_at__date__gte=month_start, booked_at__date__lt=month_end).count()
-            labels.append(month_start.strftime('%b %Y'))
-            data.append(count)
-        context['monthly_labels'] = json.dumps(labels)
-        context['monthly_data'] = json.dumps(data)
+            start = date(yr, mth, 1)
+            end = date(yr + 1, 1, 1) if mth == 12 else date(yr, mth + 1, 1)
+            months.append((start, end))
+        monthly_counts = {
+            (row['month'].year, row['month'].month): row['count']
+            for row in (
+                Booking.objects
+                .filter(booked_at__gte=months[0][0], booked_at__lt=months[-1][1])
+                .annotate(month=TruncMonth('booked_at'))
+                .values('month')
+                .annotate(count=Count('id'))
+            )
+        }
+        context['monthly_labels'] = json.dumps([s.strftime('%b %Y') for s, _ in months])
+        context['monthly_data'] = json.dumps([
+            monthly_counts.get((s.year, s.month), 0) for s, _ in months
+        ])
 
         return context
 
@@ -295,6 +301,7 @@ class AdminDeleteViewMixin:
         return self.delete(request, *args, **kwargs)
 
 
+@method_decorator(permission_required('movie', 'can_delete'), name='dispatch')
 class MovieDeleteView(AdminSessionMixin, DeleteView):
     model = Movie
     template_name = 'admin/movies/movie_confirm_delete.html'
@@ -380,6 +387,7 @@ class MovieDeleteView(AdminSessionMixin, DeleteView):
 
 
 @admin_session_required
+@permission_required('movie', 'can_view')
 def movie_removal_list(request):
     now = timezone.now()
     week_ago = now - timedelta(days=7)
@@ -481,6 +489,7 @@ class MovieDetailView(AdminSessionMixin, TemplateView):
 
 
 @admin_session_required
+@permission_required('movie', 'can_edit')
 def movie_toggle_status(request, pk):
     movie = get_object_or_404(Movie, id=pk)
     valid_statuses = [s[0] for s in Movie.STATUS_CHOICES]
@@ -505,6 +514,7 @@ def movie_toggle_status(request, pk):
 
 
 @admin_session_required
+@permission_required('movie', 'can_edit')
 def movie_toggle_homepage(request, pk):
     movie = get_object_or_404(Movie, id=pk)
     movie.show_on_homepage = not movie.show_on_homepage
@@ -523,6 +533,7 @@ def movie_toggle_homepage(request, pk):
 
 
 @admin_session_required
+@permission_required('movie', 'can_edit')
 def movie_restore(request, pk):
     movie = get_object_or_404(Movie, id=pk)
     movie.is_deleted = False
@@ -545,7 +556,18 @@ def movie_restore(request, pk):
 def search_suggestions(request):
     q = request.GET.get('q', '').strip()
     if len(q) < 1:
-        return JsonResponse([], safe=False)
+        from movies.discovery import trending_movies
+        movies = trending_movies(6)
+        results = []
+        for m in movies:
+            results.append({
+                'id': m.id,
+                'name': m.name,
+                'image': m.image.url if m.image and hasattr(m.image, 'url') else '',
+                'url': f'/movies/{m.id}/',
+                'type': 'trending',
+            })
+        return JsonResponse(results, safe=False)
     movies = Movie.objects.filter(
         name__icontains=q,
         is_deleted=False
@@ -558,7 +580,8 @@ def search_suggestions(request):
             'id': m.id,
             'name': m.name,
             'image': m.image.url if m.image and hasattr(m.image, 'url') else '',
-            'url': f'/movies/{m.id}/'
+            'url': f'/movies/{m.id}/',
+            'type': 'result',
         })
     return JsonResponse(results, safe=False)
 
@@ -1115,6 +1138,16 @@ class ScreenCreateView(AdminSessionMixin, CreateView):
     template_name = 'admin/screens/screen_form.html'
     success_url = reverse_lazy('admin_screen_list')
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from admin_panel.layouts import build_layout_spec, preview_rows
+        size = self.request.GET.get('size', 'small')
+        spec = build_layout_spec(size)
+        context['preview_rows'] = preview_rows(spec)
+        context['preview_capacity'] = len(spec['seats'])
+        context['preview_size'] = size
+        return context
+
     def form_valid(self, form):
         response = super().form_valid(form)
         messages.success(self.request, 'Screen added successfully.')
@@ -1134,6 +1167,16 @@ class ScreenUpdateView(AdminSessionMixin, UpdateView):
     form_class = ScreenForm
     template_name = 'admin/screens/screen_form.html'
     success_url = reverse_lazy('admin_screen_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from admin_panel.layouts import build_layout_spec, preview_rows
+        size = self.object.size if self.object.size in ('small', 'medium', 'large', 'imax', 'premium') else 'small'
+        spec = build_layout_spec(size)
+        context['preview_rows'] = preview_rows(spec)
+        context['preview_capacity'] = len(spec['seats'])
+        context['preview_size'] = size
+        return context
 
     def form_valid(self, form):
         response = super().form_valid(form)
@@ -1166,6 +1209,25 @@ class ScreenDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
         )
         messages.success(request, 'Screen deleted successfully.')
         return super().delete(request, *args, **kwargs)
+
+
+@admin_session_required
+def screen_layout_preview(request):
+    """JSON seat-layout preview for a screen size (admin layout picker)."""
+    from admin_panel.layouts import build_layout_spec, preview_rows
+    size = request.GET.get('size', 'small')
+    if size not in ('small', 'medium', 'large', 'imax', 'premium'):
+        size = 'small'
+    spec = build_layout_spec(size)
+    return JsonResponse({
+        'size': size,
+        'rows': spec['rows'],
+        'cols_per_section': spec['cols_per_section'],
+        'total_cols': spec['total_cols'],
+        'capacity': len(spec['seats']),
+        'sections': spec['sections'],
+        'preview_rows': preview_rows(spec),
+    })
 
 
 class ShowListView(AdminSessionMixin, ListView):
@@ -1297,6 +1359,7 @@ class ShowDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
 
 
 @admin_session_required
+@permission_required('show', 'can_edit')
 def show_toggle_status(request, pk):
     show = get_object_or_404(Show, id=pk)
     status_cycle = {'active': 'sold_out', 'sold_out': 'paused', 'paused': 'cancelled', 'cancelled': 'active'}
@@ -1317,6 +1380,7 @@ def show_toggle_status(request, pk):
 
 
 @admin_session_required
+@permission_required('show', 'can_edit')
 def show_bulk_action(request):
     if request.method == 'POST':
         movie_id = request.POST.get('movie')
@@ -1554,7 +1618,7 @@ def seat_management(request):
 
     if theater_id:
         selected_theater = get_object_or_404(Theater, id=theater_id)
-        seats = Seat.objects.filter(theater=selected_theater).order_by('seat_number')
+        seats = Seat.objects.filter(theater=selected_theater).order_by('row_idx', 'col_idx', 'seat_number')
     else:
         seats = Seat.objects.none()
 
@@ -1564,35 +1628,23 @@ def seat_management(request):
         if action == 'generate_seats':
             theater_id = request.POST.get('theater_id')
             theater = get_object_or_404(Theater, id=theater_id)
-            try:
-                rows = int(request.POST.get('rows', 8))
-                seats_per_row = int(request.POST.get('seats_per_row', 12))
-            except (TypeError, ValueError):
-                rows = 0
-                seats_per_row = 0
-            if rows < 1 or rows > 50 or seats_per_row < 1 or seats_per_row > 50:
-                messages.error(request, 'Rows and seats per row must be whole numbers between 1 and 50.')
-                return redirect(f'{reverse("admin_seat_management")}?theater={theater.id}')
-            created_count = 0
-            for r in range(1, rows + 1):
-                row_label = chr(64 + r) if r <= 26 else f'R{r}'
-                for s in range(1, seats_per_row + 1):
-                    seat_number = f'{row_label}{s}'
-                    _, created = Seat.objects.get_or_create(
-                        theater=theater,
-                        seat_number=seat_number,
-                        defaults={'is_booked': False}
-                    )
-                    if created:
-                        created_count += 1
+            from admin_panel.services import create_seats_for_theater
+            from admin_panel.layouts import capacity_of
+            admin_show = getattr(theater, 'admin_show', None)
+            layout_spec = theater.layout_spec or getattr(
+                admin_show.screen if admin_show else None, 'layout_spec', None)
+            created_count = create_seats_for_theater(
+                theater, capacity_of(layout_spec) if layout_spec else 0,
+                layout_spec=layout_spec,
+            )
             AuditLog.objects.create(
                 user=request.user,
                 action='Seats Generated',
                 module='Seat',
-                details=f'Generated {created_count} seats for {theater.name} ({rows}x{seats_per_row})',
+                details=f'Generated {created_count} seats for {theater.name} from layout',
                 ip_address=request.META.get('REMOTE_ADDR')
             )
-            messages.success(request, f'{created_count} seats generated successfully.')
+            messages.success(request, f'{created_count} seats generated from the screen layout.')
             return redirect(f'{reverse("admin_seat_management")}?theater={theater.id}')
 
         elif action == 'block_seat':
@@ -2053,7 +2105,7 @@ class UserListView(AdminSessionMixin, ListView):
             return 20
 
     def get_queryset(self):
-        qs = User.objects.annotate(booking_count=Count('booking_set'))
+        qs = User.objects.annotate(booking_count=Count('booking'))
         search = self.request.GET.get('search')
         if search:
             qs = qs.filter(
@@ -2538,6 +2590,7 @@ class NotificationListView(AdminSessionMixin, ListView):
 
 
 @admin_session_required
+@permission_required('notification', 'can_create')
 def notification_create(request):
     if request.method == 'POST':
         form = NotificationForm(request.POST)
@@ -2585,6 +2638,7 @@ def notification_create(request):
 
 
 @admin_session_required
+@permission_required('notification', 'can_view')
 def notification_mark_read(request, pk):
     notification = get_object_or_404(Notification, id=pk)
     notification.is_read = True
@@ -2593,6 +2647,7 @@ def notification_mark_read(request, pk):
 
 
 @admin_session_required
+@permission_required('notification', 'can_delete')
 def notification_delete(request, pk):
     notification = get_object_or_404(Notification, id=pk)
     AuditLog.objects.create(
@@ -2657,6 +2712,7 @@ class ReviewListView(AdminSessionMixin, ListView):
 
 
 @admin_session_required
+@permission_required('review', 'can_edit')
 def review_approve(request, pk):
     review = get_object_or_404(Review, id=pk)
     review.is_approved = not review.is_approved
@@ -2675,6 +2731,7 @@ def review_approve(request, pk):
 
 
 @admin_session_required
+@permission_required('review', 'can_edit')
 def review_hide(request, pk):
     review = get_object_or_404(Review, id=pk)
     review.is_hidden = True
@@ -2692,6 +2749,7 @@ def review_hide(request, pk):
 
 
 @admin_session_required
+@permission_required('review', 'can_edit')
 def review_restore(request, pk):
     review = get_object_or_404(Review, id=pk)
     review.is_hidden = False
@@ -2709,6 +2767,7 @@ def review_restore(request, pk):
 
 
 @admin_session_required
+@permission_required('review', 'can_delete')
 def review_delete(request, pk):
     review = get_object_or_404(Review, id=pk)
     movie_name = review.movie.name
