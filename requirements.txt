@@ -1,12 +1,42 @@
-asgiref==3.12.1
-dj-database-url
+# ============================================================
+# BookMySeat — Python dependencies (Vercel serverless ready)
+# Pinned exactly so every deploy is reproducible.
+# ============================================================
+
+# --- Web framework ---------------------------------------------------------
 Django==6.0.7
-django-redis==5.4.0
-gunicorn==23.0.0
-pillow==12.0.0
-psycopg2-binary
-qrcode==8.2
-razorpay==2.0.1
-reportlab==4.2.2
+asgiref==3.12.1
 sqlparse==0.5.5
+
+# --- Environment / configuration -------------------------------------------
+# Imported by bookmyseat/settings.py (load_dotenv + DATABASE_URL).
+python-dotenv==1.0.0
+dj-database-url==3.1.2
+
+# --- Static files ----------------------------------------------------------
+# Serves collected static files in production (no separate web server).
+# Added to MIDDLEWARE in bookmyseat/settings.py; works on serverless.
+whitenoise==6.8.2
+
+# --- Database --------------------------------------------------------------
+# Required by dj-database-url when DATABASE_URL points at PostgreSQL (Vercel).
+psycopg2-binary==2.9.12
+
+# --- Cache -----------------------------------------------------------------
+# Optional Redis cache (used only when REDIS_URL is set; falls back to
+# LocMem otherwise). Pulls in `redis` automatically.
+django-redis==5.4.0
+
+# --- Imaging / PDF tickets / QR codes --------------------------------------
+Pillow==12.0.0
+reportlab==4.2.2
+qrcode==8.2
+
+# --- Payments --------------------------------------------------------------
+razorpay==2.0.1
+
+# --- Utilities -------------------------------------------------------------
 typing_extensions==4.15.0
+
+# Local dev server only (NOT used by Vercel, which wraps the WSGI app itself).
+gunicorn==23.0.0
