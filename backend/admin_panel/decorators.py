@@ -58,6 +58,9 @@ def permission_required(module, action='can_view'):
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
+            if not _verify_admin_session(request):
+                clear_admin_session(request)
+                return redirect('/admin-login/')
             user = request.user
             if user.is_superuser:
                 return view_func(request, *args, **kwargs)

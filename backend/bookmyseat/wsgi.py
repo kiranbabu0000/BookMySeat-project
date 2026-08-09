@@ -8,6 +8,13 @@ https://docs.djangoproject.com/en/5.1/howto/deployment/wsgi/
 """
 
 import os
+import sys
+from pathlib import Path
+
+# Ensure the backend/ folder (parent of this project package) is importable
+# when this module is loaded by a serverless runtime whose working directory
+# is the repository root (e.g. Vercel's @vercel/python builder).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from django.core.wsgi import get_wsgi_application
 

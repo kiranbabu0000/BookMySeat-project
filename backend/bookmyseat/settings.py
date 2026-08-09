@@ -20,11 +20,19 @@ import dj_database_url
 # even if the package is missing from a cached/stale build.
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    # Explicitly load the .env that lives next to manage.py (BASE_DIR/.env)
+    # so secrets resolve regardless of the directory the process is run from.
+    load_dotenv(os.path.join(Path(__file__).resolve().parent.parent, '.env'))
 except ImportError:
     pass
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
+# BASE_DIR is the backend/ folder (contains manage.py, .env, db.sqlite3, media/).
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Project root contains the separated frontend/ folder.
+PROJECT_ROOT = BASE_DIR.parent
+# Separated frontend assets live outside the Django project folder.
+FRONTEND_DIR = PROJECT_ROOT / 'frontend'
 
 
 # Quick-start development settings - unsuitable for production
@@ -159,7 +167,7 @@ else:
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': ['templates'],
+        'DIRS': [str(FRONTEND_DIR / 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -260,7 +268,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = 'static/'
-STATICFILES_DIRS = [BASE_DIR / 'static']
+STATICFILES_DIRS = [str(FRONTEND_DIR / 'static')]
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # WhiteNoise serves the app's static files in production (no separate web

@@ -20,9 +20,11 @@ venv/
 
 # Media files
 /media/
+/backend/media/
 
 # Static files (build output only)
 /staticfiles/
+/backend/staticfiles/
 
 # IDE
 .idea/

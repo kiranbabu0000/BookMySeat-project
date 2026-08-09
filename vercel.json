@@ -1,13 +1,13 @@
 {
     "builds": [{
-        "src": "bookmyseat/wsgi.py",
+        "src": "backend/bookmyseat/wsgi.py",
         "use": "@vercel/python",
         "config": { "maxLambdaSize": "50mb", "runtime": "python3.12" }
     }],
     "routes": [
         {
             "src": "/(.*)",
-            "dest": "bookmyseat/wsgi.py"
+            "dest": "backend/bookmyseat/wsgi.py"
         }
     ]
 }
