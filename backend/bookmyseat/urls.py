@@ -1,7 +1,7 @@
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.conf import settings
-from django.conf.urls.static import static
+from django.views.static import serve as media_serve
 
 handler404 = 'movies.views.custom_404'
 handler403 = 'movies.views.custom_403'
@@ -14,8 +14,15 @@ urlpatterns = [
     path('', include('admin_panel.urls')),
 ]
 
-# Serve uploaded media (banners/posters/thumbnails) from MEDIA_ROOT in both
-# development and production. On Render the movie image files are committed to
-# the repo (see .gitignore) because serverless/Render free disks are not
-# persistent. `insecure=True` keeps the pattern active when DEBUG=False.
-urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT, insecure=True)
+# Serve uploaded media (banners/posters/thumbnails) in both development and
+# production. Django 6's static() helper only registers routes when
+# DEBUG=True, so we register the /media/ route explicitly instead.
+# On Render/Vercel the movie image files are committed to the repo (see
+# .gitignore) because those platforms' disks are not persistent.
+urlpatterns += [
+    re_path(
+        r'^media/(?P<path>.*)$',
+        media_serve,
+        {'document_root': settings.MEDIA_ROOT},
+    ),
+]

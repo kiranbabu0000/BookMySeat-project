@@ -39,9 +39,38 @@ services:
       - key: DATABASE_SSL_REQUIRE
         value: "True"
       - key: RAZORPAY_DEMO_MODE
-        value: "True"
-      # Razorpay live/test keys and SMTP settings are NOT set here on purpose.
-      # Add them in the Render dashboard (Environment tab) before going live:
+        value: "False"
+      # Add these in the Render dashboard (Environment tab) before going live.
+      # Razorpay test keys:
       #   RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET
-      #   EMAIL_HOST / EMAIL_PORT / EMAIL_HOST_USER / EMAIL_HOST_PASSWORD
-      #   DEFAULT_FROM_EMAIL / SITE_URL
+      #   (set RAZORPAY_DEMO_MODE=False when keys are present)
+      # SMTP email:
+      #   EMAIL_HOST=smtp.gmail.com / EMAIL_PORT=587 / EMAIL_USE_TLS=True
+      #   EMAIL_HOST_USER / EMAIL_HOST_PASSWORD / DEFAULT_FROM_EMAIL / SITE_URL
+
+  # Email worker: confirmation emails are enqueued to movies.EmailOutbox during
+  # booking and delivered by this cron job. Add the same DATABASE_URL + EMAIL_*
+  # env vars to it in the Render dashboard (or via the blueprint below).
+  - type: cron
+    name: bookmyseat-email-worker
+    runtime: python
+    plan: free
+    rootDir: backend
+    schedule: "* * * * *"
+    buildCommand: pip install -r requirements.txt
+    command: python manage.py process_email_outbox --limit 50
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_SECRET_KEY
+        fromService:
+          name: bookmyseat
+          type: web
+          envVarKey: DJANGO_SECRET_KEY
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bookmyseat-db
+          property: connectionString
+      # Email settings must be added here too (same values as the web service):
+      #   EMAIL_HOST / EMAIL_PORT / EMAIL_USE_TLS
+      #   EMAIL_HOST_USER / EMAIL_HOST_PASSWORD / DEFAULT_FROM_EMAIL
