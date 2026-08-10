@@ -4,7 +4,7 @@ Rendered both server-side (full page) and via AJAX (discovery.js).
 {% endcomment %}
 <div class="discovery-count" id="movieCount">
   <span class="discovery-count__num">{{ total }}</span>
-  Movie{{ total|pluralize }} found
+  {% if total == 1 %}{{ results_label }}{% else %}{{ results_label_plural }}{% endif %} found
 </div>
 
 {% if chips %}
@@ -24,12 +24,12 @@ Rendered both server-side (full page) and via AJAX (discovery.js).
   <div class="col-12">
     <div class="empty-state">
       <div class="empty-state__icon"><i class="bi bi-search"></i></div>
-      <h2 class="empty-state__title">No movies found</h2>
+      <h2 class="empty-state__title">No {% if total == 1 %}{{ results_label }}{% else %}{{ results_label_plural }}{% endif %} found</h2>
       <p class="empty-state__text">
         {% if params.search or params.genres or params.languages or params.city or params.theatre_id or params.release or params.rating or params.timings %}
-        No movies match your current search and filters. Try removing some filters.
+        No {{ results_label_plural }} match your current search and filters. Try removing some filters.
         {% else %}
-        No movies are available at the moment. Check back soon for the latest releases.
+        No {{ results_label_plural }} are available at the moment. Check back soon for the latest {{ results_label_plural|lower }}.
         {% endif %}
       </p>
       {% if params.search or params.genres or params.languages or params.city or params.theatre_id or params.release or params.rating or params.timings %}

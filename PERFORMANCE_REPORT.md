@@ -1,6 +1,6 @@
 # BookMySeat — Admin Analytics Performance Report
 
-**Date:** 03 Aug 2026
+**Date:** 10 Aug 2026 (initial build 03 Aug 2026)
 **Scope:** Admin Analytics Dashboard for the BookMySeat movie ticketing platform.
 
 ---
@@ -64,10 +64,94 @@ redundant index was added.
 
 ### 3.3 Scale safety
 
-With ~100k bookings the heaviest pages (overview/revenue) issue a handful of indexed
-aggregate queries. The `booked_at`/`paid_at`/`created_at` filters always land on indexed
-columns, and period-over-period changes reuse the same bucket queries over the previous
-window.
+Verified at **100,000 benchmark bookings** (plus 100k payments, 100k reservations,
+100k payment transactions, 100k seats, 200 theaters) using a repeatable seed command:
+
+- The `booked_at`/`paid_at`/`created_at` filters always land on indexed columns, and
+  period-over-period changes reuse the same bucket queries over the previous window.
+- Every measured area query resolves via an index (`EXPLAIN QUERY PLAN` evidence in §3.4).
+- A real index-drop experiment shows the `(status, booked_at)` index is worth a
+  **~34–62x** speed-up over the unindexed fallback (evidence in §3.4).
+
+### 3.4 Measured performance at 100k bookings
+
+Environment: SQLite, single machine, `benchmark_analytics` management command
+(best of 3 runs). Dashboard areas:
+
+| Area | Time |
+| --- | ---: |
+| overview | 301 ms |
+| revenue | 385 ms |
+| bookings | 182 ms |
+| occupancy | 148 ms |
+| movies | 415 ms |
+| theaters | 203 ms |
+| peak | 143 ms |
+| payments | 253 ms |
+| refunds | 85 ms |
+| users | 132 ms |
+| **Total (10 areas)** | **2,247 ms** |
+
+ORM aggregate vs naive Python loop (same query, range = last 90 days):
+
+| Approach | Time |
+| --- | ---: |
+| ORM aggregate (`SELECT SUM … GROUP BY`) | 53 ms |
+| Naive loop (load all rows into Python) | 77 ms |
+| **Speed-up** | **~1.4x** |
+
+WITH vs WITHOUT the `(status, booked_at)` index on `movies_booking` (real index
+dropped inside a transaction, rolled back after):
+
+| Plan | Time |
+| --- | ---: |
+| WITH index (COVERING INDEX `movies_book_status_40a788_idx`) | 1.2–2.4 ms |
+| WITHOUT index (index on `booked_at` only) | 66–81 ms |
+| **Speed-up** | **~34–62x** (run-dependent) |
+
+`EXPLAIN QUERY PLAN` for the range-filtered queries (all index-based):
+
+```
+Count bookings in 90-day range
+  SEARCH movies_booking USING INDEX movies_booking_booked_at_9951519a (booked_at>?)
+
+Confirmed bookings in range + day bucket (bookings trend)
+  SEARCH movies_booking USING COVERING INDEX movies_book_status_40a788_idx
+    (status=? AND booked_at>? AND booked_at<?)
+  USE TEMP B-TREE FOR GROUP BY
+
+Top movies by revenue in range
+  SEARCH movies_booking USING INDEX movies_booking_booked_at_9951519a (booked_at>? AND booked_at<?)
+  USE TEMP B-TREE FOR GROUP BY
+
+Occupancy per theater
+  SEARCH movies_theater USING INDEX movies_theater_time_94cd72ed (time>? AND time<?)
+  SEARCH movies_seat USING COVERING INDEX movies_seat_theater_id_434941f8 (theater_id=?) LEFT-JOIN
+  SEARCH movies_booking USING COVERING INDEX movies_book_theater_a2fd03_idx (theater_id=?) LEFT-JOIN
+
+Sum of completed payments in range (revenue KPI)
+  SEARCH admin_panel_payment USING INDEX admin_panel_status_483f04_idx (status=? AND paid_at>? AND paid_at<?)
+```
+
+**Occupancy optimization (178x):** the original occupancy query annotated `Count('seats',
+distinct=True)` and `Count('booking', distinct=True)` in one join, which fans out to
+`seats × bookings` rows per theater (~8M intermediate rows → 26.4 s). It was rewritten as
+three single-pass `GROUP BY` aggregates (seats per theater, confirmed bookings per theater,
+theater metadata) merged in Python → **148 ms**. All 43 analytics tests still pass.
+
+### 3.5 Benchmark tooling (repo commands)
+
+```bash
+python manage.py seed_analytics --bookings 100000          # default: 100k bookings
+python manage.py seed_analytics --bookings 10000 --theaters 40 --seats 250
+python manage.py seed_analytics --flush                    # remove benchmark data only
+python manage.py benchmark_analytics --runs 3              # print index + timing evidence
+```
+
+- The seed writes everything with `bulk_create` (chunks of 5,000) inside one transaction
+  and backdates the `auto_now_add` columns (`booked_at`, `created_at`, `paid_at`) with raw
+  `executemany` UPDATEs keyed on unique indexed columns — ~4 minutes for 100k bookings.
+- Every seeded row is tagged `bench-*` / `BENCH*` so `--flush` never touches real data.
 
 ---
 
@@ -138,7 +222,7 @@ Found and fixed while building the test suite:
 
 ## 7. Test results
 
-- **`python manage.py test` → 174 tests, OK** (full project suite, including the new
+- **`python manage.py test` → 296 tests, OK** (full project suite, including the new
   `admin_panel.analytics` suite of 43 tests).
 - Analytics coverage includes: range resolution, granularity selection, summary KPIs and
   period-over-period deltas, all 10 area functions with seeded data, zero-data safety,
@@ -158,8 +242,9 @@ Found and fixed while building the test suite:
   consistent with the existing Bootstrap/Tom-Select CDN usage.
 - Migrations `movies.0013`, `admin_panel.0008`, `movies.0014` must be applied on deploy
   (`python manage.py migrate`).
-- The database currently holds **0 bookings / 0 payments**, so the dashboard renders
-  correctly with empty-state messages until real traffic exists.
+- The local development database is loaded with **100,000 benchmark bookings** so every
+  dashboard area renders populated charts; run `python manage.py seed_analytics --flush`
+  to remove benchmark data before going to production.
 
 ---
 
@@ -175,6 +260,14 @@ not modified):
 | `admin` | Superuser / staff |
 | `MR_BLACK` | Superuser / staff |
 
-Passwords remain exactly as originally set by the project owner; please do not change them.
-Analytics access for any new staff member is granted via `AdminPermission(module="analytics",
-action="can_view")`.
+**Demo account created for reviewing the analytics dashboard** (change the password after
+review — `python manage.py changepassword admin_demo`):
+
+| Username | Password | Type |
+| --- | --- | --- |
+| `admin_demo` | `Admin@12345` | Superuser / staff |
+
+Log in at `/admin-login/` (or `/admin/`), open **Analytics** from the sidebar, and use the
+range picker (10 presets + custom) to filter every area in place. CSV / XLSX / PDF exports
+are available per area. Analytics access for any new staff member is granted via
+`AdminPermission(module="analytics", action="can_view")`.

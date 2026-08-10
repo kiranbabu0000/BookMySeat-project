@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load movie_extras %}
+{% load static %}
 
 {% block title %}{{ movie.name }} — {% if movie.category == 'movie' %}Theaters{% else %}Venues{% endif %}{% endblock %}
 
@@ -89,6 +90,90 @@
         <i class="bi bi-x-lg"></i>
       </button>
     </div>
+    <div class="ticket-vehicle" id="ticketVehiclePreview" aria-hidden="true">
+      <svg class="ticket-vehicle__art ticket-vehicle__art--scooty is-visible" viewBox="0 0 140 100" fill="none" role="img" aria-label="Scooter for 1-2 tickets">
+        <ellipse class="tv-shadow" cx="68" cy="93" rx="50" ry="4.5" fill="#0f172a" opacity="0.12"/>
+        <g class="tv-wheel tv-wheel--rear">
+          <circle cx="36" cy="82" r="11" fill="#0f172a"/>
+          <circle cx="36" cy="82" r="5" fill="#e2e8f0"/>
+          <circle cx="33" cy="82" r="1.6" fill="#64748b"/>
+        </g>
+        <g class="tv-wheel tv-wheel--front">
+          <circle cx="104" cy="82" r="11" fill="#0f172a"/>
+          <circle cx="104" cy="82" r="5" fill="#e2e8f0"/>
+          <circle cx="101" cy="82" r="1.6" fill="#64748b"/>
+        </g>
+        <path d="M104 82 L104 58" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M89 84 A15 15 0 0 1 119 84 L115.5 84 A11.5 11.5 0 0 0 92.5 84 Z" fill="#0f766e"/>
+        <path d="M72 62 L70 62 L70 40 Q71 30 80 30 Q90 30 92 38 L94 50 Q95 58 90 62 L72 62 Z" fill="#0d9488"/>
+        <path d="M72 40 Q73 32 80 32 Q88 32 90 40 L91 50 L74 50 L72 40 Z" fill="#5eead4" opacity="0.45"/>
+        <rect x="42" y="60" width="32" height="5" rx="2.5" fill="#0d9488"/>
+        <rect x="42" y="63" width="32" height="2.5" rx="1.25" fill="#0f766e"/>
+        <path d="M42 62 L44 46 Q46 38 54 38 L70 38 Q73 38 73 42 L73 62 Z" fill="#0d9488"/>
+        <path d="M42 62 L73 62 L73 60 L44 60 Q43 60 42 62 Z" fill="#0f766e"/>
+        <path d="M48 38 L72 38 Q74 38 74 35.5 Q74 31 69 31 L53 31 Q48 31 48 35.5 Z" fill="#1e293b"/>
+        <path d="M50 34 L70 34" stroke="#334155" stroke-width="2" stroke-linecap="round"/>
+        <path d="M84 30 L84 24" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M72 22 L94 27" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="70" cy="21" r="2.4" fill="#0d9488"/>
+        <circle cx="92" cy="40" r="3" fill="#fde68a"/>
+        <rect x="40" y="44" width="3.5" height="8" rx="1.75" fill="#fda4af"/>
+        <path d="M31 66 L25 74 L28 77 L34 68 Z" fill="#64748b"/>
+      </svg>
+      <img class="ticket-vehicle__art ticket-vehicle__art--auto"
+           src="{% static 'img/auto-rickshaw.png' %}"
+           alt="Auto-rickshaw for 3-4 tickets">
+      <svg class="ticket-vehicle__art ticket-vehicle__art--car" viewBox="0 0 140 100" fill="none" role="img" aria-label="Car for 5-8 tickets">
+        <ellipse class="tv-shadow" cx="70" cy="91" rx="55" ry="4.5" fill="#0f172a" opacity="0.12"/>
+        <g class="tv-wheel tv-wheel--front">
+          <circle cx="34" cy="76" r="13" fill="#0f172a"/>
+          <circle cx="34" cy="76" r="5.5" fill="#e2e8f0"/>
+          <circle cx="30.4" cy="76" r="1.8" fill="#64748b"/>
+        </g>
+        <g class="tv-wheel tv-wheel--rear">
+          <circle cx="100" cy="76" r="13" fill="#0f172a"/>
+          <circle cx="100" cy="76" r="5.5" fill="#e2e8f0"/>
+          <circle cx="96.4" cy="76" r="1.8" fill="#64748b"/>
+        </g>
+        <path d="M14 62 L14 53 Q15 46 24 46 L40 44 Q46 26 56 26 L80 26 Q86 26 92 32 L104 42 Q116 46 116 54 L116 62 Z" fill="#e11d48"/>
+        <path d="M14 62 L14 57 L116 57 L116 62 Z" fill="#9f1239"/>
+        <path d="M40 43 L54 28 L72 28 L72 44 Z" fill="#e2e8f0"/>
+        <path d="M76 28 L92 28 L104 40 L104 44 L76 44 Z" fill="#e2e8f0"/>
+        <path d="M45 42 L53 32 L56 32 L48 42 Z" fill="#ffffff" opacity="0.7"/>
+        <path d="M82 43 L98 43 L98 38 Q95 33 89 33 L82 33 Z" fill="#ffffff" opacity="0.35"/>
+        <path d="M74 46 L74 60" stroke="#9f1239" stroke-width="1.5"/>
+        <path d="M58 53 L64 53" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="17.5" cy="49" r="3" fill="#fde68a"/>
+        <rect x="112.5" y="48" width="4" height="8" rx="2" fill="#fda4af"/>
+        <path d="M45 41 L39 36 Q37.5 34.5 40 34 L43.5 33.5 L48 39 Z" fill="#1e293b"/>
+      </svg>
+      <svg class="ticket-vehicle__art ticket-vehicle__art--van" viewBox="0 0 140 100" fill="none" role="img" aria-label="Van for 9-10 tickets">
+        <ellipse class="tv-shadow" cx="70" cy="93" rx="56" ry="4.5" fill="#0f172a" opacity="0.12"/>
+        <g class="tv-wheel tv-wheel--front">
+          <circle cx="30" cy="80" r="13" fill="#0f172a"/>
+          <circle cx="30" cy="80" r="5.5" fill="#e2e8f0"/>
+          <circle cx="26.4" cy="80" r="1.8" fill="#64748b"/>
+        </g>
+        <g class="tv-wheel tv-wheel--rear">
+          <circle cx="104" cy="80" r="13" fill="#0f172a"/>
+          <circle cx="104" cy="80" r="5.5" fill="#e2e8f0"/>
+          <circle cx="100.4" cy="80" r="1.8" fill="#64748b"/>
+        </g>
+        <path d="M14 62 L14 45 Q14 41 18 39 L34 27 Q36 27 38 27 L110 27 Q115 27 118 31 L118 62 Z" fill="#2563eb"/>
+        <path d="M14 62 L14 57 L118 57 L118 62 Z" fill="#1d4ed8"/>
+        <path d="M21 37 Q29 30 34 28 L36 28 L36 44 L21 44 Z" fill="#e2e8f0"/>
+        <path d="M24 40 L32 33 L34 33 L26 40 Z" fill="#ffffff" opacity="0.7"/>
+        <rect x="44" y="34" width="22" height="12" rx="2" fill="#e2e8f0"/>
+        <rect x="72" y="34" width="30" height="12" rx="2" fill="#e2e8f0"/>
+        <path d="M46 36 L64 36 L64 40 L46 40 Z" fill="#ffffff" opacity="0.45"/>
+        <path d="M74 36 L100 36 L100 40 L74 40 Z" fill="#ffffff" opacity="0.3"/>
+        <path d="M66 33 L66 62" stroke="#1d4ed8" stroke-width="1.5"/>
+        <path d="M70 46 L76 46" stroke="#1e293b" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="17" cy="42" r="3" fill="#fde68a"/>
+        <rect x="114" y="48" width="4" height="9" rx="2" fill="#fda4af"/>
+        <path d="M34 30 L30 26 Q28 24 31 23.5 L34.5 23 L38 28 Z" fill="#1e293b"/>
+      </svg>
+    </div>
     <div class="ticket-count-grid" role="radiogroup" aria-label="Ticket count">
       {% for n in "1 2 3 4 5 6 7 8 9 10"|split_items:" " %}
       <button type="button" class="ticket-count-chip{% if forloop.first %} is-active{% endif %}"
@@ -113,13 +198,14 @@
   .ticket-count-sheet.is-open { display: block; }
   .ticket-count-sheet__backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.55); animation: tcFade 0.2s ease; }
   .ticket-count-sheet__panel {
-    position: absolute; left: 0; right: 0; bottom: 0; max-width: 480px; margin: 0 auto;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: min(480px, calc(100% - 2rem));
     background: var(--bg-card, #fff); color: var(--text-primary, #111);
-    border-radius: 18px 18px 0 0; padding: 0.75rem 1.25rem 1.25rem;
-    box-shadow: 0 -12px 40px rgba(0,0,0,0.25);
-    animation: tcUp 0.25s ease;
+    border-radius: 18px; padding: 1.25rem;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+    animation: tcPop 0.2s ease;
   }
-  .ticket-count-sheet__handle { width: 44px; height: 5px; border-radius: 999px; background: var(--border-color, #ddd); margin: 0 auto 0.75rem; }
+  .ticket-count-sheet__handle { display: none; }
   .ticket-count-sheet__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
   .ticket-count-sheet__title { font-weight: 800; }
   .ticket-count-sheet__subtitle { font-size: 0.85rem; }
@@ -127,11 +213,28 @@
   .ticket-count-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.6rem; margin-bottom: 1.25rem; }
   .ticket-count-chip {
     border: 1px solid var(--border-color, #ddd); border-radius: 12px; background: transparent;
-    color: var(--text-primary, #111); font-weight: 700; padding: 0.65rem 0; transition: all 0.15s ease;
+    color: var(--text-primary, #111); font-weight: 700; font-size: 1rem; padding: 0.65rem 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s ease;
   }
   .ticket-count-chip:hover { border-color: var(--accent-primary, #e11d48); }
   .ticket-count-chip.is-active { background: var(--accent-primary, #e11d48); border-color: var(--accent-primary, #e11d48); color: #fff; }
-  @keyframes tcUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .ticket-vehicle { position: relative; height: 104px; margin-bottom: 0.5rem; display: flex; align-items: flex-end; justify-content: center; }
+  .ticket-vehicle__art { position: absolute; bottom: 0; width: 160px; max-width: 76%; display: none; }
+  .ticket-vehicle__art.is-visible { display: block; animation: tvFloat 2.6s ease-in-out infinite; }
+  .ticket-vehicle__art.is-entering { animation: tvIn 0.3s ease, tvFloat 2.6s ease-in-out infinite; }
+  .ticket-vehicle__art .tv-wheel, .ticket-vehicle__art .tv-shadow { transform-box: fill-box; transform-origin: center; }
+  .ticket-vehicle__art.is-visible .tv-wheel { animation: tvSpin 1.5s linear infinite; }
+  .ticket-vehicle__art.is-visible .tv-shadow { animation: tvShadow 2.6s ease-in-out infinite; }
+  .ticket-vehicle__art--auto { width: auto; height: 100%; max-width: 100%; transform-origin: 50% 100%; }
+  .ticket-vehicle__art--auto.is-visible { animation: tvAutoIdle 2.8s ease-in-out infinite; }
+  .ticket-vehicle__art--auto.is-entering { animation: tvIn 0.3s ease, tvAutoIdle 2.8s ease-in-out infinite; }
+  @keyframes tvAutoIdle { 0%, 100% { transform: translateY(0) rotate(0deg); } 30% { transform: translateY(-2px) rotate(-1deg); } 60% { transform: translateY(-5px) rotate(0deg); } 85% { transform: translateY(-2px) rotate(1deg); } }
+  @keyframes tvFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  @keyframes tvIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes tvSpin { to { transform: rotate(360deg); } }
+  @keyframes tvShadow { 0%, 100% { transform: scaleX(1); opacity: 0.12; } 50% { transform: scaleX(0.84); opacity: 0.08; } }
+  @keyframes tcPop { from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
   @keyframes tcFade { from { opacity: 0; } to { opacity: 1; } }
 </style>
 <script>
@@ -149,6 +252,22 @@
       var active = Number(chip.getAttribute('data-ticket-count')) === n;
       chip.classList.toggle('is-active', active);
       chip.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+    showVehicle(n);
+  }
+
+  function showVehicle(n) {
+    var target = n <= 2 ? 'scooty' : n <= 4 ? 'auto' : n <= 8 ? 'car' : 'van';
+    Array.prototype.slice.call(document.querySelectorAll('.ticket-vehicle__art')).forEach(function (art) {
+      var visible = art.classList.contains('ticket-vehicle__art--' + target);
+      art.classList.toggle('is-visible', visible);
+      if (visible) {
+        art.classList.remove('is-entering');
+        void art.offsetWidth;
+        art.classList.add('is-entering');
+      } else {
+        art.classList.remove('is-entering');
+      }
     });
   }
 

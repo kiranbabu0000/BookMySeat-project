@@ -37,11 +37,19 @@
     <div class="row g-4">
       <!-- Profile Update Form -->
       <div class="col-lg-5">
-        <div class="card h-100 border-0 shadow-sm" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
+        <div class="card border-0 shadow-sm" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
           <div class="card-header bg-transparent border-bottom p-4" style="border-color: var(--border-color) !important;">
-            <h2 class="h5 fw-bold mb-0"><i class="bi bi-person-gear me-2 text-danger"></i>Update Profile</h2>
+            <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+              <h2 class="h5 fw-bold mb-0"><i class="bi bi-person-gear me-2 text-danger"></i>Update Profile</h2>
+              <button class="btn btn-sm btn-bms-outline rounded-pill" type="button"
+                      data-bs-toggle="collapse" data-bs-target="#profileUpdateCollapse"
+                      aria-expanded="true" aria-controls="profileUpdateCollapse" id="profileUpdateToggle">
+                <i class="bi bi-chevron-up" id="profileUpdateCaret"></i>
+                <span id="profileUpdateToggleLabel">Hide</span>
+              </button>
+            </div>
           </div>
-          <div class="card-body p-4">
+          <div class="card-body p-4 collapse show" id="profileUpdateCollapse">
             <form method="POST" class="form-bms">
               {% csrf_token %}
               {% for field in u_form %}
@@ -80,10 +88,10 @@
                 <a href="{% url 'profile' %}" class="btn btn-sm {% if not status_filter %}btn-bms-primary{% else %}btn-bms-outline{% endif %} fw-semibold">All</a>
               </li>
               <li class="nav-item">
-                <a href="{% url 'profile' %}?filter=upcoming" class="btn btn-sm {% if status_filter == 'upcoming' %}btn-bms-primary{% else %}btn-bms-outline{% endif %} fw-semibold">Upcoming</a>
+                <a href="{% url 'profile' %}?filter=current" class="btn btn-sm {% if status_filter == 'current' %}btn-bms-primary{% else %}btn-bms-outline{% endif %} fw-semibold">Current</a>
               </li>
               <li class="nav-item">
-                <a href="{% url 'profile' %}?filter=past" class="btn btn-sm {% if status_filter == 'past' %}btn-bms-primary{% else %}btn-bms-outline{% endif %} fw-semibold">Past</a>
+                <a href="{% url 'profile' %}?filter=history" class="btn btn-sm {% if status_filter == 'history' or status_filter == 'past' %}btn-bms-primary{% else %}btn-bms-outline{% endif %} fw-semibold">History</a>
               </li>
             </ul>
           </div>
@@ -106,6 +114,9 @@
                         <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
                           <div>
                             <h3 class="h5 fw-bold mb-1" style="color: var(--text-primary);">{{ group.primary.movie.name }}</h3>
+                            {% if group.status_display %}
+                            <span class="badge me-1" style="{% if group.status_display == 'On Now' %}background: rgba(220,38,38,0.15); color: var(--accent-primary); border: 1px solid rgba(220,38,38,0.35);{% elif group.status_display == 'Upcoming' %}background: rgba(22,163,74,0.15); color: var(--accent-success); border: 1px solid rgba(22,163,74,0.35);{% else %}background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color);{% endif %} font-weight:600;">{{ group.status_display }}</span>
+                            {% endif %}
                             {% if group.language_label %}
                             <span class="badge me-1" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); font-weight:600;">{{ group.language_label }}</span>
                             {% endif %}
@@ -361,6 +372,24 @@
     }
     tick();
     setInterval(tick, 1000);
+
+    var updateCard = document.getElementById('profileUpdateCollapse');
+    var updateToggle = document.getElementById('profileUpdateToggle');
+    if (updateCard && updateToggle && window.bootstrap && bootstrap.Collapse) {
+      var stored = localStorage.getItem('profileUpdateCollapsed');
+      if (stored === '1') bootstrap.Collapse.getOrCreateInstance(updateCard, { toggle: false }).hide();
+      function sync() {
+        var hidden = updateCard.classList.contains('show') === false;
+        var caret = document.getElementById('profileUpdateCaret');
+        var label = document.getElementById('profileUpdateToggleLabel');
+        if (caret) caret.className = hidden ? 'bi bi-chevron-down' : 'bi bi-chevron-up';
+        if (label) label.textContent = hidden ? 'Show' : 'Hide';
+        localStorage.setItem('profileUpdateCollapsed', hidden ? '1' : '0');
+      }
+      updateCard.addEventListener('shown.bs.collapse', sync);
+      updateCard.addEventListener('hidden.bs.collapse', sync);
+      sync();
+    }
   })();
 
   document.querySelectorAll('.btn-share').forEach(function (btn) {

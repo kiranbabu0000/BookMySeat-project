@@ -14,5 +14,8 @@ urlpatterns = [
     path('', include('admin_panel.urls')),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Serve uploaded media (banners/posters/thumbnails) from MEDIA_ROOT in both
+# development and production. On Render the movie image files are committed to
+# the repo (see .gitignore) because serverless/Render free disks are not
+# persistent. `insecure=True` keeps the pattern active when DEBUG=False.
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT, insecure=True)

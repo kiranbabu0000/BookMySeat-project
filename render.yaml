@@ -1,0 +1,47 @@
+# Render blueprint for BookMySeat.
+# Deploy: connect this repo on https://dashboard.render.com and choose
+# "Blueprint" (render.yaml is auto-detected), or run the Render CLI:
+#   render blueprint launch
+#
+# The web service runs the Django backend from backend/ with Gunicorn.
+# Static files are served by WhiteNoise (no separate web server needed).
+# PostgreSQL is provisioned automatically and its connection string is
+# injected into DATABASE_URL.
+
+databases:
+  - name: bookmyseat-db
+    plan: free
+    databaseName: bookmyseat
+
+services:
+  - type: web
+    name: bookmyseat
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: python manage.py migrate --noinput && gunicorn bookmyseat.wsgi:application
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_ALLOWED_HOSTS
+        value: .onrender.com
+      - key: DJANGO_TRUST_PROXY
+        value: "True"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bookmyseat-db
+          property: connectionString
+      - key: DATABASE_SSL_REQUIRE
+        value: "True"
+      - key: RAZORPAY_DEMO_MODE
+        value: "True"
+      # Razorpay live/test keys and SMTP settings are NOT set here on purpose.
+      # Add them in the Render dashboard (Environment tab) before going live:
+      #   RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET
+      #   EMAIL_HOST / EMAIL_PORT / EMAIL_HOST_USER / EMAIL_HOST_PASSWORD
+      #   DEFAULT_FROM_EMAIL / SITE_URL

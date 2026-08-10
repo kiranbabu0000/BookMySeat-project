@@ -18,10 +18,11 @@
     </div>
 
     <form id="discoveryForm" method="get" action="{% url 'movie_list' %}" role="search" novalidate>
+      <input type="hidden" name="category" value="{{ params.category }}">
       <div class="discovery-tabs mb-3" role="group" aria-label="Browse by category">
-        {% for value, label in category_options %}
-        <a href="?{% if params.category != value %}category={{ value }}{% endif %}"
-           class="discovery-tab{% if params.category == value %} is-active{% endif %}">{{ label }}</a>
+        {% for tab in category_links %}
+        <a href="{{ tab.href }}"
+           class="discovery-tab{% if params.category == tab.value %} is-active{% endif %}">{{ tab.label }}</a>
         {% endfor %}
       </div>
       <!-- Toolbar: search + sort -->
@@ -167,6 +168,14 @@
 
         <!-- Results -->
         <div class="col-lg-9">
+          <div id="discoveryResults" class="position-relative">
+            <div id="discoveryLoading" class="discovery-loading d-none" role="status" aria-live="polite">
+              <div class="spinner-border text-danger" role="status" aria-hidden="true"></div>
+              <span class="visually-hidden">Loading movies&hellip;</span>
+            </div>
+            {% include 'movies/_movie_results.html' %}
+          </div>
+
           {% if recommended %}
           <section class="discovery-recommended mb-4" aria-label="Recommended for you">
             <div class="section-header">
@@ -180,14 +189,6 @@
             </div>
           </section>
           {% endif %}
-
-          <div id="discoveryResults" class="position-relative">
-            <div id="discoveryLoading" class="discovery-loading d-none" role="status" aria-live="polite">
-              <div class="spinner-border text-danger" role="status" aria-hidden="true"></div>
-              <span class="visually-hidden">Loading movies&hellip;</span>
-            </div>
-            {% include 'movies/_movie_results.html' %}
-          </div>
         </div>
       </div>
     </form>

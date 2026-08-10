@@ -40,5 +40,8 @@ razorpay==2.0.1
 # --- Utilities -------------------------------------------------------------
 typing_extensions==4.15.0
 
-# Local dev server only (NOT used by Vercel, which wraps the WSGI app itself).
+# --- App server -------------------------------------------------------------
+# Gunicorn is the WSGI server used in production (Render). Vercel does not
+# need it (it wraps the WSGI app itself), but it must stay installed for
+# Render-style deployments.
 gunicorn==23.0.0

@@ -19,8 +19,12 @@ venv/
 *.db
 
 # Media files
+# Movie images (banners/posters/thumbnails) ARE committed so they deploy with
+# the site. Everything else uploaded at runtime stays gitignored.
 /media/
-/backend/media/
+/backend/media/*
+!/backend/media/movies/
+!/backend/media/movies/**
 
 # Static files (build output only)
 /staticfiles/

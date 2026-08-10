@@ -34,6 +34,9 @@
   var lastEtag = null;
   var busy = false;
 
+  /* Ticket-count bottom sheet */
+  var sheetSelection = 1;
+
   /* Seat-map zoom */
   var MIN_ZOOM = 60;
   var MAX_ZOOM = 150;
@@ -113,6 +116,16 @@
     els.zoomReset = document.getElementById('zoomResetBtn');
     els.zoomLevel = document.getElementById('zoomLevel');
     els.tierBreakdown = document.getElementById('summaryTierBreakdown');
+    els.ticketCountRow = document.getElementById('ticketCountRow');
+    els.ticketValue = document.getElementById('ticketCountValue');
+    els.ticketCountLabel = document.getElementById('ticketCountLabel');
+    els.ticketCountBtn = document.getElementById('ticketCountBtn');
+    els.ticketHint = document.getElementById('ticketCountHint');
+    els.ticketSheet = document.getElementById('ticketCountSheet');
+    els.ticketSheetChips = els.ticketSheet
+      ? Array.prototype.slice.call(els.ticketSheet.querySelectorAll('[data-ticket-count]'))
+      : [];
+    els.ticketSheetContinue = document.getElementById('ticketCountContinue');
     els.mobileBar = document.getElementById('mobileActionBar');
     els.mobileTotal = document.getElementById('mobileTotal');
     els.mobileSeatCount = document.getElementById('mobileSeatCount');
@@ -125,6 +138,7 @@
     if (show.platform_fee === undefined || show.platform_fee === null) show.platform_fee = 5;
     if (show.misc_fee === undefined || show.misc_fee === null) show.misc_fee = 2.5;
     MAX_SEATS = Number(show.max_tickets) || MAX_SEATS_DEFAULT;
+    state.ticketCount = Math.min(Math.max(Number(show.ticket_count) || 1, 1), MAX_SEATS);
     if (show.prices) {
       Object.keys(show.prices).forEach(function (id) {
         prices[id] = Number(show.prices[id]);
@@ -178,6 +192,24 @@
     if (els.mobileRelease) {
       els.mobileRelease.addEventListener('click', function () {
         els.releaseBtn.click();
+      });
+    }
+
+    if (els.ticketCountBtn) {
+      els.ticketCountBtn.addEventListener('click', openTicketSheet);
+    }
+    if (els.ticketSheet) {
+      els.ticketSheet.addEventListener('click', function (e) {
+        if (e.target.closest('[data-tc-close]')) { closeTicketSheet(); return; }
+        var chip = e.target.closest('[data-ticket-count]');
+        if (chip) selectChip(Number(chip.getAttribute('data-ticket-count')));
+        if (e.target.closest('#ticketCountContinue')) {
+          setTicketCount(sheetSelection);
+          closeTicketSheet();
+        }
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && els.ticketSheet.classList.contains('is-open')) closeTicketSheet();
       });
     }
 
@@ -286,13 +318,94 @@
     els.gst.textContent = fmtCurrency(gst);
     if (els.gstLabel) els.gstLabel.textContent = 'GST (' + Math.round(gstRate * 100) + '%)';
     els.total.textContent = fmtCurrency(total);
-    els.continueBtn.disabled = ids.size === 0 || state.mode === 'hold';
+    els.continueBtn.disabled = state.mode === 'hold' || ids.size !== state.ticketCount;
+    if (els.ticketValue) els.ticketValue.textContent = state.ticketCount;
+    if (els.ticketCountLabel) els.ticketCountLabel.textContent = state.ticketCount === 1 ? 'Ticket' : 'Tickets';
+    updateTicketHint(ids.size);
     renderTierBreakdown(ids);
     if (els.mobileTotal) els.mobileTotal.textContent = fmtCurrency(total);
     if (els.mobileSeatCount) {
       els.mobileSeatCount.innerHTML = '<i class="bi bi-ticket-perforated me-1"></i>' + ids.size;
     }
-    if (els.mobilePrimary) els.mobilePrimary.disabled = ids.size === 0;
+    if (els.mobilePrimary) {
+      els.mobilePrimary.disabled = ids.size === 0 || (state.mode !== 'hold' && ids.size !== state.ticketCount);
+    }
+  }
+
+  function setTicketCount(n) {
+    if (state.mode === 'hold') return;
+    n = Math.min(Math.max(Number(n) || 1, 1), MAX_SEATS);
+    if (n === state.ticketCount) return;
+    state.ticketCount = n;
+    updateSummary();
+  }
+
+  function openTicketSheet() {
+    if (state.mode === 'hold' || !els.ticketSheet) return;
+    sheetSelection = state.ticketCount;
+    els.ticketSheetChips.forEach(function (chip) {
+      chip.disabled = Number(chip.getAttribute('data-ticket-count')) > MAX_SEATS;
+    });
+    selectChip(sheetSelection);
+    els.ticketSheet.classList.add('is-open');
+    els.ticketSheet.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeTicketSheet() {
+    if (!els.ticketSheet) return;
+    els.ticketSheet.classList.remove('is-open');
+    els.ticketSheet.setAttribute('aria-hidden', 'true');
+  }
+
+  function selectChip(n) {
+    sheetSelection = n;
+    els.ticketSheetChips.forEach(function (chip) {
+      var active = Number(chip.getAttribute('data-ticket-count')) === n;
+      chip.classList.toggle('is-active', active);
+      chip.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+    showVehicle(n);
+  }
+
+  function showVehicle(n) {
+    if (!els.ticketSheet) return;
+    var target = n <= 2 ? 'scooty' : n <= 4 ? 'auto' : n <= 8 ? 'car' : 'van';
+    els.ticketSheet.querySelectorAll('.ticket-vehicle__art').forEach(function (art) {
+      var visible = art.classList.contains('ticket-vehicle__art--' + target);
+      art.classList.toggle('is-visible', visible);
+      if (visible) {
+        art.classList.remove('is-entering');
+        void art.offsetWidth;
+        art.classList.add('is-entering');
+      } else {
+        art.classList.remove('is-entering');
+      }
+    });
+  }
+
+  function updateTicketHint(selectedCount) {
+    if (!els.ticketHint) return;
+    var target = state.ticketCount;
+    if (state.mode === 'hold') {
+      els.ticketHint.textContent = 'Held seats can be added or removed before payment.';
+      els.ticketHint.className = 'text-muted small mt-1 mb-3';
+      return;
+    }
+    var need = target - selectedCount;
+    if (need > 0) {
+      if (selectedCount === 0) {
+        els.ticketHint.textContent = 'Select exactly ' + target + ' seat' + (target === 1 ? '' : 's') + ' to continue.';
+      } else {
+        els.ticketHint.textContent = 'Select ' + need + ' more seat' + (need === 1 ? '' : 's') + ' to match your ' + target + '-ticket order.';
+      }
+      els.ticketHint.className = 'text-muted small mt-1 mb-3';
+    } else if (need < 0) {
+      els.ticketHint.textContent = 'You\u2019ve selected ' + selectedCount + ' seats for a ' + target + '-ticket order \u2014 deselect ' + (-need) + ' to continue.';
+      els.ticketHint.className = 'small mt-1 mb-3 is-invalid';
+    } else {
+      els.ticketHint.textContent = 'All set \u2014 ' + target + ' of ' + target + ' seat' + (target === 1 ? '' : 's') + ' selected.';
+      els.ticketHint.className = 'small mt-1 mb-3 is-valid';
+    }
   }
 
   function renderTierBreakdown(ids) {
@@ -333,6 +446,7 @@
     els.selActions.classList.toggle('d-none', hold);
     els.holdActions.classList.toggle('d-none', !hold);
     els.timerBar.classList.toggle('d-none', !hold);
+    if (els.ticketCountRow) els.ticketCountRow.classList.toggle('d-none', hold);
     if (els.mobilePrimaryLabel) {
       els.mobilePrimaryLabel.innerHTML = hold
         ? '<i class="bi bi-credit-card me-1"></i> Proceed to Pay'
@@ -364,8 +478,10 @@
       removeSelection(id);
     } else {
       var extra = partnerOf(id);
-      if (state.selected.size + (extra ? 1 : 0) > MAX_SEATS) {
-        flashMessage('You can only select ' + MAX_SEATS + ' seats.', 'danger');
+      var limit = state.ticketCount || MAX_SEATS;
+      var add = extra ? 2 : 1;
+      if (state.selected.size + add > limit) {
+        flashMessage('You can only select up to ' + limit + ' seat' + (limit === 1 ? '' : 's') + ' for this booking.', 'danger');
         return;
       }
       if (extra && (state.booked.has(extra) || state.reserved.has(extra))) {
@@ -400,8 +516,10 @@
       flashMessage('This seat has just been reserved by another user.', 'danger');
     } else {
       var extra = partnerOf(id);
-      if (state.held.size + (extra ? 1 : 0) > MAX_SEATS) {
-        flashMessage('You can only hold ' + MAX_SEATS + ' seats.', 'danger');
+      var limit = state.ticketCount || MAX_SEATS;
+      var add = extra ? 2 : 1;
+      if (state.held.size + add > limit) {
+        flashMessage('You can only hold up to ' + limit + ' seat' + (limit === 1 ? '' : 's') + ' for this booking.', 'danger');
         return;
       }
       if (extra && (state.booked.has(extra) || state.reserved.has(extra))) {
@@ -429,6 +547,7 @@
     api(layout.dataset.reserveUrl, {
       show_id: show.id,
       seats: Array.from(state.selected),
+      ticket_count: state.ticketCount,
     }).then(function (data) {
       busy = false;
       setProcessing(false);
@@ -512,6 +631,7 @@
     state.selected.clear();
     state.held = new Set(res.seats.map(String));
     state.expiresAt = new Date(res.expires_at);
+    if (Number(res.ticket_count) >= 1) state.ticketCount = Math.min(Number(res.ticket_count), MAX_SEATS);
     syncClockOffset(res);
     syncPrices(res);
     renderSeats();
@@ -524,6 +644,7 @@
     state.reservation = res;
     state.held = new Set(res.seats.map(String));
     state.expiresAt = new Date(res.expires_at);
+    if (Number(res.ticket_count) >= 1) state.ticketCount = Math.min(Number(res.ticket_count), MAX_SEATS);
     syncClockOffset(res);
     syncPrices(res);
     renderSeats();

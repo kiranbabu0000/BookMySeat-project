@@ -1,5 +1,6 @@
 # BookMySeat
 
+
 Online movie ticket booking platform built with Django (server-rendered).
 
 ## Project structure

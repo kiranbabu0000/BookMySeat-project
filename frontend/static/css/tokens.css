@@ -52,7 +52,7 @@
   --footer-text: #cbd5e1;
   --seat-available: #ffffff;
   --seat-selected: #dc2626;
-  --seat-reserved: #d97706;
+  --seat-reserved: #334155;
   --seat-booked: #cbd5e1;
   --seat-vip: #d97706;
   --seat-wheelchair: #2563eb;
@@ -106,7 +106,7 @@
   --footer-text: #8a97ab;
   --seat-available: #1f2838;
   --seat-selected: #e50914;
-  --seat-reserved: #d4af37;
+  --seat-reserved: #94a3b8;
   --seat-booked: #2c3850;
   --seat-vip: #d4af37;
   --seat-wheelchair: #4f8ef7;
