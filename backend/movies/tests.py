@@ -96,11 +96,18 @@ class ReservationServiceTests(TestCase):
 
     def test_create_reservation_reuses_existing_active_reservation(self):
         first = create_reservation(self.user, self.show.id, [self.seats[0].id])
-        second = create_reservation(self.user, self.show.id, [self.seats[1].id])
+        second = create_reservation(self.user, self.show.id, [self.seats[0].id])
         self.assertEqual(first.token, second.token)
         self.assertEqual(
             Reservation.objects.filter(user=self.user).count(), 1
         )
+
+    def test_create_reservation_rejects_seat_change_on_active_hold(self):
+        # Requesting different seats while an active hold exists must fail
+        # loudly instead of silently returning the hold for other seats.
+        create_reservation(self.user, self.show.id, [self.seats[0].id])
+        with self.assertRaises(ReservationError):
+            create_reservation(self.user, self.show.id, [self.seats[1].id])
 
     def test_seat_held_by_another_user_is_rejected(self):
         create_reservation(self.user, self.show.id, [self.seats[0].id])

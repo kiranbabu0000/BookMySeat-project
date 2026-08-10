@@ -328,6 +328,17 @@ class DiscoveryFacetTests(DiscoveryBase):
         theatre_names = [t.name for t in facets['theatres']]
         self.assertIn('PVR Mumbai', theatre_names)
 
+    def test_facets_never_duplicate_shared_values(self):
+        # m1 + m2 share Hindi and PVR Mumbai; two movies share each genre.
+        self.m2.genres.add(self.action)
+        facets = facet_data()
+        genre_slugs = [g.slug for g in facets['genres']]
+        language_codes = [l.code for l in facets['languages']]
+        theatre_names = [t.name for t in facets['theatres']]
+        for values in (genre_slugs, language_codes, theatre_names):
+            self.assertEqual(len(values), len(set(values)),
+                             f'facet values must be unique, got {values}')
+
     def test_chips_reflect_active_filters(self):
         params = DiscoveryParams(search='boom', genres=['action'], city='Mumbai', rating=7)
         chips = chip_data(params, facet_data())
@@ -396,3 +407,35 @@ class DiscoveryViewTests(DiscoveryBase):
         self.client.force_login(self.user)
         response = self.client.get(self.url)
         self.assertContains(response, 'Recommended for You')
+
+    def test_price_sort_respects_selected_category(self):
+        therapy = _make_movie(
+            'Calm Therapy', [self.comedy], [self.hindi], rating=6.0,
+            category='laughing_therapy', release_date=self.today,
+        )
+        _make_show(therapy, self.mumbai, self.mumbai_screen, show_time=time(16, 0), price=100)
+        for sort in ('price_asc', 'price_desc', 'popularity', 'newest'):
+            response = self.client.get(
+                self.url + '?category=laughing_therapy&sort=' + sort,
+                headers={'X-Requested-With': 'XMLHttpRequest'},
+            )
+            data = response.json()
+            self.assertIn('Calm Therapy', data['html'])
+            self.assertNotIn('Action Blast', data['html'])
+            self.assertNotIn('Comedy Nights', data['html'])
+
+    def test_category_hidden_input_preserves_section_on_sort(self):
+        response = self.client.get(self.url + '?category=laughing_therapy&sort=price_desc')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            '<input type="hidden" name="category" value="laughing_therapy">',
+            html=True,
+        )
+
+    def test_category_tab_links_preserve_active_sort(self):
+        response = self.client.get(self.url + '?category=laughing_therapy&sort=price_desc')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'category=laughing_therapy')
+        # The Movies tab link keeps the active sort while leaving the section.
+        self.assertContains(response, 'href="?sort=price_desc"')

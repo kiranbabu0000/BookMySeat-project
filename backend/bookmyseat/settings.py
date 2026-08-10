@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 import os
+import sys
 import dj_database_url
 
 # Load .env file (gitignored) for local secrets like email SMTP credentials.
@@ -41,6 +42,10 @@ FRONTEND_DIR = PROJECT_ROOT / 'frontend'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
+# True while running the test suite. Used to bypass short-lived feed caches so
+# tests always see fresh data.
+TESTING = 'test' in sys.argv
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
 if not SECRET_KEY:
@@ -53,7 +58,8 @@ if not SECRET_KEY:
         )
 
 ALLOWED_HOSTS = os.environ.get(
-    'DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost,.vercel.app'
+    'DJANGO_ALLOWED_HOSTS',
+    '127.0.0.1,localhost,.vercel.app,.onrender.com,.railway.app',
 ).split(',')
 
 
@@ -143,6 +149,13 @@ CSRF_COOKIE_SECURE = os.environ.get(
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_NAME = 'bms_sessionid'
 
+# Behind the HTTPS proxy of Render / Railway / Vercel the platform rewrites
+# X-Forwarded-Proto to "https", which Django must trust so request.is_secure()
+# and the secure cookie flags below behave correctly in production.
+# Set DJANGO_TRUST_PROXY=False if the app is served directly (no proxy).
+if not DEBUG and os.environ.get('DJANGO_TRUST_PROXY', 'True') == 'True':
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # Cache. Uses Redis (via REDIS_URL) when available so rate limiting, OTP and
 # analytics payload caching stay consistent across workers; otherwise falls
 # back to a per-process LocMem cache for local development.
@@ -187,10 +200,23 @@ WSGI_APPLICATION = 'bookmyseat.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-
+#
+# Local development (no DATABASE_URL): SQLite at backend/db.sqlite3.
+# Production (DATABASE_URL present): PostgreSQL configured from the URL that
+# Render / Railway / Supabase / Vercel provide. Connection pooling is enabled
+# for long-lived processes (conn_max_age) and stale connections are revalidated
+# on serverless platforms (conn_health_checks). SSL is required by default in
+# production and can be toggled with DATABASE_SSL_REQUIRE.
 if os.environ.get('DATABASE_URL'):
     DATABASES = {
-        'default': dj_database_url.config(conn_max_age=600, ssl_require=True)
+        'default': dj_database_url.config(
+            conn_max_age=600,
+            conn_health_checks=True,
+            ssl_require=(
+                os.environ.get('DATABASE_SSL_REQUIRE', 'True' if not DEBUG else 'False')
+                == 'True'
+            ),
+        )
     }
 else:
     DATABASES = {

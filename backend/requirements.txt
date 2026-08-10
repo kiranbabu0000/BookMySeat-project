@@ -19,7 +19,9 @@ dj-database-url==3.1.2
 whitenoise==6.8.2
 
 # --- Database --------------------------------------------------------------
-# Required by dj-database-url when DATABASE_URL points at PostgreSQL (Vercel).
+# PostgreSQL driver used by dj-database-url when DATABASE_URL points at
+# PostgreSQL (Render / Railway / Vercel). Compatible with Python 3.12/3.13
+# and Django 6.0. Local development keeps using SQLite (no driver needed).
 psycopg2-binary==2.9.12
 
 # --- Cache -----------------------------------------------------------------

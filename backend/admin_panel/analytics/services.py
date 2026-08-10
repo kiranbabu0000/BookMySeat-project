@@ -15,7 +15,7 @@ from django.db.models import Count, Sum, Q, Max
 from django.db.models.functions import TruncDate, TruncMonth, ExtractYear, ExtractHour, ExtractWeekDay, Coalesce
 from django.utils import timezone
 
-from movies.models import Booking, Movie, Theater
+from movies.models import Booking, Movie, Seat, Theater
 from admin_panel.models import Payment, PaymentTransaction
 
 ZERO = Decimal('0.00')
@@ -429,58 +429,56 @@ def _hour_series(queryset, date_field, rng):
 
 def occupancy_data(rng):
     shows = Theater.objects.filter(time__gte=rng.start, time__lt=rng.end)
-    total_seats = _show_total_seats(shows)
-    occupied = _occupied_seats(shows, rng)
-
-    by_theater = list(
-        shows.annotate(
-            total_seats=Count('seats', distinct=True),
-            booked_seats=Count(
-                'booking',
-                filter=Q(
-                    booking__status='confirmed',
-                    booking__booked_at__gte=rng.start,
-                    booking__booked_at__lt=rng.end,
-                ),
-                distinct=True,
-            ),
-        ).order_by('-booked_seats')
-        .values('id', 'name', 'movie__name', 'total_seats', 'booked_seats')[:15]
+    # Three single-pass aggregates instead of one query with two distinct
+    # joins: the seats x bookings join fan-out blows up at 100k bookings.
+    # theater__in=<queryset> keeps the filtered show list in a subquery, so
+    # no SQLite bound-variable limit is hit for large theater sets.
+    seat_counts = dict(
+        Seat.objects.filter(theater__in=shows)
+        .values('theater_id')
+        .annotate(c=Count('id'))
+        .values_list('theater_id', 'c')
     )
+    book_counts = dict(
+        Booking.objects.filter(
+            theater__in=shows,
+            status='confirmed',
+            booked_at__gte=rng.start,
+            booked_at__lt=rng.end,
+        )
+        .values('theater_id')
+        .annotate(c=Count('id'))
+        .values_list('theater_id', 'c')
+    )
+    info = {
+        t['id']: t
+        for t in shows.values('id', 'name', 'movie__name')
+    }
+
+    total_seats = sum(seat_counts.values())
+    occupied = sum(book_counts.values())
+
     theater_rows = []
-    for t in by_theater:
-        total = t['total_seats'] or 0
-        bk = t['booked_seats'] or 0
+    for tid, t in info.items():
+        total = seat_counts.get(tid, 0) or 0
+        bk = book_counts.get(tid, 0) or 0
         theater_rows.append({
-            'id': t['id'],
+            'id': tid,
             'name': t['name'],
             'movie': t['movie__name'] or '—',
             'total_seats': total,
             'booked_seats': bk,
             'rate': round((bk / total * 100), 1) if total else 0.0,
         })
+    theater_rows.sort(key=lambda r: r['booked_seats'], reverse=True)
     return {
-        'shows': shows.count(),
+        'shows': len(info),
         'total_seats': total_seats,
         'booked_seats': occupied,
         'occupancy_rate': round((occupied / total_seats * 100), 1) if total_seats else 0.0,
         'occupancy_rate_fmt': f"{round((occupied / total_seats * 100), 1) if total_seats else 0.0}%",
-        'per_theater': theater_rows,
+        'per_theater': theater_rows[:15],
     }
-
-
-def _show_total_seats(shows):
-    qs = shows.annotate(seat_count=Count('seats'))
-    return qs.aggregate(v=Coalesce(Sum('seat_count'), 0))['v']
-
-
-def _occupied_seats(shows, rng):
-    return Booking.objects.filter(
-        status='confirmed',
-        theater__in=shows,
-        booked_at__gte=rng.start,
-        booked_at__lt=rng.end,
-    ).count()
 
 
 # ---------------------------------------------------------------------------

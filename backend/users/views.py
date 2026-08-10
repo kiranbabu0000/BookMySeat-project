@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm
 from .forms import UserRegisterForm, UserUpdateForm
+from .models import NameChange
 from django.shortcuts import render,redirect,get_object_or_404
 from django.contrib.auth import login, authenticate, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -191,17 +194,30 @@ def register_otp_resend(request):
 @login_required
 def profile(request):
     status_filter = request.GET.get('filter', '')
+    now = timezone.now()
+    # History retention: bookings older than 6 months roll off the list.
+    history_cutoff = now - timedelta(days=182)
     bookings_qs = Booking.objects.filter(user=request.user).select_related(
         'movie', 'theater', 'seat', 'reservation', 'payment'
-    ).prefetch_related('movie__languages')
-    now = timezone.now()
-    if status_filter == 'upcoming':
+    ).prefetch_related('movie__languages').filter(theater__time__gte=history_cutoff)
+    if status_filter == 'current':
         bookings_qs = bookings_qs.filter(theater__time__gte=now)
-    elif status_filter == 'past':
+    elif status_filter in ('history', 'past'):
         bookings_qs = bookings_qs.filter(theater__time__lt=now)
-    bookings = bookings_qs.order_by('-booked_at')
+    bookings = list(bookings_qs.order_by('-booked_at'))
     for booking in bookings:
         booking.cancel_allowed = booking.theater.time > now
+        duration_min = booking.movie.duration or 180
+        booking.show_end = booking.theater.time + timedelta(minutes=duration_min)
+        booking.is_on_now = booking.theater.time <= now < booking.show_end
+        booking.is_current = booking.show_end > now
+        booking.is_history = booking.show_end <= now
+        if booking.is_on_now:
+            booking.status_display = 'On Now'
+        elif booking.is_current:
+            booking.status_display = 'Upcoming'
+        else:
+            booking.status_display = 'History'
 
     # Group tickets purchased together (same reservation) into a single booking;
     # separate purchases stay as their own entries stacked below.
@@ -263,6 +279,20 @@ def profile(request):
             url=ticket_url,
         )
 
+    for group in booking_groups:
+        if any(b.is_on_now for b in group['seats']):
+            group['status_display'] = 'On Now'
+        elif any(b.is_current for b in group['seats']):
+            group['status_display'] = 'Upcoming'
+        else:
+            group['status_display'] = 'History'
+        group['is_current'] = group['status_display'] in ('Upcoming', 'On Now')
+
+    if status_filter == 'current':
+        booking_groups = [g for g in booking_groups if g.get('is_current')]
+    elif status_filter in ('history', 'past'):
+        booking_groups = [g for g in booking_groups if not g.get('is_current')]
+
     transactions = PaymentTransaction.objects.filter(user=request.user).select_related(
         'reservation', 'reservation__show', 'reservation__show__movie'
     )[:50]
@@ -278,7 +308,32 @@ def profile(request):
     if request.method == 'POST':
         u_form = UserUpdateForm(request.POST, instance=request.user)
         if u_form.is_valid():
+            old_first = request.user.first_name
+            old_last = request.user.last_name
+            name_changed = (old_first, old_last) != (
+                u_form.cleaned_data.get('first_name') or '',
+                u_form.cleaned_data.get('last_name') or '',
+            )
+            if name_changed:
+                day_ago = now - timedelta(hours=24)
+                if NameChange.objects.filter(
+                    user=request.user, changed_at__gte=day_ago
+                ).count() >= 3:
+                    messages.error(
+                        request,
+                        'You can only change your name 3 times per day. Please try again later.',
+                    )
+                    return redirect('profile')
             u_form.save()
+            if name_changed:
+                NameChange.objects.create(
+                    user=request.user,
+                    old_first=old_first,
+                    old_last=old_last,
+                    new_first=request.user.first_name,
+                    new_last=request.user.last_name,
+                )
+            messages.success(request, 'Your profile has been updated.')
             return redirect('profile')
     else:
         u_form = UserUpdateForm(instance=request.user)

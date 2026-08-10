@@ -70,6 +70,9 @@ def movie_list(request):
             (value, label)
             for value, label in discovery.CATEGORY_LABELS.items()
         ],
+        'category_links': discovery.category_links(params),
+        'results_label': discovery.CATEGORY_SINGULAR.get(params.category, 'Movie'),
+        'results_label_plural': discovery.CATEGORY_LABELS.get(params.category, 'Movies'),
     }
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -187,6 +190,49 @@ def movie_detail(request, movie_id):
     })
 
 
+def _attach_occupancy(theaters, now=None):
+    """Annotate each Theater with occupancy_pct / availability_level / availability_label.
+
+    Levels: low (<70% occupied), medium (70-89%), high (>=90% - almost full).
+    Occupied = permanently booked seats + seats held by active reservations.
+    """
+    now = now or timezone.now()
+    theaters = list(theaters)
+    ids = [t.id for t in theaters]
+    if not ids:
+        return theaters
+    totals = dict(
+        Seat.objects.filter(theater_id__in=ids)
+        .values('theater_id')
+        .annotate(n=Count('id'))
+        .values_list('theater_id', 'n')
+    )
+    booked = dict(
+        Seat.objects.filter(theater_id__in=ids, is_booked=True)
+        .values('theater_id')
+        .annotate(n=Count('id'))
+        .values_list('theater_id', 'n')
+    )
+    held = dict(
+        ReservedSeat.objects.filter(
+            reservation__show_id__in=ids,
+            reservation__status='active',
+            reservation__expires_at__gt=now,
+        )
+        .values('reservation__show_id')
+        .annotate(n=Count('id'))
+        .values_list('reservation__show_id', 'n')
+    )
+    for t in theaters:
+        total = totals.get(t.id) or 0
+        used = (booked.get(t.id) or 0) + (held.get(t.id) or 0)
+        pct = round(used * 100.0 / total, 1) if total else 0
+        t.occupancy_pct = pct
+        t.availability_level = 'high' if pct >= 90 else ('medium' if pct >= 70 else 'low')
+        t.availability_label = 'Almost full' if pct >= 90 else ('Filling fast' if pct >= 70 else '')
+    return theaters
+
+
 def theater_list(request, movie_id):
     movie = get_object_or_404(Movie, id=movie_id, is_deleted=False)
     if movie.status in ['archived', 'hidden']:
@@ -217,6 +263,7 @@ def theater_list(request, movie_id):
     if selected_date == today:
         theaters = theaters.exclude(time__lt=timezone.now())
     theaters = theaters.order_by('name', 'screen_name', 'time')
+    theaters = _attach_occupancy(theaters)
 
     date_tabs = [
         {
@@ -236,7 +283,7 @@ def theater_list(request, movie_id):
             {'movie': movie, 'theaters': theaters, 'selected_date': selected_date, 'city': city},
             request=request,
         )
-        return JsonResponse({'html': html, 'count': theaters.count()})
+        return JsonResponse({'html': html, 'count': len(theaters)})
 
     return render(request, 'movies/theater_list.html', {
         'movie': movie,
@@ -270,6 +317,7 @@ def _reservation_payload(reservation):
         'discount': str(pricing['discount']),
         'total': str(pricing['total']),
         'hold_seconds': RESERVATION_HOLD_SECONDS,
+        'ticket_count': reservation.ticket_count or len(seats),
     }
 
 
@@ -353,7 +401,8 @@ def book_seats(request, theater_id):
         'seat_data': seat_data,
         'tier_prices': tier_prices,
         'layout': layout,
-        'max_tickets': ticket_count or MAX_TICKET_COUNT,
+        'max_tickets': MAX_TICKET_COUNT,
+        'ticket_count': ticket_count or 1,
         'show_data': {
             'id': show.id,
             'name': show.name,
@@ -367,7 +416,8 @@ def book_seats(request, theater_id):
             'gst_slabs': gst_slabs(),
             'layout': layout,
             'couple_pairs': couple_pairs,
-            'max_tickets': ticket_count or MAX_TICKET_COUNT,
+            'max_tickets': MAX_TICKET_COUNT,
+            'ticket_count': ticket_count or 1,
         },
         'reservation_data': active_reservation,
     })
@@ -436,6 +486,7 @@ def modify_reservation_view(request, token):
             token,
             param_list('add'),
             param_list('remove'),
+            ticket_count=param('ticket_count', None),
         )
         return JsonResponse({'ok': True, 'reservation': _reservation_payload(reservation)})
     except ReservationError as exc:
@@ -620,18 +671,18 @@ def _resolve_ticket_target(booking_ref):
     """
     reservation = Reservation.objects.filter(booking_ref=booking_ref).select_related(
         'user', 'show', 'show__movie'
-    ).prefetch_related('bookings__seat', 'bookings__payment').first()
+    ).prefetch_related('bookings__seat', 'bookings__payment', 'show__movie__languages').first()
     if reservation:
         return reservation, None
     booking = Booking.objects.filter(booking_ref=booking_ref).select_related(
         'user', 'movie', 'theater', 'seat', 'reservation', 'payment'
-    ).first()
+    ).prefetch_related('movie__languages').first()
     if booking:
         return None, booking
     if booking_ref.isdigit():
         booking = Booking.objects.filter(id=int(booking_ref)).select_related(
             'user', 'movie', 'theater', 'seat', 'reservation', 'payment'
-        ).first()
+        ).prefetch_related('movie__languages').first()
         if booking:
             return None, booking
     return None, None

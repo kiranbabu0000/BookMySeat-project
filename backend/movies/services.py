@@ -380,7 +380,10 @@ def _validate_couple_pairs(seats):
             )
 
 
-def _parse_seat_ids(raw_ids, limit=12):
+MAX_TICKET_COUNT = 10
+
+
+def _parse_seat_ids(raw_ids, limit=MAX_TICKET_COUNT):
     """Validate and normalise seat id input from the client."""
     if not raw_ids:
         return set()
@@ -435,9 +438,6 @@ def _bulk_hold_seats(reservation, seats):
         ) from None
 
 
-MAX_TICKET_COUNT = 10
-
-
 def _coerce_ticket_count(ticket_count):
     """Validate a user-chosen ticket count (1-10). Returns int or None."""
     if ticket_count is None:
@@ -460,8 +460,11 @@ def create_reservation(user, show_id, seat_ids, ticket_count=None):
     if not requested:
         raise ReservationError('Please select at least one seat.')
     count = _coerce_ticket_count(ticket_count)
-    if count is not None and len(requested) > count:
-        raise ReservationError(f'You can select a maximum of {count} seats.')
+    if count is not None and len(requested) != count:
+        raise ReservationError(
+            f'Your order is for {count} ticket{"s" if count != 1 else ""} — '
+            f'please select exactly {count} seat{"s" if count != 1 else ""}.'
+        )
 
     with transaction.atomic():
         try:
@@ -476,7 +479,13 @@ def create_reservation(user, show_id, seat_ids, ticket_count=None):
             user=user, show=show, status='active'
         ).select_for_update().first()
         if existing and existing.expires_at > now:
-            return existing
+            held_ids = set(existing.reserved_seats.values_list('seat_id', flat=True))
+            if held_ids == requested:
+                return existing
+            raise ReservationError(
+                'You already have an active hold for this show. '
+                'Release it before selecting different seats.'
+            )
 
         seats = _locked_seats(requested, show)
         _assert_available(seats, now)
@@ -517,13 +526,18 @@ def _get_owned_active_reservation(user, token, now=None):
     return reservation
 
 
-def modify_reservation(user, token, add_seat_ids, remove_seat_ids):
-    """Add/remove seats on an active reservation and refresh its expiry."""
+def modify_reservation(user, token, add_seat_ids, remove_seat_ids, ticket_count=None):
+    """Add/remove seats on an active reservation and refresh its expiry.
+
+    When ``ticket_count`` is supplied the reservation is locked to exactly that
+    many held seats. Otherwise the held seat count becomes the new ticket count,
+    so the two never drift apart after the user starts modifying seats.
+    """
     now = timezone.now()
     to_add = _parse_seat_ids(add_seat_ids)
     to_remove = _parse_seat_ids(remove_seat_ids)
     to_remove = {s for s in to_remove if s not in to_add}
-    if not to_add and not to_remove:
+    if not to_add and not to_remove and ticket_count is None:
         raise ReservationError('No seat changes requested.')
 
     with transaction.atomic():
@@ -556,10 +570,20 @@ def modify_reservation(user, token, add_seat_ids, remove_seat_ids):
             _bulk_hold_seats(reservation, seats)
 
         held_count = ReservedSeat.objects.filter(reservation=reservation).count()
-        if reservation.ticket_count and held_count > reservation.ticket_count:
-            raise ReservationError(
-                'You can hold a maximum of {} seats.'.format(reservation.ticket_count)
-            )
+        if ticket_count is not None:
+            target = _coerce_ticket_count(ticket_count)
+            if held_count != target:
+                raise ReservationError(
+                    f'Your order is for {target} ticket{"s" if target != 1 else ""} — '
+                    f'please select exactly {target} seat{"s" if target != 1 else ""}.'
+                )
+            reservation.ticket_count = target
+        else:
+            reservation.ticket_count = held_count
+            if held_count > MAX_TICKET_COUNT:
+                raise ReservationError(
+                    'You can hold a maximum of {} seats.'.format(MAX_TICKET_COUNT)
+                )
         if not held_count:
             raise ReservationError('Reservation must keep at least one seat.')
 
@@ -569,7 +593,7 @@ def modify_reservation(user, token, add_seat_ids, remove_seat_ids):
         ])
 
         reservation.expires_at = now + timedelta(seconds=RESERVATION_HOLD_SECONDS)
-        reservation.save(update_fields=['expires_at', 'updated_at'])
+        reservation.save(update_fields=['ticket_count', 'expires_at', 'updated_at'])
         show.bump_seat_revision()
         return reservation
 
@@ -616,6 +640,11 @@ def confirm_booking(user, token, transaction_id=None, payment_method='upi', coup
         )
         if not reserved_seats:
             raise ReservationError('Reservation has no seats left.')
+        if reservation.ticket_count and len(reserved_seats) != reservation.ticket_count:
+            raise ReservationError(
+                'Ticket count no longer matches the selected seats. '
+                'Please release and reselect your seats.'
+            )
 
         pricing = reservation_pricing(reservation, coupon_code=coupon_code)
         coupon = pricing['coupon']

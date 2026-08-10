@@ -15,6 +15,7 @@ Canonical data sources (kept in sync automatically with the admin panel):
 from datetime import time, timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Count, F, FloatField, OuterRef, Q, Subquery
 from django.db.models.functions import Abs
 from django.utils import timezone
@@ -35,6 +36,26 @@ CATEGORY_LABELS = {
     'laughing_therapy': 'Laughing Therapy',
     'live_concert': 'Live Concerts',
 }
+
+CATEGORY_SINGULAR = {
+    'movie': 'Movie',
+    'laughing_therapy': 'Laughing Therapy',
+    'live_concert': 'Live Concert',
+}
+
+# Short-lived cache for the expensive catalog feeds so the home and
+# movie-detail pages stop recomputing them on every request.
+FEED_CACHE_TTL = 300
+
+
+def _cached_feed(key, fn):
+    if getattr(settings, 'TESTING', False):
+        return fn()
+    value = cache.get(key)
+    if value is None:
+        value = fn()
+        cache.set(key, value, FEED_CACHE_TTL)
+    return value
 
 SORT_CHOICES = {
     'popularity',
@@ -175,6 +196,25 @@ def querystring(params):
     return urlencode(params.to_query())
 
 
+def category_links(params):
+    """Category-tab links that preserve every active filter (search/sort/etc.).
+
+    The 'movie' tab drops the category param entirely since it is the default
+    browse scope, keeping URLs clean while staying on the current section.
+    """
+    links = []
+    for value in CATEGORY_CHOICES:
+        parts = [(k, v) for k, v in params.to_query() if k != 'category']
+        if value != 'movie':
+            parts.append(('category', value))
+        links.append({
+            'value': value,
+            'label': CATEGORY_LABELS.get(value, value),
+            'href': '?' + urlencode(parts),
+        })
+    return links
+
+
 def visible_movies():
     return Movie.objects.filter(is_deleted=False).exclude(status__in=HIDDEN_STATUSES)
 
@@ -267,12 +307,18 @@ def available_cities():
 
 def facet_data():
     """Filter options shown on the discovery page (only for visible movies)."""
+    # Kept as a subquery (not materialized) so a large catalog never builds
+    # a giant IN (...) list in Python.
     visible_ids = visible_movies().values_list('pk', flat=True)
-    genres = list(Genre.objects.filter(movies__in=visible_ids).order_by('name'))
-    languages = list(Language.objects.filter(movies__in=visible_ids).order_by('name'))
+    # The __in lookups JOIN the M2M / FK through tables, so every matching row
+    # repeats once per related movie/show. DISTINCT collapses them to one entry
+    # per genre/language/theatre.
+    genres = list(Genre.objects.filter(movies__in=visible_ids).distinct().order_by('name'))
+    languages = list(Language.objects.filter(movies__in=visible_ids).distinct().order_by('name'))
     cities = available_cities()
     theatres = list(
         Theatre.objects.filter(is_active=True, shows__status='active', shows__movie_id__in=visible_ids)
+        .distinct()
         .order_by('name')
     )
     return {
@@ -316,6 +362,13 @@ def chip_data(params, facets):
 
 def trending_movies(limit=10, category='movie'):
     """Bookings (total + recent) + wishlists + approved reviews + rating, weighted."""
+    return _cached_feed(
+        'feed:trending:{}:{}'.format(limit, category),
+        lambda: _trending_movies(limit, category),
+    )
+
+
+def _trending_movies(limit, category):
     recent_cutoff = timezone.now() - timedelta(days=7)
     base = visible_movies().filter(category=category)
     bookings = Count('booking', filter=Q(booking__status='confirmed'), distinct=True)
@@ -340,6 +393,13 @@ def trending_movies(limit=10, category='movie'):
 
 def recently_released(limit=8, category='movie'):
     """Newly released movies, newest first. Expired/unavailable statuses excluded."""
+    return _cached_feed(
+        'feed:recent:{}:{}'.format(limit, category),
+        lambda: _recently_released(limit, category),
+    )
+
+
+def _recently_released(limit, category):
     today = timezone.localdate()
     return list(
         visible_movies()
@@ -352,6 +412,13 @@ def similar_movies(movie, limit=6):
     """Movies sharing genres, languages, rating proximity and popularity.
     Results stay within the same category (movies vs events) so an event
     detail page always recommends related events."""
+    return _cached_feed(
+        'feed:similar:{}:{}:{}'.format(movie.pk, movie.category, limit),
+        lambda: _similar_movies(movie, limit),
+    )
+
+
+def _similar_movies(movie, limit):
     genre_ids = list(movie.genres.values_list('pk', flat=True))
     language_ids = list(movie.languages.values_list('pk', flat=True))
     qs = visible_movies().exclude(pk=movie.pk).filter(category=movie.category)
