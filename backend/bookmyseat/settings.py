@@ -117,20 +117,21 @@ if not EMAIL_BACKEND:
                 'EMAIL_HOST must be set when DEBUG is False. Production must '
                 'never silently fall back to the console email backend, which '
                 'accepts messages but sends nothing. Set EMAIL_HOST, '
-                'EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, DEFAULT_FROM_EMAIL and '
-                'SITE_URL (Render: Environment tab on the web service AND the '
-                'bookmyseat-email-worker cron job).'
+                'EMAIL_HOST_PASSWORD, DEFAULT_FROM_EMAIL and SITE_URL (Render: '
+                'Environment tab on the web service).'
             )
 EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587') or '587')
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_USER = os.environ.get(
+    'EMAIL_HOST_USER', 'bookmyseat.official26@gmail.com'
+)
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False') == 'True'
 # Fail fast instead of hanging a request when the SMTP host is unreachable.
 EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '15') or '15')
 DEFAULT_FROM_EMAIL = os.environ.get(
-    'DEFAULT_FROM_EMAIL', 'BookMySeat <no-reply@bookmyseat.com>'
+    'DEFAULT_FROM_EMAIL', 'BookMySeat <bookmyseat.official26@gmail.com>'
 )
 
 # Public site base URL used to build absolute links inside emails.
