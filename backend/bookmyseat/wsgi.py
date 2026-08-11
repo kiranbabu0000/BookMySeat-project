@@ -22,3 +22,9 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'bookmyseat.settings')
 
 application = get_wsgi_application()
 app = application
+
+# Deliver queued emails (confirmation/OTP) from the web process itself so no
+# separate (paid) cron worker is required on Render's free tier.
+from movies.outbox_worker import start_outbox_worker  # noqa: E402
+
+start_outbox_worker()
