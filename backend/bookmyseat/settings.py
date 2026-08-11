@@ -127,6 +127,8 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False') == 'True'
+# Fail fast instead of hanging a request when the SMTP host is unreachable.
+EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '15') or '15')
 DEFAULT_FROM_EMAIL = os.environ.get(
     'DEFAULT_FROM_EMAIL', 'BookMySeat <no-reply@bookmyseat.com>'
 )

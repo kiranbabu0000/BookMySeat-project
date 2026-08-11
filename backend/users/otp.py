@@ -5,11 +5,15 @@ separate attempt counter, so a leaked session can't be used to replay a code
 and brute-forcing is capped.
 """
 import hmac
+import logging
 import secrets
 
 from django.conf import settings
 from django.core.cache import cache
-from django.core.mail import send_mail
+
+from movies.models import EmailOutbox
+
+logger = logging.getLogger(__name__)
 
 OTP_CODE_LENGTH = 6
 OTP_TTL_SECONDS = 600          # 10 minutes
@@ -49,7 +53,16 @@ def generate_and_store(user):
 
 
 def send_otp_email(user, otp):
-    """Email the code to the user. Returns True if the email was accepted."""
+    """Enqueue the code into the async email outbox.
+
+    Returns True when the message was queued. Delivery happens asynchronously
+    via the ``process_email_outbox`` worker, so a slow or unreachable SMTP
+    server never blocks (or hangs) the register request.
+    """
+    recipient = (user.email or '').strip()
+    if not recipient:
+        logger.warning('OTP EMAIL SKIPPED: user=%s has no email address', user.id)
+        return False
     subject = 'Verify your BookMySeat account'
     lines = [
         'Hi {},'.format(user.username),
@@ -61,18 +74,19 @@ def send_otp_email(user, otp):
         'Enter this code to activate your account. It expires in 10 minutes.',
         'If you did not create this account, you can safely ignore this email.',
         '',
-        '— BookMySeat',
+        '\u2014 BookMySeat',
     ]
     try:
-        send_mail(
-            subject,
-            '\n'.join(lines),
-            getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@bookmyseat.com'),
-            [user.email],
-            fail_silently=False,
+        EmailOutbox.objects.create(
+            recipient=recipient,
+            subject=subject,
+            plain_body='\n'.join(lines),
+            html_body='',
+            max_attempts=getattr(settings, 'EMAIL_OUTBOX_MAX_ATTEMPTS', 6),
         )
         return True
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - registration must never fail on email
+        logger.warning('OTP EMAIL ENQUEUE FAILED for user=%s: %s', user.id, exc)
         return False
 
 

@@ -9,6 +9,7 @@ from admin_panel.models import AdminProfile
 
 from .otp import generate_and_store
 from .middleware import JUST_LOGGED_OUT_FLAG, JUST_LOGGED_OUT_WINDOW
+from movies.models import EmailOutbox
 from movies.testutils import DEMO_RAZORPAY
 
 
@@ -142,9 +143,10 @@ class RegisterOtpFlowTests(TestCase):
         self.assertRedirects(response, reverse('register_otp'))
         user = User.objects.get(username='carol')
         self.assertFalse(user.is_active)
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('verify', mail.outbox[0].subject.lower())
-        self.assertRegex(mail.outbox[0].body, r'\b\d{6}\b')
+        outbox = EmailOutbox.objects.filter(recipient='carol@example.com').first()
+        self.assertIsNotNone(outbox)
+        self.assertIn('verify', outbox.subject.lower())
+        self.assertRegex(outbox.plain_body, r'\b\d{6}\b')
         self.assertEqual(self.client.session.get('otp_user_id'), user.id)
 
     def test_register_otp_page_requires_started_flow(self):
@@ -177,7 +179,9 @@ class RegisterOtpFlowTests(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('_auth_user_id', self.client.session)
-        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(
+            EmailOutbox.objects.filter(recipient='carol@example.com').count(), 1
+        )
 
     def test_wrong_otp_keeps_user_inactive(self):
         self._register_post()
@@ -209,7 +213,9 @@ class RegisterOtpFlowTests(TestCase):
         first = self._get_code(user.id)
         response = self.client.post(reverse('register_otp_resend'))
         self.assertRedirects(response, reverse('register_otp'))
-        self.assertEqual(len(mail.outbox), 2)
+        self.assertEqual(
+            EmailOutbox.objects.filter(recipient='carol@example.com').count(), 2
+        )
         self.assertNotEqual(self._get_code(user.id), first)
 
     def test_resend_without_flow_redirects_to_register(self):
