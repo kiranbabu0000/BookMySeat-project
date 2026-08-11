@@ -41,6 +41,32 @@ python manage.py runserver
 
 Then open http://127.0.0.1:8000
 
+## Email worker (confirmation emails)
+
+Booking emails are enqueued to `EmailOutbox` and delivered asynchronously by the
+`process_email_outbox` worker — they are NOT sent during the booking request.
+
+`python manage.py runserver` **auto-starts this worker in the background**, so
+local bookings email you with no extra command (you'll see
+`Email outbox worker started` in the runserver console). In production the
+worker must run on its own (Render cron job); it is the same command.
+
+To run the worker manually — e.g. flush whatever is currently queued once:
+
+```bash
+cd backend
+python manage.py process_email_outbox
+```
+
+or run it forever in a second terminal (for a plain `runserver` build or a
+different dev server):
+
+```bash
+python manage.py process_email_outbox --loop
+```
+
+Failed sends are retried with exponential backoff up to `EMAIL_OUTBOX_MAX_ATTEMPTS`.
+
 ## Notes
 
 - `backend/bookmyseat/settings.py` points Django's template loader and static

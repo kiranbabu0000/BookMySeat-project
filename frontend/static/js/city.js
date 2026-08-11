@@ -19,6 +19,18 @@
     'Pune': [18.5204, 73.8567],
   };
   var GEO_MAX_KM = 300;
+  var MANUAL_KEY = 'bms_city_manual';
+
+  /* Common city-name variants so reverse geocoding results match the seeded
+     cities even when the geocoder returns an alias (Bangalore vs Bengaluru). */
+  var CITY_ALIASES = {
+    'bangalore': 'Bengaluru',
+    'calcutta': 'Kolkata',
+    'bombay': 'Mumbai',
+    'madras': 'Chennai',
+    'new delhi': 'Delhi',
+    'delhi ncr': 'Delhi',
+  };
 
   function getCities() {
     return Array.prototype.map.call(
@@ -132,11 +144,58 @@
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
+  function knownCities() {
+    var cities = getCities();
+    return cities.length ? cities : Object.keys(CITY_COORDS);
+  }
+
+  /* Match a reverse-geocoded place name against the cities we actually serve,
+     resolving common aliases. Returns the canonical city name or null. */
+  function normalizeCity(raw) {
+    if (!raw) return null;
+    var cleaned = String(raw).trim().replace(/\s+/g, ' ');
+    if (!cleaned) return null;
+    if (CITY_ALIASES[cleaned.toLowerCase()]) cleaned = CITY_ALIASES[cleaned.toLowerCase()];
+    var cities = knownCities();
+    for (var i = 0; i < cities.length; i++) {
+      if (cities[i].toLowerCase() === cleaned.toLowerCase()) return cities[i];
+    }
+    return null;
+  }
+
+  /* Real reverse geocoding via OpenStreetMap Nominatim (free, no API key).
+     Falls back to offline nearest-city matching when the network is unavailable. */
+  function reverseGeocode(lat, lng, cb) {
+    if (typeof fetch !== 'function') { cb(null); return; }
+    var url = 'https://nominatim.openstreetmap.org/reverse' +
+      '?format=jsonv2&zoom=12&accept-language=en&lat=' + encodeURIComponent(lat) +
+      '&lon=' + encodeURIComponent(lng);
+    var controller = null;
+    if (typeof AbortController === 'function') {
+      controller = new AbortController();
+      setTimeout(function () { controller.abort(); }, 8000);
+    }
+    fetch(url, { signal: controller ? controller.signal : undefined })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.address) { cb(null); return; }
+        var a = data.address;
+        var city = a.city || a.town || a.village || a.municipality ||
+          a.state_district || a.county || a.state || '';
+        cb(city || null);
+      })
+      .catch(function () { cb(null); });
+  }
+
   function detectViaGeolocation(cb) {
     if (!navigator.geolocation) { cb(null); return; }
     navigator.geolocation.getCurrentPosition(
       function (pos) {
-        cb(nearestCity(pos.coords.latitude, pos.coords.longitude));
+        var lat = pos.coords.latitude;
+        var lng = pos.coords.longitude;
+        reverseGeocode(lat, lng, function (named) {
+          cb(normalizeCity(named) || nearestCity(lat, lng));
+        });
       },
       function () { cb(null); },
       { timeout: 8000, maximumAge: 600000 }
@@ -146,6 +205,16 @@
   function init() {
     var stored = getStoredCity();
     var cities = getCities();
+    var manual = false;
+    try { manual = localStorage.getItem(MANUAL_KEY) === '1'; } catch (e) {}
+    if (manual) {
+      if (stored) {
+        updateLabel(stored);
+        var sel = document.getElementById('citySelect');
+        if (sel && !sel.value) sel.value = stored;
+      }
+      return;
+    }
     if (stored) {
       if (cities.indexOf(stored) !== -1) {
         updateLabel(stored);
@@ -182,6 +251,7 @@
       var item = e.target.closest('.city-selector__item[data-city]');
       if (!item) return;
       e.preventDefault();
+      try { localStorage.setItem(MANUAL_KEY, '1'); } catch (e2) {}
       selectCity(item.getAttribute('data-city'), { navigate: true });
     });
     document.addEventListener('click', function (e) {

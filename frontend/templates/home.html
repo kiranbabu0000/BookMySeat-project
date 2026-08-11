@@ -81,7 +81,7 @@
     </div>
     <nav class="genre-chips" aria-label="Movie categories">
       {% for genre in genres %}
-      <a class="genre-chip" href="{% url 'movie_list' %}?genre={{ genre.slug }}">
+      <a class="genre-chip" href="{{ genre.href }}">
         <i class="bi bi-film" aria-hidden="true"></i>{{ genre.name }}
       </a>
       {% endfor %}

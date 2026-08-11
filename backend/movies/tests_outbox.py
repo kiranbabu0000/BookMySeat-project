@@ -3,14 +3,16 @@
 The booking flow must never wait for SMTP — confirmation emails are persisted
 to ``EmailOutbox`` and delivered by ``process_email_outbox``. These tests cover
 the enqueue step, worker delivery, exponential-backoff retries, permanent
-failure after ``max_attempts`` and reclaiming messages stuck mid-delivery.
+failure after ``max_attempts``, reclaiming messages stuck mid-delivery, and the
+``runserver`` auto-start of the worker.
 """
+import time
 from datetime import timedelta
 
 from django.core import mail
 from django.core.mail.backends.base import BaseEmailBackend
 from django.core.management import call_command
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from admin_panel.models import Notification
@@ -193,6 +195,14 @@ class BookingEnqueueTests(TestCase):
             message.pdf_attachment.startswith(b'%PDF'),
             'the enqueued message must carry a generated PDF ticket',
         )
+        self.assertTrue(
+            message.qr_image.startswith(b'\x89PNG'),
+            'the enqueued message must carry an inline QR PNG',
+        )
+        self.assertIn(
+            'cid:qr_ticket', message.html_body,
+            'the HTML must reference the QR by Content-ID, not a data URI',
+        )
         self.assertEqual(mail.outbox, [], 'email must not be sent inside the booking request')
         self.assertTrue(
             Notification.objects.filter(user=self.user, title='Booking confirmed').exists(),
@@ -202,3 +212,61 @@ class BookingEnqueueTests(TestCase):
         call_command('process_email_outbox', verbosity=0)
         self.assertEqual(len(mail.outbox), 1, 'worker must deliver the enqueued email')
         self.assertEqual(EmailOutbox.objects.filter(status='sent').count(), 1)
+
+    def test_booking_without_email_skips_enqueue_but_keeps_notification(self):
+        no_email = User.objects.create_user('bob', '', 'password123')
+        self.client.force_login(no_email)
+        reservation = self._reserve(self.seats[1].id).json()['reservation']
+        self._pay(reservation['token'])
+
+        self.assertEqual(
+            EmailOutbox.objects.count(), 0,
+            'no confirmation email can be enqueued when the user has no address',
+        )
+        self.assertEqual(mail.outbox, [])
+        self.assertTrue(
+            Notification.objects.filter(user=no_email, title='Booking confirmed').exists(),
+            'in-app notification must still be created without an email address',
+        )
+
+
+class RunserverEmailWorkerTests(TestCase):
+    """`python manage.py runserver` must auto-start the email outbox worker."""
+
+    def test_runserver_resolves_to_movies_command(self):
+        from django.core.management import get_commands
+        self.assertEqual(
+            get_commands()['runserver'], 'movies',
+            'movies.runserver must override django.contrib.staticfiles runserver '
+            'so the email worker auto-starts locally',
+        )
+
+
+@override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+class RunserverEmailWorkerDeliveryTests(TransactionTestCase):
+    """The runserver worker thread must actually drain pending messages.
+
+    TransactionTestCase (real commits) so the worker thread's own database
+    connection sees the enqueued message.
+    """
+
+    def test_start_email_worker_thread_delivers_pending_messages(self):
+        from movies.management.commands.runserver import _start_email_worker
+
+        message = _make_message()
+        thread, stop_event = _start_email_worker(sleep=0.1)
+        try:
+            deadline = time.time() + 15
+            while time.time() < deadline:
+                message.refresh_from_db()
+                if message.status == 'sent':
+                    break
+                time.sleep(0.05)
+            message.refresh_from_db()
+            self.assertEqual(message.status, 'sent', 'worker thread must deliver')
+            self.assertEqual(message.attempts, 1)
+            self.assertEqual(len(mail.outbox), 1)
+            self.assertEqual(mail.outbox[0].to, ['patron@example.com'])
+        finally:
+            stop_event.set()
+            thread.join(timeout=5)

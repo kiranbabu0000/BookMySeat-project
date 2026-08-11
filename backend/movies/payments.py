@@ -304,8 +304,11 @@ def verify_and_confirm(user, token, *, gateway_order_id, gateway_payment_id,
 
     try:
         send_booking_confirmation(user, reservation, bookings)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - email must never fail a verified booking
+        logger.warning(
+            'Confirmation email enqueue failed for reservation=%s: %s',
+            reservation.token, exc,
+        )
     return reservation, bookings
 
 
@@ -497,8 +500,11 @@ def _webhook_payment_captured(payload):
 
     try:
         send_booking_confirmation(locked.user, reservation, bookings)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - email must never fail a captured payment
+        logger.warning(
+            'Confirmation email enqueue failed for order=%s: %s',
+            order_id, exc,
+        )
 
 
 def _webhook_payment_failed(payload):

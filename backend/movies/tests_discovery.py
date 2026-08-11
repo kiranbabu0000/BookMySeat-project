@@ -439,3 +439,113 @@ class DiscoveryViewTests(DiscoveryBase):
         self.assertContains(response, 'category=laughing_therapy')
         # The Movies tab link keeps the active sort while leaving the section.
         self.assertContains(response, 'href="?sort=price_desc"')
+
+
+class CategoryAwareFacetTests(DiscoveryBase):
+    """Event categories must not leak pseudo-genres into the Movies tab (or vice versa)."""
+
+    def setUp(self):
+        super().setUp()
+        self.therapy_genre = _make_genre('Laughing Therapy', 'laughing-therapy')
+        self.concert_genre = _make_genre('Live Concert', 'live-concert')
+        self.therapy = _make_movie(
+            'Comedy Night', [self.therapy_genre], [self.hindi], rating=7.5,
+            category='laughing_therapy', release_date=self.today,
+        )
+        self.concert = _make_movie(
+            'Rock Night', [self.concert_genre], [self.tamil], rating=8.0,
+            category='live_concert', release_date=self.today,
+        )
+        _make_show(self.therapy, self.mumbai, self.mumbai_screen, show_time=time(20, 0), price=500)
+        _make_show(self.concert, self.delhi, self.delhi_screen, show_time=time(21, 0), price=900)
+
+    def test_movies_facets_exclude_event_pseudo_genres(self):
+        facets = facet_data('movie')
+        genre_slugs = [g.slug for g in facets['genres']]
+        self.assertIn('action', genre_slugs)
+        self.assertNotIn('laughing-therapy', genre_slugs)
+        self.assertNotIn('live-concert', genre_slugs)
+
+    def test_event_facets_only_include_their_own_genre(self):
+        facets = facet_data('live_concert')
+        genre_slugs = [g.slug for g in facets['genres']]
+        self.assertEqual(genre_slugs, ['live-concert'])
+        self.assertNotIn('action', genre_slugs)
+
+    def test_event_category_with_pseudo_genre_returns_results(self):
+        qs = discover_movies(DiscoveryParams(category='live_concert', genres=['live-concert']))
+        self.assertEqual(list(qs.values_list('name', flat=True)), ['Rock Night'])
+
+    def test_movies_tab_with_pseudo_genre_has_no_results(self):
+        # The sidebar no longer offers pseudo-genres here, but a hand-crafted
+        # URL must never crash or leak event rows into the Movies tab.
+        qs = discover_movies(DiscoveryParams(genres=['live-concert']))
+        self.assertEqual(qs.count(), 0)
+
+    def test_date_filter_restricts_to_show_date(self):
+        qs = discover_movies(DiscoveryParams(category='live_concert', date=self.today.isoformat()))
+        self.assertEqual(list(qs.values_list('name', flat=True)), ['Rock Night'])
+        tomorrow = (self.today + timedelta(days=1)).isoformat()
+        qs = discover_movies(DiscoveryParams(category='live_concert', date=tomorrow))
+        self.assertEqual(qs.count(), 0)
+
+    def test_price_range_filter(self):
+        qs = discover_movies(DiscoveryParams(price_min=250, price_max=350))
+        self.assertEqual(set(qs.values_list('name', flat=True)), {'Comedy Nights', 'Drama Queen'})
+        qs = discover_movies(DiscoveryParams(price_max=200))
+        self.assertEqual(list(qs.values_list('name', flat=True)), ['Action Blast'])
+
+    def test_price_range_filter_scoped_to_category(self):
+        qs = discover_movies(DiscoveryParams(category='live_concert', price_min=900))
+        self.assertEqual(list(qs.values_list('name', flat=True)), ['Rock Night'])
+        qs = discover_movies(DiscoveryParams(category='live_concert', price_max=800))
+        self.assertEqual(qs.count(), 0)
+
+    def test_invalid_date_and_price_are_ignored(self):
+        params = DiscoveryParams.from_request(
+            self.client.get(reverse('movie_list') + '?date=not-a-date&price_min=-5&price_max=abc').wsgi_request
+        )
+        self.assertEqual(params.date, '')
+        self.assertIsNone(params.price_min)
+        self.assertIsNone(params.price_max)
+
+    def test_event_tab_renders_date_and_price_filters_only(self):
+        response = self.client.get(reverse('movie_list') + '?category=live_concert')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Event Date')
+        self.assertContains(response, 'Price Range')
+        self.assertNotContains(response, 'Show Timing')
+        self.assertNotContains(response, 'Genres')
+
+    def test_movies_tab_does_not_offer_event_pseudo_genres(self):
+        response = self.client.get(reverse('movie_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="genre" value="action"')
+        self.assertNotContains(response, 'name="genre" value="live-concert"')
+        self.assertNotContains(response, 'name="genre" value="laughing-therapy"')
+
+
+class HomeGenreChipTests(DiscoveryBase):
+    """Home page "Browse by Category" chips must never land on an empty Movies tab."""
+
+    def setUp(self):
+        super().setUp()
+        self.therapy_genre = _make_genre('Laughing Therapy', 'laughing-therapy')
+        self.concert_genre = _make_genre('Live Concert', 'live-concert')
+        # Attach the event pseudo-genres to real (visible) rows so the chips render.
+        self.m1.genres.add(self.therapy_genre)
+        self.m2.genres.add(self.concert_genre)
+
+    def test_event_pseudo_genre_chips_link_to_category_tabs(self):
+        response = self.client.get(reverse('home'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '?category=laughing_therapy')
+        self.assertContains(response, '?category=live_concert')
+
+    def test_movie_genre_chips_still_link_to_genre_filter(self):
+        response = self.client.get(reverse('home'))
+        self.assertContains(response, '?genre=action')
+        self.assertContains(response, '?genre=comedy')
+        # Pseudo-genres must never be offered as a Movies-tab genre filter.
+        self.assertNotContains(response, '?genre=laughing-therapy')
+        self.assertNotContains(response, '?genre=live-concert')

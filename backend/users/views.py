@@ -64,11 +64,23 @@ def home(request):
         Movie.objects.filter(status='coming_soon', is_deleted=False, category='movie')
         .order_by('release_date')[:8]
     )
+    visible_movie_ids = Movie.objects.filter(is_deleted=False).exclude(
+        status__in=['archived', 'hidden']
+    )
     genres = list(
-        Genre.objects.filter(movies__is_deleted=False)
-        .exclude(movies__status__in=['archived', 'hidden'])
+        Genre.objects.filter(movies__in=visible_movie_ids)
         .distinct().order_by('name')
     )
+    # Event pseudo-genres (Laughing Therapy / Live Concert) must link to their
+    # category tabs, not to a genre filter on the Movies tab (which is empty).
+    genre_links = []
+    for genre in genres:
+        category = genre.slug.replace('-', '_')
+        if category in ('laughing_therapy', 'live_concert'):
+            href = '{}?category={}'.format(reverse('movie_list'), category)
+        else:
+            href = '{}?genre={}'.format(reverse('movie_list'), genre.slug)
+        genre_links.append({'name': genre.name, 'slug': genre.slug, 'href': href})
     return render(request, 'home.html', {
         'movies': movies,
         'laughing_therapy': laughing_therapy,
@@ -79,7 +91,7 @@ def home(request):
         'recommended': recommended_for_user(request, 8) if request.user.is_authenticated else [],
         'top_rated': top_rated,
         'coming_soon': coming_soon,
-        'genres': genres,
+        'genres': genre_links,
     })
 
 def register(request):

@@ -1,7 +1,7 @@
 {% if rail %}
 <div class="movie-rail__item">
 {% else %}
-<div class="col-6 col-sm-4 col-md-3 col-lg-2 mb-4">
+<div class="col-6 col-sm-4 col-md-3 col-lg-3 mb-4">
 {% endif %}
   <article class="movie-card h-100">
     <a href="{% url 'movie_detail' movie.id %}" class="text-decoration-none d-flex flex-column h-100" aria-label="View {{ movie.name }}">
@@ -20,18 +20,20 @@
         <span class="movie-card__category">
           {% if movie.category == 'laughing_therapy' %}<i class="bi bi-emoji-laughing" aria-hidden="true"></i>
           {% elif movie.category == 'live_concert' %}<i class="bi bi-music-note-beamed" aria-hidden="true"></i>{% endif %}
-          {{ movie.get_category_display }}
+          <span class="movie-card__category-text">{{ movie.get_category_display }}</span>
         </span>
         {% endif %}
       </div>
       <div class="movie-card__body">
         <h3 class="movie-card__title">{{ movie.name }}</h3>
-        <p class="movie-card__meta">
-          <i class="bi bi-people me-1" aria-hidden="true"></i>{{ movie.cast|truncatewords:4 }}
-        </p>
-        {% if movie.description %}
-        <p class="movie-card__desc">{{ movie.description|truncatewords:12 }}</p>
-        {% endif %}
+        <div class="movie-card__meta">
+          {% if movie.release_date %}
+          <span class="movie-card__date"><i class="bi bi-calendar-event" aria-hidden="true"></i>{{ movie.release_date|date:"d M Y" }}</span>
+          {% endif %}
+          {% if current_city %}
+          <span class="movie-card__city"><i class="bi bi-geo-alt" aria-hidden="true"></i>{{ current_city }}</span>
+          {% endif %}
+        </div>
         <div class="movie-card__footer">
           {% if movie.min_price %}
           <span class="movie-card__price"><i class="bi bi-ticket-perforated" aria-hidden="true"></i> &#8377;{{ movie.min_price }} onwards</span>

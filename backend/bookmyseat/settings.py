@@ -71,9 +71,13 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    # movies MUST come before django.contrib.staticfiles: Django resolves
+    # duplicate management commands by iterating INSTALLED_APPS in reverse, so
+    # the earlier app wins. movies.runserver (which auto-starts the email
+    # worker) has to beat staticfiles' runserver.
+    'movies',
     'django.contrib.staticfiles',
     'users',
-    'movies',
     'admin_panel',
 ]
 
@@ -96,12 +100,27 @@ AUTH_USER_MODEL='auth.User'
 # Email delivery. Configure EMAIL_HOST etc. (or the .env / environment
 # variables) to send real confirmation emails; otherwise emails are printed
 # to the console for development.
-EMAIL_BACKEND = os.environ.get(
-    'EMAIL_BACKEND',
-    'django.core.mail.backends.smtp.EmailBackend'
-    if os.environ.get('EMAIL_HOST')
-    else 'django.core.mail.backends.console.EmailBackend',
-)
+#
+# The console backend is ONLY a development convenience. In production it
+# silently "sends" to stdout and marks outbox rows as delivered, which looks
+# successful but delivers nothing — so when DEBUG is disabled we fail fast
+# instead of ever falling back to it.
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', '')
+if not EMAIL_BACKEND:
+    if os.environ.get('EMAIL_HOST'):
+        EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    else:
+        EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+        if not DEBUG and not TESTING:
+            from django.core.exceptions import ImproperlyConfigured
+            raise ImproperlyConfigured(
+                'EMAIL_HOST must be set when DEBUG is False. Production must '
+                'never silently fall back to the console email backend, which '
+                'accepts messages but sends nothing. Set EMAIL_HOST, '
+                'EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, DEFAULT_FROM_EMAIL and '
+                'SITE_URL (Render: Environment tab on the web service AND the '
+                'bookmyseat-email-worker cron job).'
+            )
 EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587') or '587')
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
@@ -256,6 +275,7 @@ LOGGING = {
     'loggers': {
         'movies.gateway': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False},
         'movies.payments': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False},
+        'movies.notifications': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
     },
 }
 

@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import timedelta, datetime, time
 from decimal import Decimal
 
 from django.test import TestCase
@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import AdminProfile, Genre, Payment, PaymentTransaction, Theatre, Screen, Show
+from .services import ensure_movie_schedule, sync_theater_from_show
 from movies.models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, SeatCategory, ShowPrice
 
 
@@ -634,3 +635,52 @@ class ShowTheaterSyncTests(TestCase):
         self.assertFalse(
             Theater.objects.filter(movie=self.movie, status='active').exists()
         )
+
+
+class RollingScheduleTests(TestCase):
+    """The rolling schedule must re-apply a movie's daily slate so the
+    today..today+3 booking window never runs out of shows."""
+
+    def setUp(self):
+        self.movie = Movie.objects.create(
+            name='Rolling Movie', rating=7.0, cast='Cast',
+            status='now_showing')
+        self.theatre = Theatre.objects.create(
+            name='Roll Hall', city='Chennai', is_active=True)
+        self.screen = Screen.objects.create(
+            theatre=self.theatre, name='Screen 1', capacity=40, size='small')
+        past = timezone.localdate() - timedelta(days=2)
+        for slot in (time(10, 30), time(18, 30)):
+            show = Show.objects.create(
+                movie=self.movie, theatre=self.theatre, screen=self.screen,
+                date=past, time=slot, ticket_price=Decimal('200.00'),
+                status='active')
+            sync_theater_from_show(show)
+
+    def test_rolls_schedule_forward_with_bookable_theaters(self):
+        created = ensure_movie_schedule(self.movie, horizon=4)
+        self.assertGreater(created, 0)
+        today = timezone.localdate()
+        for offset in range(4):
+            day = today + timedelta(days=offset)
+            shows = Show.objects.filter(
+                movie=self.movie, date=day, status='active')
+            self.assertTrue(shows.exists(), f'no shows on {day}')
+            for show in shows:
+                self.assertIsNotNone(show.theater_id)
+                self.assertTrue(
+                    Seat.objects.filter(theater=show.theater).exists())
+
+    def test_idempotent(self):
+        ensure_movie_schedule(self.movie, horizon=4)
+        second = ensure_movie_schedule(self.movie, horizon=4)
+        self.assertEqual(second, 0)
+
+    def test_past_times_today_are_not_created(self):
+        ensure_movie_schedule(self.movie, horizon=4)
+        today = timezone.localdate()
+        now = timezone.now()
+        for show in Show.objects.filter(
+                movie=self.movie, date=today, status='active'):
+            starts = timezone.make_aware(datetime.combine(today, show.time))
+            self.assertGreater(starts, now)

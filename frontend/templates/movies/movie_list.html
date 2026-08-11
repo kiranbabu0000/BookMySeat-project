@@ -47,7 +47,7 @@
             <option value="alpha_desc" {% if params.sort == 'alpha_desc' %}selected{% endif %}>Name (Z-A)</option>
           </select>
         </div>
-        <button type="button" class="btn btn-bms-outline discovery-toolbar__clear {% if params.category == 'movie' and not params.search and not params.genres and not params.languages and not params.city and not params.theatre_id and not params.release and not params.rating and not params.timings %}d-none{% endif %}" data-clear-filters>
+        <button type="button" class="btn btn-bms-outline discovery-toolbar__clear {% if not params.search and not params.genres and not params.languages and not params.city and not params.theatre_id and not params.release and not params.rating and not params.timings and not params.date and not params.price_min and not params.price_max %}d-none{% endif %}" data-clear-filters>
           <i class="bi bi-x-circle me-1" aria-hidden="true"></i>Clear All
         </button>
       </div>
@@ -61,6 +61,7 @@
           </button>
           <div class="collapse d-lg-block" id="discoveryFilters">
             <aside class="discovery-filters" aria-label="Movie filters">
+              {% if params.category == 'movie' %}
               <div class="discovery-filter-group"
                    onchange="this.closest('form').requestSubmit()">
                 <h2 class="discovery-filter-group__title">Genres</h2>
@@ -88,6 +89,7 @@
                 <p class="text-muted small mb-0">No languages available.</p>
                 {% endfor %}
               </div>
+              {% endif %}
 
               <div class="discovery-filter-group"
                    onchange="this.closest('form').requestSubmit()">
@@ -112,6 +114,7 @@
                 </select>
               </div>
 
+              {% if params.category == 'movie' %}
               <div class="discovery-filter-group"
                    onchange="this.closest('form').requestSubmit()">
                 <h2 class="discovery-filter-group__title">Release Date</h2>
@@ -158,6 +161,27 @@
                   <span>Night</span>
                 </label>
               </div>
+              {% else %}
+              <div class="discovery-filter-group"
+                   onchange="this.closest('form').requestSubmit()">
+                <h2 class="discovery-filter-group__title">Event Date</h2>
+                <input type="date" name="date" class="form-control form-control-sm form-bms"
+                       value="{{ params.date|default:'' }}" aria-label="Event date">
+              </div>
+
+              <div class="discovery-filter-group"
+                   onchange="this.closest('form').requestSubmit()">
+                <h2 class="discovery-filter-group__title">Price Range</h2>
+                <div class="d-flex gap-2">
+                  <label class="visually-hidden" for="priceMin">Minimum price</label>
+                  <input type="number" id="priceMin" name="price_min" class="form-control form-control-sm form-bms"
+                         min="0" step="1" placeholder="Min ₹" value="{{ params.price_min|default:'' }}">
+                  <label class="visually-hidden" for="priceMax">Maximum price</label>
+                  <input type="number" id="priceMax" name="price_max" class="form-control form-control-sm form-bms"
+                         min="0" step="1" placeholder="Max ₹" value="{{ params.price_max|default:'' }}">
+                </div>
+              </div>
+              {% endif %}
 
               <button type="submit" class="btn btn-bms-primary w-100 mt-3">
                 <i class="bi bi-funnel me-1" aria-hidden="true"></i> Apply Filters

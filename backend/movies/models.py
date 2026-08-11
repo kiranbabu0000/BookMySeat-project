@@ -289,6 +289,10 @@ class EmailOutbox(models.Model):
     html_body = models.TextField(blank=True, default='')
     pdf_filename = models.CharField(max_length=255, blank=True, default='')
     pdf_attachment = models.BinaryField(null=True, blank=True, help_text="Generated PDF M-ticket (application/pdf)")
+    qr_image = models.BinaryField(
+        null=True, blank=True,
+        help_text="Ticket QR PNG (image/png) embedded inline as cid:qr_ticket",
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
     attempts = models.PositiveIntegerField(default=0, help_text="Delivery attempts so far")
     max_attempts = models.PositiveIntegerField(default=6, help_text="Attempts before the message is marked failed")

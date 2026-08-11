@@ -40,17 +40,37 @@ services:
         value: "True"
       - key: RAZORPAY_DEMO_MODE
         value: "False"
-      # Add these in the Render dashboard (Environment tab) before going live.
-      # Razorpay test keys:
-      #   RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET
-      #   (set RAZORPAY_DEMO_MODE=False when keys are present)
-      # SMTP email:
-      #   EMAIL_HOST=smtp.gmail.com / EMAIL_PORT=587 / EMAIL_USE_TLS=True
-      #   EMAIL_HOST_USER / EMAIL_HOST_PASSWORD / DEFAULT_FROM_EMAIL / SITE_URL
+      # SMTP email (set the secret values in the Render dashboard — Environment
+      # tab — on BOTH services; sync:false keeps them out of the repository).
+      # Required: EMAIL_HOST_USER / EMAIL_HOST_PASSWORD / DEFAULT_FROM_EMAIL /
+      # SITE_URL. Production refuses to boot without EMAIL_HOST rather than
+      # silently falling back to the console backend (which sends nothing).
+      - key: EMAIL_BACKEND
+        value: django.core.mail.backends.smtp.EmailBackend
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: SITE_URL
+        sync: false
 
   # Email worker: confirmation emails are enqueued to movies.EmailOutbox during
-  # booking and delivered by this cron job. Add the same DATABASE_URL + EMAIL_*
-  # env vars to it in the Render dashboard (or via the blueprint below).
+  # booking and delivered by this cron job (runs every minute).
+  #
+  # REQUIRED dashboard step (cannot be automated — these are sync:false secrets):
+  # set EMAIL_HOST, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, DEFAULT_FROM_EMAIL and
+  # SITE_URL in the Environment tab of THIS cron job (not just the web service).
+  # settings.py raises ImproperlyConfigured at boot when DEBUG=False and
+  # EMAIL_HOST is unset, so a missing secret makes this job fail every run and
+  # confirmation emails stay pending forever in the outbox.
   - type: cron
     name: bookmyseat-email-worker
     runtime: python
@@ -71,6 +91,19 @@ services:
         fromDatabase:
           name: bookmyseat-db
           property: connectionString
-      # Email settings must be added here too (same values as the web service):
-      #   EMAIL_HOST / EMAIL_PORT / EMAIL_USE_TLS
-      #   EMAIL_HOST_USER / EMAIL_HOST_PASSWORD / DEFAULT_FROM_EMAIL
+      - key: EMAIL_BACKEND
+        value: django.core.mail.backends.smtp.EmailBackend
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: SITE_URL
+        sync: false

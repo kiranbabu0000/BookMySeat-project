@@ -575,7 +575,7 @@
 
 .movie-rail__item {
   flex: 0 0 auto;
-  width: 160px;
+  width: 200px;
   scroll-snap-align: start;
 }
 
@@ -807,6 +807,21 @@
   letter-spacing: 0.02em;
   display: flex; align-items: center; gap: 0.3rem;
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  max-width: calc(100% - 4.5rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.movie-card__category > i {
+  flex: 0 0 auto;
+}
+
+.movie-card__category-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .movie-card__body {
@@ -828,9 +843,24 @@
 }
 
 .movie-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+  align-items: center;
   font-size: 0.8125rem;
   color: var(--text-muted);
   margin-bottom: var(--space-sm);
+}
+
+.movie-card__date,
+.movie-card__city {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .movie-card__desc {

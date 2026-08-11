@@ -12,7 +12,7 @@ Canonical data sources (kept in sync automatically with the admin panel):
     - movies.Booking        -> confirmed bookings (trending + recommendations)
     - admin_panel.Review    -> approved review counts (engagement signal)
 """
-from datetime import time, timedelta
+from datetime import date as date_type, time, timedelta
 
 from django.conf import settings
 from django.core.cache import cache
@@ -114,7 +114,7 @@ class DiscoveryParams:
 
     def __init__(self, search='', genres=None, languages=None, city='', theatre_id=None,
                  release='', rating=None, timings=None, sort='popularity', page=1, per_page=None,
-                 category='movie'):
+                 category='movie', date='', price_min=None, price_max=None):
         self.search = search
         self.genres = genres or []
         self.languages = languages or []
@@ -127,6 +127,9 @@ class DiscoveryParams:
         self.page = max(1, page)
         self.per_page = per_page or DEFAULT_PER_PAGE
         self.category = category if category in CATEGORY_CHOICES else 'movie'
+        self.date = date
+        self.price_min = price_min
+        self.price_max = price_max
 
     @classmethod
     def from_request(cls, request):
@@ -161,9 +164,30 @@ class DiscoveryParams:
         category = GET.get('category') if GET.get('category') in CATEGORY_CHOICES else 'movie'
         page = max(1, _safe_int(GET.get('page'), 1))
         per_page = min(MAX_PER_PAGE, max(MIN_PER_PAGE, _safe_int(GET.get('per_page'), DEFAULT_PER_PAGE)))
+
+        raw_date = (GET.get('date') or '').strip()
+        date_value = ''
+        if raw_date:
+            try:
+                parsed_date = date_type.fromisoformat(raw_date)
+            except ValueError:
+                parsed_date = None
+            if parsed_date is not None:
+                date_value = parsed_date.isoformat()
+
+        price_min = _safe_int(GET.get('price_min'), None)
+        price_max = _safe_int(GET.get('price_max'), None)
+        if price_min is not None and price_min < 0:
+            price_min = None
+        if price_max is not None and price_max < 0:
+            price_max = None
+        if price_min is not None and price_max is not None and price_min > price_max:
+            price_min = price_max = None
+
         return cls(search=search, genres=genres, languages=languages, city=city,
                    theatre_id=theatre_id, release=release, rating=rating, timings=timings,
-                   sort=sort, page=page, per_page=per_page, category=category)
+                   sort=sort, page=page, per_page=per_page, category=category,
+                   date=date_value, price_min=price_min, price_max=price_max)
 
     def to_query(self):
         """Non-empty params as a tuple list for urlencode (preserves multi-values)."""
@@ -184,6 +208,12 @@ class DiscoveryParams:
             parts.append(('release', self.release))
         if self.rating:
             parts.append(('rating', str(self.rating)))
+        if self.date:
+            parts.append(('date', self.date))
+        if self.price_min is not None:
+            parts.append(('price_min', str(self.price_min)))
+        if self.price_max is not None:
+            parts.append(('price_max', str(self.price_max)))
         for value in self.timings:
             parts.append(('timing', value))
         if self.sort != 'popularity':
@@ -235,7 +265,8 @@ def discover_movies(params):
     if params.search:
         qs = qs.filter(name__icontains=params.search)
 
-    joined = bool(params.genres or params.languages or params.city or params.theatre_id or params.timings)
+    joined = bool(params.genres or params.languages or params.city or params.theatre_id
+                  or params.timings or params.date)
 
     if params.genres:
         qs = qs.filter(genres__slug__in=params.genres)
@@ -258,6 +289,16 @@ def discover_movies(params):
             start, end = TIMING_OPTIONS[key]
             timing_q |= Q(shows__time__gte=start, shows__time__lt=end)
         qs = qs.filter(timing_q, shows__status='active')
+
+    if params.date:
+        qs = qs.filter(shows__date=params.date, shows__status='active')
+
+    if params.price_min is not None or params.price_max is not None:
+        qs = qs.annotate(_filter_price=_min_price_subquery())
+        if params.price_min is not None:
+            qs = qs.filter(_filter_price__gte=params.price_min)
+        if params.price_max is not None:
+            qs = qs.filter(_filter_price__lte=params.price_max)
 
     aggregating = params.sort == 'popularity'
     if params.sort in ('price_asc', 'price_desc'):
@@ -294,28 +335,40 @@ def discover_movies(params):
     return qs
 
 
-def available_cities():
-    """Distinct cities with active shows for visible movies (navbar + facets)."""
+def available_cities(category='movie'):
+    """Distinct cities with active shows for visible catalog items (navbar + facets).
+
+    Scoped to a catalog category (movie / laughing_therapy / live_concert) so the
+    city list never mixes event venues with cinema cities on a single tab.
+    """
+    if category not in CATEGORY_CHOICES:
+        category = 'movie'
     return list(
         Theatre.objects.filter(
-            is_active=True, shows__status='active', shows__movie_id__in=visible_movies()
+            is_active=True, shows__status='active',
+            shows__movie_id__in=visible_movies().filter(category=category),
         )
         .exclude(city__isnull=True).exclude(city='')
         .values_list('city', flat=True).distinct().order_by('city')
     )
 
 
-def facet_data():
-    """Filter options shown on the discovery page (only for visible movies)."""
-    # Kept as a subquery (not materialized) so a large catalog never builds
-    # a giant IN (...) list in Python.
-    visible_ids = visible_movies().values_list('pk', flat=True)
-    # The __in lookups JOIN the M2M / FK through tables, so every matching row
-    # repeats once per related movie/show. DISTINCT collapses them to one entry
-    # per genre/language/theatre.
+def facet_data(category='movie'):
+    """Filter options shown on the discovery page, scoped to the active category.
+
+    Kept as a subquery (not materialized) so a large catalog never builds
+    a giant IN (...) list in Python. The ``__in`` lookups JOIN the M2M / FK
+    through tables, so every matching row repeats once per related
+    movie/show; DISTINCT collapses them to one entry per genre/language/theatre.
+    Only genres/languages/theatres actually attached to that category are listed,
+    so event pseudo-genres never appear on the Movies tab (and vice versa).
+    """
+    if category not in CATEGORY_CHOICES:
+        category = 'movie'
+    visible_ids = visible_movies().filter(category=category).values_list('pk', flat=True)
     genres = list(Genre.objects.filter(movies__in=visible_ids).distinct().order_by('name'))
     languages = list(Language.objects.filter(movies__in=visible_ids).distinct().order_by('name'))
-    cities = available_cities()
+    cities = available_cities(category)
     theatres = list(
         Theatre.objects.filter(is_active=True, shows__status='active', shows__movie_id__in=visible_ids)
         .distinct()
@@ -355,6 +408,14 @@ def chip_data(params, facets):
                       'param': 'release', 'value': params.release})
     if params.rating:
         chips.append({'label': f'{params.rating}+ stars', 'param': 'rating', 'value': str(params.rating)})
+    if params.date:
+        chips.append({'label': params.date, 'param': 'date', 'value': params.date})
+    if params.price_min is not None:
+        chips.append({'label': 'From ₹{}'.format(params.price_min),
+                      'param': 'price_min', 'value': str(params.price_min)})
+    if params.price_max is not None:
+        chips.append({'label': 'Up to ₹{}'.format(params.price_max),
+                      'param': 'price_max', 'value': str(params.price_max)})
     for key in params.timings:
         chips.append({'label': TIMING_LABELS.get(key, key), 'param': 'timing', 'value': key})
     return chips

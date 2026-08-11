@@ -3,18 +3,24 @@
 Email delivery is asynchronous via the database-backed outbox
 (``movies.EmailOutbox``). ``send_booking_confirmation`` only performs a fast
 INSERT — the booking request never blocks on SMTP. Pending messages are sent by
-the ``process_email_outbox`` management command (cron job or ``--loop`` worker),
-which retries failed deliveries automatically with exponential backoff up to
-``EMAIL_OUTBOX_MAX_ATTEMPTS``.
+the ``process_email_outbox`` management command (cron job or ``--loop`` worker;
+``runserver`` auto-starts it locally), which retries failed deliveries
+automatically with exponential backoff up to ``EMAIL_OUTBOX_MAX_ATTEMPTS``.
 """
+import base64
+import logging
+from email.message import EmailMessage as EmailLibMessage
+
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.urls import reverse
 
 from admin_panel.models import Notification
-from movies.qr import build_qr_payload, ticket_qr_data_uri
+from movies.qr import build_qr_payload, ticket_qr_png_bytes
 from .models import EmailOutbox
+
+logger = logging.getLogger(__name__)
 
 
 def _fmt_currency(value):
@@ -89,6 +95,7 @@ def _email_content(user, show, bookings, total, payment_tx=None, reservation=Non
             pass
 
     qr_payload = build_qr_payload(booking_ref, show.movie.name, show.name, seats)
+    qr_bytes = ticket_qr_png_bytes(qr_payload) or b''
     context = {
         'user': user,
         'movie_name': show.movie.name,
@@ -107,7 +114,7 @@ def _email_content(user, show, bookings, total, payment_tx=None, reservation=Non
         'ticket_url': _absolute_url(reverse('download_ticket', args=[booking_ref])),
         'pdf_url': _absolute_url(reverse('ticket_pdf', args=[booking_ref])),
         'qr_payload': qr_payload,
-        'qr_data_uri': ticket_qr_data_uri(qr_payload),
+        'has_qr': bool(qr_bytes),
         'site_url': _absolute_url('/'),
     }
 
@@ -121,24 +128,44 @@ def _email_content(user, show, bookings, total, payment_tx=None, reservation=Non
         'html_body': html_body,
         'pdf_filename': 'ticket_{}.pdf'.format(booking_ref),
         'pdf_bytes': _build_pdf_bytes(context),
+        'qr_bytes': qr_bytes,
     }
 
 
 def _enqueue(user, show, bookings, total, payment_tx=None, reservation=None):
     """Persist one confirmation email to the outbox. Never blocks on SMTP."""
+    recipient = (user.email or '').strip()
+    if not recipient:
+        logger.warning(
+            'EMAIL RECIPIENT MISSING: user=%s has no email address; '
+            'confirmation email skipped for movie=%s. The booking is unaffected.',
+            getattr(user, 'username', '?'),
+            show.movie.name if show and show.movie else '?',
+        )
+        return None
     try:
         content = _email_content(user, show, bookings, total, payment_tx, reservation)
-        return EmailOutbox.objects.create(
-            recipient=user.email,
+        outbox = EmailOutbox.objects.create(
+            recipient=recipient,
             subject=content['subject'],
             plain_body=content['plain_body'],
             html_body=content['html_body'],
             pdf_filename=content['pdf_filename'],
             pdf_attachment=content['pdf_bytes'] or b'',
+            qr_image=content['qr_bytes'] or b'',
             max_attempts=getattr(settings, 'EMAIL_OUTBOX_MAX_ATTEMPTS', 6),
         )
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - the booking must never fail on email
+        logger.warning(
+            'EMAIL ENQUEUE FAILED for %s (movie=%s): %s',
+            recipient, show.movie.name if show and show.movie else '?', exc,
+        )
         return None
+    logger.info(
+        'EMAIL ENQUEUED outbox=%s recipient=%s movie=%s',
+        outbox.pk, recipient, show.movie.name if show and show.movie else '?',
+    )
+    return outbox
 
 
 def _create_in_app_notification(user, show, bookings):
@@ -187,6 +214,23 @@ def send_manual_booking_confirmation(user, bookings):
     _create_in_app_notification(user, show, bookings)
 
 
+def _inline_image_part(png_bytes, content_id):
+    """Build an inline MIME part the HTML body can reference as ``cid:<id>``.
+
+    Gmail and most webmail clients strip ``data:`` URIs from ``<img>`` tags, so
+    the ticket QR is attached as a real image part with a Content-ID instead.
+    The PNG payload is base64-encoded (standard for binary email parts) so every
+    backend, including the console backend, can serialize it as pure ASCII.
+    """
+    part = EmailLibMessage()
+    part['Content-Type'] = 'image/png'
+    part['Content-ID'] = '<{}>'.format(content_id)
+    part['Content-Disposition'] = 'inline; filename="{}.png"'.format(content_id)
+    part['Content-Transfer-Encoding'] = 'base64'
+    part.set_payload(base64.encodebytes(png_bytes).decode('ascii'))
+    return part
+
+
 def send_outbox_message(outbox):
     """Send a single outbox message via the configured email backend.
 
@@ -209,11 +253,20 @@ def send_outbox_message(outbox):
                 bytes(outbox.pdf_attachment),
                 'application/pdf',
             )
+        if outbox.qr_image:
+            message.attach(_inline_image_part(bytes(outbox.qr_image), 'qr_ticket'))
         message.send(fail_silently=False)
+        logger.info(
+            'EMAIL SENT outbox=%s recipient=%s', outbox.pk, outbox.recipient,
+        )
         return True
     except Exception as exc:  # noqa: BLE001 - failures are recorded for retry
         outbox.last_error = str(exc)[:500]
         outbox.save(update_fields=['last_error', 'updated_at'])
+        logger.warning(
+            'EMAIL SEND FAILED outbox=%s recipient=%s error=%s',
+            outbox.pk, outbox.recipient, exc,
+        )
         return False
 
 

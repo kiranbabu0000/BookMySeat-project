@@ -43,10 +43,12 @@ class Command(BaseCommand):
         loop = options['loop']
         limit = max(1, options['limit'])
         sleep = max(0.1, options['sleep'])
-        self.stdout.write(
-            self.style.SUCCESS('Email outbox worker started (loop={}, limit={}).'.format(
-                loop, limit))
-        )
+        verbosity = options.get('verbosity', 1)
+        if verbosity > 0:
+            self.stdout.write(
+                self.style.SUCCESS('Email outbox worker started (loop={}, limit={}).'.format(
+                    loop, limit))
+            )
         try:
             while True:
                 sent, failed = self._deliver_due(limit)
@@ -58,7 +60,8 @@ class Command(BaseCommand):
                     break
                 time.sleep(sleep)
         except KeyboardInterrupt:
-            self.stdout.write(self.style.WARNING('\nWorker stopped.'))
+            if verbosity > 0:
+                self.stdout.write(self.style.WARNING('\nWorker stopped.'))
 
     def _claim_due(self, limit, now):
         """Atomically claim up to ``limit`` due messages and return their pks.

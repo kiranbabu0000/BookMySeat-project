@@ -5,14 +5,15 @@ The public booking pipeline (seat map, reservations, bookings) is driven by
 These helpers bridge the two so that shows created in the admin panel become
 bookable on the customer side and status changes are reflected both ways.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from math import ceil
 
 from django.utils import timezone
 
-from movies.models import Seat, SeatCategory, Theater
+from movies.models import Movie, Seat, SeatCategory, ShowPrice, Theater
 
 from .layouts import build_layout_spec
+from .models import Show
 
 
 def _row_label(index):
@@ -133,3 +134,101 @@ def hide_theater_for_show(show, status='cancelled'):
     """Reflect a Show-level status change on the linked booking-flow Theater."""
     if show.theater_id is not None:
         Theater.objects.filter(pk=show.theater_id).update(status=status)
+
+
+SCHEDULE_HORIZON_DAYS = 4
+
+
+def _schedule_template(movie, window_last):
+    """Daily (theatre, screen, time, price) slate of the most recent scheduled
+    day at or before the rolling window — the pattern re-applied to new days."""
+    last = (
+        Show.objects.filter(movie=movie, status='active', date__lte=window_last)
+        .order_by('-date', '-time')
+        .first()
+    )
+    if last is None:
+        return []
+    return list(
+        Show.objects.filter(movie=movie, status='active', date=last.date)
+        .order_by('theatre_id', 'screen_id', 'time')
+        .values_list('theatre_id', 'screen_id', 'time', 'ticket_price')
+    )
+
+
+def _copy_pricing(source, target):
+    """Copy a booking-flow theater's per-category price catalog to another."""
+    rows = list(ShowPrice.objects.filter(theater=source).select_related('category'))
+    if not rows:
+        return
+    ShowPrice.objects.bulk_create(
+        [ShowPrice(theater=target, category=r.category, price=r.price) for r in rows],
+        ignore_conflicts=True,
+    )
+
+
+def ensure_movie_schedule(movie, horizon=SCHEDULE_HORIZON_DAYS):
+    """Roll a movie's shows forward so every one of the next ``horizon`` days
+    carries its usual daily slate. Idempotent — existing shows are kept.
+
+    Days are never deleted; as calendar days pass the date tabs roll forward
+    and this fills the freshly appearing days with the same theatres/screens/
+    times, each backed by a bookable ``movies.Theater`` row with seats.
+    """
+    if horizon < 1:
+        return 0
+    today = timezone.localdate()
+    window_last = today + timedelta(days=horizon - 1)
+    template = _schedule_template(movie, window_last)
+    if not template:
+        return 0
+    created = 0
+    for day in (today + timedelta(days=i) for i in range(horizon)):
+        existing = set(
+            Show.objects.filter(movie=movie, date=day, status='active')
+            .values_list('theatre_id', 'screen_id', 'time')
+        )
+        for theatre_id, screen_id, show_time, ticket_price in template:
+            if day == today:
+                start = timezone.make_aware(datetime.combine(day, show_time))
+                if start <= timezone.now():
+                    continue
+            if (theatre_id, screen_id, show_time) in existing:
+                continue
+            show, was_created = Show.objects.get_or_create(
+                movie=movie,
+                theatre_id=theatre_id,
+                screen_id=screen_id,
+                date=day,
+                time=show_time,
+                defaults={'ticket_price': ticket_price, 'status': 'active'},
+            )
+            if not was_created and show.status != 'active':
+                Show.objects.filter(pk=show.pk).update(status='active')
+            theater = sync_theater_from_show(show)
+            source = (
+                Theater.objects.filter(
+                    admin_show__movie=movie,
+                    admin_show__theatre_id=theatre_id,
+                    admin_show__screen_id=screen_id,
+                    prices__isnull=False,
+                )
+                .exclude(pk=theater.pk)
+                .order_by('id')
+                .first()
+            )
+            if source is not None:
+                _copy_pricing(source, theater)
+            created += 1
+    return created
+
+
+def ensure_rolling_schedule(horizon=SCHEDULE_HORIZON_DAYS):
+    """Roll the schedule forward for every movie that currently has a show."""
+    movie_ids = (
+        Show.objects.filter(status='active').values_list('movie_id', flat=True).distinct()
+    )
+    return sum(
+        ensure_movie_schedule(movie, horizon)
+        for movie in Movie.objects.filter(pk__in=movie_ids)
+    )

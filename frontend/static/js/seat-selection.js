@@ -369,7 +369,10 @@
 
   function showVehicle(n) {
     if (!els.ticketSheet) return;
-    var target = n <= 2 ? 'scooty' : n <= 4 ? 'auto' : n <= 8 ? 'car' : 'van';
+    var target = ({
+      1: 'one', 2: 'scooty', 3: 'auto', 4: 'four', 5: 'five',
+      6: 'six', 7: 'seven', 8: 'seven', 9: 'nine', 10: 'nine'
+    })[n] || 'scooty';
     els.ticketSheet.querySelectorAll('.ticket-vehicle__art').forEach(function (art) {
       var visible = art.classList.contains('ticket-vehicle__art--' + target);
       art.classList.toggle('is-visible', visible);

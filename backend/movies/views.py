@@ -33,6 +33,7 @@ from .services import (
 )
 from .notifications import send_booking_confirmation
 from admin_panel.models import Review, ReviewHelpful, Show, PaymentTransaction, AuditLog
+from admin_panel.services import ensure_movie_schedule, SCHEDULE_HORIZON_DAYS
 from .qr import build_qr_payload, ticket_qr_data_uri
 import json
 import secrets
@@ -87,7 +88,7 @@ def movie_list(request):
             'has_next': page.has_next(),
         })
 
-    facets = discovery.facet_data()
+    facets = discovery.facet_data(params.category)
     context.update({
         'genres': facets['genres'],
         'languages': facets['languages'],
@@ -240,7 +241,14 @@ def theater_list(request, movie_id):
         raise Http404("Movie not available")
 
     today = timezone.now().date()
-    show_dates = [today + timedelta(days=i) for i in range(4)]
+    show_dates = [today + timedelta(days=i) for i in range(SCHEDULE_HORIZON_DAYS)]
+    # Lazily roll the schedule forward so the rolling date tabs always have
+    # shows: if the last tab has no theaters yet, re-apply the movie's daily
+    # slate to the freshly appearing days. Skipped under the test runner.
+    if not getattr(settings, 'TESTING', False) and not Theater.objects.filter(
+        movie=movie, status='active', time__date=show_dates[-1]
+    ).exists():
+        ensure_movie_schedule(movie, SCHEDULE_HORIZON_DAYS)
     selected_date = today
     raw_date = request.GET.get('date')
     if raw_date:

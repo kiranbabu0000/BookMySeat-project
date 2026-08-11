@@ -21,7 +21,7 @@
   var state = { page: 1, preserveScroll: false };
   var searchTimer = null;
   var suggestTimer = null;
-  var filterFields = ['search', 'genre', 'language', 'city', 'theatre', 'release', 'rating', 'timing'];
+  var filterFields = ['search', 'genre', 'language', 'city', 'theatre', 'release', 'rating', 'timing', 'date', 'price_min', 'price_max'];
 
   function collectParams() {
     var fd = new FormData(form);
@@ -140,11 +140,15 @@
   }
 
   function resetFilters(keepSort) {
+    var categoryInput = form.querySelector('input[name="category"]');
+    var categoryValue = categoryInput ? categoryInput.value : '';
     form.querySelectorAll('input[name], select[name]').forEach(function (el) {
       if (keepSort && el.name === 'sort') return;
       if (el.type === 'checkbox') { el.checked = false; }
       else { el.value = ''; }
     });
+    // "Clear All" must stay on the current category tab (Movies / events).
+    if (categoryInput) { categoryInput.value = categoryValue; }
   }
 
   // Search-as-you-type + suggestions
