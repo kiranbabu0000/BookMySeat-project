@@ -134,6 +134,10 @@ DEFAULT_FROM_EMAIL = os.environ.get(
     'DEFAULT_FROM_EMAIL', 'BookMySeat <bookmyseat.official26@gmail.com>'
 )
 
+# Send via Brevo's HTTPS API (port 443) when set. Render's free tier blocks
+# SMTP ports (25/465/587), so production uses BREVO_API_KEY instead of SMTP.
+BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
+
 # Public site base URL used to build absolute links inside emails.
 SITE_URL = os.environ.get('SITE_URL', '')
 

@@ -8,8 +8,12 @@ the ``process_email_outbox`` management command (cron job or ``--loop`` worker;
 automatically with exponential backoff up to ``EMAIL_OUTBOX_MAX_ATTEMPTS``.
 """
 import base64
+import json
 import logging
+import re
 from email.message import EmailMessage as EmailLibMessage
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
@@ -113,6 +117,7 @@ def _email_content(user, show, bookings, total, payment_tx=None, reservation=Non
         'transaction_id': transaction_id,
         'ticket_url': _absolute_url(reverse('download_ticket', args=[booking_ref])),
         'pdf_url': _absolute_url(reverse('ticket_pdf', args=[booking_ref])),
+        'profile_url': _absolute_url(reverse('profile')),
         'qr_payload': qr_payload,
         'has_qr': bool(qr_bytes),
         'site_url': _absolute_url('/'),
@@ -231,31 +236,90 @@ def _inline_image_part(png_bytes, content_id):
     return part
 
 
+def _from_address():
+    """Split DEFAULT_FROM_EMAIL into (name, email) for the Brevo API."""
+    value = getattr(settings, 'DEFAULT_FROM_EMAIL', '') or ''
+    match = re.search(r'<([^>]+)>', value)
+    email = match.group(1) if match else value
+    name = re.sub(r'\s*<[^>]+>', '', value).strip() or 'BookMySeat'
+    return name, email
+
+
+def _send_via_brevo(outbox):
+    """Deliver a single outbox message through Brevo's HTTPS API (port 443).
+
+    Render's free tier blocks SMTP ports (25/465/587); HTTPS is unaffected, so
+    production sends email as a JSON POST instead of a raw SMTP connection.
+    Raises on failure so the worker records the error and schedules a retry.
+    """
+    name, email = _from_address()
+    payload = {
+        'sender': {'name': name, 'email': email},
+        'to': [{'email': outbox.recipient}],
+        'subject': outbox.subject,
+        'textContent': outbox.plain_body or '',
+        'htmlContent': outbox.html_body or outbox.plain_body or '',
+        'attachment': [],
+    }
+    if outbox.pdf_attachment:
+        payload['attachment'].append({
+            'content': base64.b64encode(bytes(outbox.pdf_attachment)).decode('ascii'),
+            'name': outbox.pdf_filename or 'ticket.pdf',
+        })
+    if outbox.qr_image:
+        payload['attachment'].append({
+            'content': base64.b64encode(bytes(outbox.qr_image)).decode('ascii'),
+            'name': 'qr_ticket.png',
+        })
+    if not payload['attachment']:
+        payload.pop('attachment')
+    request = Request(
+        'https://api.brevo.com/v3/smtp/email',
+        data=json.dumps(payload).encode('utf-8'),
+        headers={
+            'api-key': settings.BREVO_API_KEY,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        },
+        method='POST',
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            status = getattr(response, 'status', 200)
+    except (URLError, OSError) as exc:
+        raise RuntimeError('Brevo API request failed: {}'.format(exc))
+    if status not in (200, 201):
+        raise RuntimeError('Brevo API returned HTTP {}'.format(status))
+
+
 def send_outbox_message(outbox):
-    """Send a single outbox message via the configured email backend.
+    """Send a single outbox message (Brevo API when configured, SMTP otherwise).
 
     Returns True on success. Any exception is recorded on the row so the worker
     can schedule the next backoff attempt. No retries happen here — the worker
     (``process_email_outbox``) owns the retry/backoff lifecycle.
     """
     try:
-        message = EmailMultiAlternatives(
-            outbox.subject,
-            outbox.plain_body,
-            getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@bookmyseat.com'),
-            [outbox.recipient],
-        )
-        if outbox.html_body:
-            message.attach_alternative(outbox.html_body, 'text/html')
-        if outbox.pdf_attachment:
-            message.attach(
-                outbox.pdf_filename or 'ticket.pdf',
-                bytes(outbox.pdf_attachment),
-                'application/pdf',
+        if getattr(settings, 'BREVO_API_KEY', ''):
+            _send_via_brevo(outbox)
+        else:
+            message = EmailMultiAlternatives(
+                outbox.subject,
+                outbox.plain_body,
+                getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@bookmyseat.com'),
+                [outbox.recipient],
             )
-        if outbox.qr_image:
-            message.attach(_inline_image_part(bytes(outbox.qr_image), 'qr_ticket'))
-        message.send(fail_silently=False)
+            if outbox.html_body:
+                message.attach_alternative(outbox.html_body, 'text/html')
+            if outbox.pdf_attachment:
+                message.attach(
+                    outbox.pdf_filename or 'ticket.pdf',
+                    bytes(outbox.pdf_attachment),
+                    'application/pdf',
+                )
+            if outbox.qr_image:
+                message.attach(_inline_image_part(bytes(outbox.qr_image), 'qr_ticket'))
+            message.send(fail_silently=False)
         logger.info(
             'EMAIL SENT outbox=%s recipient=%s', outbox.pk, outbox.recipient,
         )
