@@ -1,0 +1,65 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verify your BookMySeat account</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f1f5f9; font-family:Arial, Helvetica, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9; padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#ffffff; padding:18px 32px; border-bottom:3px solid #e11d48;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td>
+                    {% if logo_data_uri %}
+                    <img src="{{ logo_data_uri }}" alt="BookMySeat" width="110" style="width:110px; display:block;">
+                    {% else %}
+                    <span style="font-size:22px; font-weight:bold; color:#e11d48;">BookMySeat</span>
+                    {% endif %}
+                  </td>
+                  <td align="right" style="font-size:12px; color:#94a3b8; text-transform:uppercase; letter-spacing:1px;">Account Verification</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px 32px;">
+              <h2 style="margin:0 0 6px; color:#111111; font-size:20px;">Verify your email</h2>
+              <p style="margin:0 0 24px; color:#64748b; font-size:14px; line-height:1.6;">
+                Hi {{ user.username }}, use the code below to activate your BookMySeat account.
+              </p>
+
+              <p style="margin:0 0 10px; color:#475569; font-size:13px; text-transform:uppercase; letter-spacing:0.5px; text-align:center;">Your one-time verification code</p>
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                <tr>
+                  <td style="background-color:#fff5f6; border:2px dashed #e11d48; border-radius:12px; padding:18px 28px;">
+                    <span style="font-family:Consolas, Menlo, 'Courier New', monospace; font-size:38px; font-weight:bold; letter-spacing:12px; color:#e11d48;">{{ otp }}</span>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0; color:#64748b; font-size:13px; line-height:1.7; text-align:center;">
+                This code expires in <strong style="color:#111111;">{{ otp_expiry_minutes }} minutes</strong>.<br>
+                If you did not create this account, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f8fafc; padding:14px 32px; font-size:11px; color:#94a3b8; text-align:center;">
+              <a href="{{ site_url }}" style="color:#e11d48; text-decoration:none;">BookMySeat</a> · Book movies, concerts &amp; events with ease
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -200,8 +200,12 @@ class BookingEnqueueTests(TestCase):
             'the enqueued message must carry an inline QR PNG',
         )
         self.assertIn(
+            'data:image/png;base64,', message.html_body,
+            'the HTML must embed the QR inline as a data URI, not an attachment',
+        )
+        self.assertNotIn(
             'cid:qr_ticket', message.html_body,
-            'the HTML must reference the QR by Content-ID, not a data URI',
+            'no leftover Content-ID reference once the QR is embedded',
         )
         self.assertEqual(mail.outbox, [], 'email must not be sent inside the booking request')
         self.assertTrue(

@@ -11,7 +11,7 @@ import base64
 import json
 import logging
 import re
-from email.message import EmailMessage as EmailLibMessage
+from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -29,6 +29,25 @@ logger = logging.getLogger(__name__)
 
 def _fmt_currency(value):
     return '\u20b9{:.2f}'.format(value)
+
+
+def _data_uri(png_bytes):
+    """Base64 data URI for embedding a PNG directly inside an email body."""
+    return 'data:image/png;base64,{}'.format(
+        base64.b64encode(bytes(png_bytes)).decode('ascii')
+    )
+
+
+def logo_data_uri():
+    """Base64 data URI of the (downscaled) BookMySeat logo, or '' if missing."""
+    for name in ('logo_email.png', 'logo.png'):
+        try:
+            path = Path(settings.PROJECT_ROOT) / 'frontend' / 'static' / 'img' / name
+            with open(path, 'rb') as handle:
+                return _data_uri(handle.read())
+        except Exception:
+            continue
+    return ''
 
 
 def _absolute_url(path):
@@ -120,6 +139,7 @@ def _email_content(user, show, bookings, total, payment_tx=None, reservation=Non
         'profile_url': _absolute_url(reverse('profile')),
         'qr_payload': qr_payload,
         'has_qr': bool(qr_bytes),
+        'logo_data_uri': logo_data_uri(),
         'site_url': _absolute_url('/'),
     }
 
@@ -127,6 +147,12 @@ def _email_content(user, show, bookings, total, payment_tx=None, reservation=Non
         html_body = render_to_string('emails/booking_confirmation.html', context)
     except Exception:
         html_body = ''
+    # Embed the QR directly in the HTML so it renders inline (never as a
+    # separate attachment) in every mail client.
+    if qr_bytes and html_body:
+        html_body = html_body.replace(
+            'cid:qr_ticket', _data_uri(qr_bytes)
+        )
     return {
         'subject': 'Booking confirmed — {}'.format(show.movie.name),
         'plain_body': '\n'.join(plain_lines),
@@ -219,23 +245,6 @@ def send_manual_booking_confirmation(user, bookings):
     _create_in_app_notification(user, show, bookings)
 
 
-def _inline_image_part(png_bytes, content_id):
-    """Build an inline MIME part the HTML body can reference as ``cid:<id>``.
-
-    Gmail and most webmail clients strip ``data:`` URIs from ``<img>`` tags, so
-    the ticket QR is attached as a real image part with a Content-ID instead.
-    The PNG payload is base64-encoded (standard for binary email parts) so every
-    backend, including the console backend, can serialize it as pure ASCII.
-    """
-    part = EmailLibMessage()
-    part['Content-Type'] = 'image/png'
-    part['Content-ID'] = '<{}>'.format(content_id)
-    part['Content-Disposition'] = 'inline; filename="{}.png"'.format(content_id)
-    part['Content-Transfer-Encoding'] = 'base64'
-    part.set_payload(base64.encodebytes(png_bytes).decode('ascii'))
-    return part
-
-
 def _from_address():
     """Split DEFAULT_FROM_EMAIL into (name, email) for the Brevo API."""
     value = getattr(settings, 'DEFAULT_FROM_EMAIL', '') or ''
@@ -265,11 +274,6 @@ def _send_via_brevo(outbox):
         payload['attachment'].append({
             'content': base64.b64encode(bytes(outbox.pdf_attachment)).decode('ascii'),
             'name': outbox.pdf_filename or 'ticket.pdf',
-        })
-    if outbox.qr_image:
-        payload['attachment'].append({
-            'content': base64.b64encode(bytes(outbox.qr_image)).decode('ascii'),
-            'name': 'qr_ticket.png',
         })
     if not payload['attachment']:
         payload.pop('attachment')
@@ -317,8 +321,6 @@ def send_outbox_message(outbox):
                     bytes(outbox.pdf_attachment),
                     'application/pdf',
                 )
-            if outbox.qr_image:
-                message.attach(_inline_image_part(bytes(outbox.qr_image), 'qr_ticket'))
             message.send(fail_silently=False)
         logger.info(
             'EMAIL SENT outbox=%s recipient=%s', outbox.pk, outbox.recipient,

@@ -10,8 +10,10 @@ import secrets
 
 from django.conf import settings
 from django.core.cache import cache
+from django.template.loader import render_to_string
 
 from movies.models import EmailOutbox
+from movies.notifications import logo_data_uri
 
 logger = logging.getLogger(__name__)
 
@@ -77,11 +79,18 @@ def send_otp_email(user, otp):
         '\u2014 BookMySeat',
     ]
     try:
+        html_body = render_to_string('emails/otp_email.html', {
+            'user': user,
+            'otp': otp,
+            'otp_expiry_minutes': OTP_TTL_SECONDS // 60,
+            'site_url': getattr(settings, 'SITE_URL', '').rstrip('/'),
+            'logo_data_uri': logo_data_uri(),
+        })
         EmailOutbox.objects.create(
             recipient=recipient,
             subject=subject,
             plain_body='\n'.join(lines),
-            html_body='',
+            html_body=html_body,
             max_attempts=getattr(settings, 'EMAIL_OUTBOX_MAX_ATTEMPTS', 6),
         )
         return True
