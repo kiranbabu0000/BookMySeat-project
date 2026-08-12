@@ -153,6 +153,59 @@ class RegisterOtpFlowTests(TestCase):
         response = self.client.get(reverse('register_otp'))
         self.assertRedirects(response, reverse('register'))
 
+    def _payload(self, username='carol', email='carol@example.com', password='Str0ngPass!'):
+        return {
+            'username': username,
+            'email': email,
+            'password1': password,
+            'password2': password,
+        }
+
+    def _assert_register_rejected(self, payload, message):
+        response = self.client.post(reverse('register'), payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, message)
+        self.assertEqual(
+            EmailOutbox.objects.count(), 0,
+            'no OTP email may be enqueued for an invalid registration',
+        )
+        self.assertNotIn('otp_user_id', self.client.session)
+        return response
+
+    def test_duplicate_name_rejected_before_otp(self):
+        User.objects.create_user(
+            username='Carol', email='carol.old@example.com', password='Str0ngPass!'
+        )
+        self._assert_register_rejected(
+            self._payload(username='carol', email='brand.new@example.com'),
+            'This name is already registered. Please use a different name.',
+        )
+        self.assertFalse(User.objects.filter(username='carol').exists())
+
+    def test_duplicate_email_rejected_before_otp(self):
+        User.objects.create_user(
+            username='alice', email='carol@example.com', password='Str0ngPass!'
+        )
+        self._assert_register_rejected(
+            self._payload(username='carol', email='CAROL@Example.com'),
+            'An account with this email is already registered.',
+        )
+        self.assertFalse(User.objects.filter(username='carol').exists())
+
+    def test_weak_password_rejected_before_otp(self):
+        self._assert_register_rejected(
+            self._payload(username='carol', email='carol@example.com', password='12345678'),
+            'password',
+        )
+        self.assertFalse(User.objects.filter(username='carol').exists())
+
+    def test_password_similar_to_name_rejected_before_otp(self):
+        self._assert_register_rejected(
+            self._payload(username='kiran', email='kiran@example.com', password='Kiran123'),
+            'password',
+        )
+        self.assertFalse(User.objects.filter(username='kiran').exists())
+
     def test_register_otp_page_masks_email(self):
         self._register_post()
         response = self.client.get(reverse('register_otp'))

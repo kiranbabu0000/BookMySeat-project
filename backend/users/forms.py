@@ -9,6 +9,22 @@ class UserRegisterForm(UserCreationForm):
         model = User
         fields = ['username', 'email', 'password1', 'password2']
 
+    def clean_username(self):
+        username = self.cleaned_data['username']
+        if User.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError(
+                'This name is already registered. Please use a different name.'
+            )
+        return username
+
+    def clean_email(self):
+        email = (self.cleaned_data.get('email') or '').strip().lower()
+        if User.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError(
+                'An account with this email is already registered.'
+            )
+        return email
+
 class UserUpdateForm(forms.ModelForm):
     first_name = forms.CharField(
         required=False,
@@ -35,6 +51,19 @@ class UserUpdateForm(forms.ModelForm):
         if not (first or last):
             raise forms.ValidationError('Please provide your first or last name.')
         return cleaned
+
+    def clean_email(self):
+        email = (self.cleaned_data.get('email') or '').strip().lower()
+        exists = (
+            User.objects.filter(email__iexact=email)
+            .exclude(pk=self.instance.pk)
+            .exists()
+        )
+        if exists:
+            raise forms.ValidationError(
+                'An account with this email is already registered.'
+            )
+        return email
 
 class ProfileUpdateForm(forms.ModelForm):
     class Meta:

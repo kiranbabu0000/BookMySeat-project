@@ -222,17 +222,87 @@ def send_booking_confirmation(user, reservation, bookings):
 
     Asynchronous: the message is written to the EmailOutbox and delivered by the
     ``process_email_outbox`` worker. Email failures never break the booking.
+    Returns the created EmailOutbox row, or None when nothing was enqueued.
     """
     payment_tx = (
         reservation.transactions.filter(status='captured')
         .order_by('-captured_at')
         .first()
     )
-    _enqueue(
+    outbox = _enqueue(
         user, reservation.show, bookings, reservation.total_amount,
         payment_tx=payment_tx, reservation=reservation,
     )
     _create_in_app_notification(user, reservation.show, bookings)
+    return outbox
+
+
+def send_payment_failed_email(tx):
+    """Enqueue a 'payment failed' email for a failed transaction. Never raises.
+
+    Sends only when a recipient exists; delivery is asynchronous via the
+    EmailOutbox. Returns the created outbox row, or None.
+    """
+    try:
+        reservation = tx.reservation
+        show = reservation.show
+        recipient = (tx.user.email or '').strip()
+        if not recipient:
+            return None
+        movie_name = show.movie.name if show and show.movie else 'your booking'
+        theatre_name = show.name if show else ''
+        reason = (tx.failure_reason or '').strip()
+        site_url = _absolute_url('/')
+        payment_url = _absolute_url(
+            reverse('payment_page', args=[reservation.token])
+        )
+        plain_lines = [
+            'Hi {},'.format(tx.user.username),
+            '',
+            'We could not complete your payment for {}.'.format(movie_name),
+            '',
+            'Movie        : {}'.format(movie_name),
+            'Cinema       : {}'.format(theatre_name),
+            'Showtime     : {}'.format(
+                show.time.strftime('%I:%M %p, %A, %d %b %Y') if show and show.time else '-'
+            ),
+            'Order ref    : {}'.format(tx.gateway_order_id or '-'),
+            'Amount       : {}'.format(_fmt_currency(tx.amount)),
+            'Payment status : FAILED',
+            'Reason       : {}'.format(reason if reason else 'The payment was not completed.'),
+            '',
+            'No seats were booked and no money was deducted for this attempt.',
+            'You can retry the payment from your booking page.',
+            '',
+            '\u2014 BookMySeat',
+        ]
+        html_body = render_to_string('emails/payment_failed.html', {
+            'user': tx.user,
+            'movie_name': movie_name,
+            'theatre_name': theatre_name,
+            'show_time': show.time if show else None,
+            'order_ref': tx.gateway_order_id or '-',
+            'amount_label': _fmt_currency(tx.amount),
+            'failure_reason': reason,
+            'payment_url': payment_url,
+            'site_url': site_url,
+            'logo_data_uri': logo_data_uri(),
+        })
+        outbox = EmailOutbox.objects.create(
+            recipient=recipient,
+            subject='Payment failed \u2014 {}'.format(movie_name),
+            plain_body='\n'.join(plain_lines),
+            html_body=html_body,
+            max_attempts=getattr(settings, 'EMAIL_OUTBOX_MAX_ATTEMPTS', 6),
+        )
+        logger.info(
+            'EMAIL ENQUEUED (payment failed) outbox=%s recipient=%s order=%s',
+            outbox.pk, recipient, tx.gateway_order_id,
+        )
+        return outbox
+    except Exception as exc:  # noqa: BLE001 - email must never break a failed payment
+        logger.warning('FAILURE EMAIL ENQUEUE FAILED order=%s: %s', tx.pk, exc)
+        return None
 
 
 def send_manual_booking_confirmation(user, bookings):

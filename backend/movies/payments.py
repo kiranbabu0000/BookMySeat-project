@@ -23,7 +23,7 @@ from django.utils import timezone
 from admin_panel.models import PaymentTransaction
 from . import gateway
 from .models import Reservation
-from .notifications import send_booking_confirmation
+from .notifications import send_booking_confirmation, send_payment_failed_email
 from .services import ReservationError, confirm_booking, reservation_pricing
 
 logger = logging.getLogger(__name__)
@@ -216,6 +216,45 @@ def _verify_capture(tx, gateway_payment_id, gateway_signature, demo):
     return payment
 
 
+def _claim_email_sent(tx_id, kind):
+    """Atomically claim the right to send one email of a given kind.
+
+    Only one caller (of the racing callback + webhook paths) wins the update
+    and returns True, so a transaction can never produce duplicate
+    confirmation or failure emails. Returns the number of rows updated.
+    """
+    field = 'confirmation_email_sent' if kind == 'confirmation' else 'failure_email_sent'
+    return PaymentTransaction.objects.filter(pk=tx_id, **{field: False}).update(
+        **{field: True, 'updated_at': timezone.now()}
+    )
+
+
+def _send_confirmation_once(tx, user, reservation, bookings):
+    """Send the confirmation email exactly once per captured transaction."""
+    if not _claim_email_sent(tx.pk, 'confirmation'):
+        return
+    try:
+        send_booking_confirmation(user, reservation, bookings)
+    except Exception as exc:  # noqa: BLE001 - email must never fail a verified booking
+        logger.warning(
+            'Confirmation email enqueue failed for reservation=%s: %s',
+            reservation.token, exc,
+        )
+
+
+def _send_failure_email_once(tx):
+    """Send the failed-payment email exactly once per failed transaction."""
+    if not _claim_email_sent(tx.pk, 'failure'):
+        return
+    try:
+        send_payment_failed_email(tx)
+    except Exception as exc:  # noqa: BLE001 - email must never fail a failed payment
+        logger.warning(
+            'Failure email enqueue failed for order=%s: %s',
+            tx.gateway_order_id, exc,
+        )
+
+
 def verify_and_confirm(user, token, *, gateway_order_id, gateway_payment_id,
                        gateway_signature, method='upi', demo=False):
     """Verify a checkout callback and confirm the booking. Idempotent.
@@ -303,7 +342,7 @@ def verify_and_confirm(user, token, *, gateway_order_id, gateway_payment_id,
         )
 
     try:
-        send_booking_confirmation(user, reservation, bookings)
+        _send_confirmation_once(locked, user, reservation, bookings)
     except Exception as exc:  # noqa: BLE001 - email must never fail a verified booking
         logger.warning(
             'Confirmation email enqueue failed for reservation=%s: %s',
@@ -348,6 +387,7 @@ def record_failure(user, token, *, gateway_order_id, gateway_payment_id,
     Reservation.objects.filter(pk=reservation.pk).update(
         payment_status='failed', updated_at=timezone.now()
     )
+    _send_failure_email_once(tx)
     return tx
 
 
@@ -499,7 +539,7 @@ def _webhook_payment_captured(payload):
         )
 
     try:
-        send_booking_confirmation(locked.user, reservation, bookings)
+        _send_confirmation_once(locked, locked.user, reservation, bookings)
     except Exception as exc:  # noqa: BLE001 - email must never fail a captured payment
         logger.warning(
             'Confirmation email enqueue failed for order=%s: %s',
@@ -524,6 +564,7 @@ def _webhook_payment_failed(payload):
     Reservation.objects.filter(pk=tx.reservation_id).update(
         payment_status='failed', updated_at=timezone.now()
     )
+    _send_failure_email_once(tx)
 
 
 def _webhook_refund(payload):

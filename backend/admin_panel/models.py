@@ -376,6 +376,10 @@ class PaymentTransaction(models.Model):
     captured_at = models.DateTimeField(null=True, blank=True)
     refund_id = models.CharField(max_length=255, blank=True, default='')
     refunded_at = models.DateTimeField(null=True, blank=True)
+    # Email idempotency: each transaction may send at most one confirmation and
+    # one failure email, even when the callback and the webhook race.
+    confirmation_email_sent = models.BooleanField(default=False)
+    failure_email_sent = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-created_at']

@@ -13,11 +13,12 @@ from django.core import mail
 from django.core.mail.backends.base import BaseEmailBackend
 from django.core.management import call_command
 from django.test import TestCase, TransactionTestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 
-from admin_panel.models import Notification
+from admin_panel.models import Notification, PaymentTransaction
 
-from .models import EmailOutbox
+from .models import EmailOutbox, Reservation
 from .notifications import backoff_delay
 from .testutils import DEMO_RAZORPAY
 from .tests import _make_categories_and_prices, _make_show
@@ -231,6 +232,72 @@ class BookingEnqueueTests(TestCase):
         self.assertTrue(
             Notification.objects.filter(user=no_email, title='Booking confirmed').exists(),
             'in-app notification must still be created without an email address',
+        )
+
+    def _fail(self, token, order_id, error='Simulated failure'):
+        return self.client.post(
+            reverse('payment_failed', args=[token]),
+            data={
+                'razorpay_order_id': order_id,
+                'razorpay_payment_id': 'pay_DEMO_failed',
+                'error': error,
+                'payment_method': 'upi',
+            },
+            content_type='application/json',
+        )
+
+    def test_failed_payment_enqueues_only_a_failure_email(self):
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        token = reservation['token']
+        checkout = self.client.post(
+            reverse('payment_start', args=[token]),
+            data={'coupon_code': ''},
+            content_type='application/json',
+        ).json()['checkout']
+        response = self._fail(token, checkout['order_id'], error='Card declined')
+        self.assertTrue(response.json()['ok'])
+
+        messages = EmailOutbox.objects.order_by('pk').all()
+        self.assertEqual(messages.count(), 1, 'exactly one email for a failed payment')
+        message = messages.first()
+        self.assertEqual(message.recipient, 'alice@example.com')
+        self.assertIn('Payment failed', message.subject)
+        self.assertNotIn('Booking confirmed', message.subject)
+        self.assertIn('Card declined', message.plain_body)
+        self.assertNotIn('Booking confirmed', message.html_body)
+        self.assertEqual(mail.outbox, [], 'email must not be sent inside the request')
+
+    def test_failed_payment_email_is_sent_only_once(self):
+        reservation = self._reserve(self.seats[0].id).json()['reservation']
+        token = reservation['token']
+        checkout = self.client.post(
+            reverse('payment_start', args=[token]),
+            data={'coupon_code': ''},
+            content_type='application/json',
+        ).json()['checkout']
+        self._fail(token, checkout['order_id'])
+        self._fail(token, checkout['order_id'])
+        self.assertEqual(
+            EmailOutbox.objects.filter(recipient='alice@example.com').count(), 1,
+            'a repeated failure for the same order must not enqueue a second email',
+        )
+
+    def test_booking_confirmation_email_is_sent_only_once_per_transaction(self):
+        reserved = self._reserve(self.seats[0].id).json()['reservation']
+        self._pay(reserved['token'])
+        tx = PaymentTransaction.objects.get(reservation__token=reserved['token'])
+        reservation = Reservation.objects.get(token=reserved['token'])
+
+        from movies.payments import _send_confirmation_once
+
+        tx.refresh_from_db()
+        _send_confirmation_once(
+            tx, self.user, reservation,
+            list(reservation.bookings.order_by('pk').select_related('seat')),
+        )
+        self.assertEqual(
+            EmailOutbox.objects.filter(recipient='alice@example.com').count(), 1,
+            'a second send attempt for the same transaction must be a no-op',
         )
 
 
