@@ -27,7 +27,7 @@
     <div class="city-selector dropdown" id="citySelector"
          data-movies-url="{% url 'movie_list' %}">
       <button class="city-selector__btn dropdown-toggle" type="button" id="citySelectorBtn"
-              data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">
+              aria-expanded="false" aria-haspopup="true">
         <i class="bi bi-geo-alt-fill city-selector__pin" aria-hidden="true"></i>
         <span class="city-selector__name" data-city-label>
           {% if current_city %}{{ current_city }}{% else %}Select City{% endif %}
@@ -48,8 +48,24 @@
       </div>
     </div>
 
+    <div class="mobile-category-trigger d-lg-none dropdown">
+      <button class="mobile-category-trigger__btn dropdown-toggle" type="button" data-bs-toggle="dropdown"
+              aria-expanded="false" aria-haspopup="true" aria-label="Select category">
+        <i class="bi bi-funnel-fill mobile-category-trigger__icon" aria-hidden="true"></i>
+        <span class="mobile-category-trigger__label">Category</span>
+        <i class="bi bi-chevron-down mobile-category-trigger__caret" aria-hidden="true"></i>
+      </button>
+      <div class="dropdown-menu mobile-category-menu" aria-label="Category selector">
+        <h6 class="dropdown-header city-selector__header">Select Category</h6>
+        <a class="dropdown-item" href="{% url 'movie_list' %}">All Movies</a>
+        <a class="dropdown-item" href="{% url 'movie_list' %}?category=movie">Movies</a>
+        <a class="dropdown-item" href="{% url 'movie_list' %}?category=live_concert">Live Concerts</a>
+        <a class="dropdown-item" href="{% url 'movie_list' %}?category=laughing_therapy">Laughing Therapy</a>
+      </div>
+    </div>
+
     <!-- Mobile right: login/register on the right only on mobile -->
-    <div class="d-flex align-items-center d-lg-none ms-auto">
+    <div class="d-flex align-items-center gap-1 d-lg-none ms-auto navbar-bms__mobile-actions">
       {% if user.is_authenticated %}
       <a class="nav-link" href="{% url 'wishlist' %}"><i class="bi bi-heart" aria-hidden="true"></i></a>
       <a class="nav-link" href="{% url 'my_notifications' %}"><i class="bi bi-bell" aria-hidden="true"></i></a>

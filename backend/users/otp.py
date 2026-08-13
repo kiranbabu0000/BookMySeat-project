@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 OTP_CODE_LENGTH = 6
 OTP_TTL_SECONDS = 600          # 10 minutes
 OTP_MAX_ATTEMPTS = 5
+OTP_MAX_RESENDS = 5            # absolute cap on code re-sends per OTP lifetime
 RESEND_COOLDOWN_SECONDS = 30
 
 
@@ -35,6 +36,10 @@ def _cooldown_key(user_id):
     return 'bms_otp_cooldown_{}'.format(user_id)
 
 
+def _resends_key(user_id):
+    return 'bms_otp_resends_{}'.format(user_id)
+
+
 def mask_email(email):
     """Mask an email for display, e.g. j***@example.com."""
     if not email or '@' not in email:
@@ -45,13 +50,24 @@ def mask_email(email):
 
 
 def generate_and_store(user):
-    """Generate a fresh code for the user and store it in the cache."""
+    """Generate a fresh code for the user and store it in the cache.
+
+    Attempts reset, but the resend counter is left untouched so a re-sent
+    code still counts toward the absolute resend cap.
+    """
     otp = '{:0{d}}'.format(
         secrets.randbelow(10 ** OTP_CODE_LENGTH), d=OTP_CODE_LENGTH
     )
     cache.set(_otp_key(user.id), otp, OTP_TTL_SECONDS)
     cache.set(_attempts_key(user.id), 0, OTP_TTL_SECONDS)
+    cache.delete(_cooldown_key(user.id))
     return otp
+
+
+def reset_resend_count(user_id):
+    """Clear the resend counter (and any cooldown) for a brand-new flow."""
+    cache.set(_resends_key(user_id), 0, OTP_TTL_SECONDS)
+    cache.delete(_cooldown_key(user_id))
 
 
 def send_otp_email(user, otp):
@@ -99,12 +115,21 @@ def send_otp_email(user, otp):
         return False
 
 
+def resend_count(user_id):
+    """Number of code re-sends issued during the current OTP lifetime."""
+    return cache.get(_resends_key(user_id), 0)
+
+
 def can_resend(user_id):
-    return cache.get(_cooldown_key(user_id)) is None
+    """True if the user may request another code (cooldown elapsed, cap not hit)."""
+    if cache.get(_cooldown_key(user_id)) is not None:
+        return False
+    return resend_count(user_id) < OTP_MAX_RESENDS
 
 
 def mark_resend(user_id):
     cache.set(_cooldown_key(user_id), 1, RESEND_COOLDOWN_SECONDS)
+    cache.set(_resends_key(user_id), resend_count(user_id) + 1, OTP_TTL_SECONDS)
 
 
 def remaining_attempts(user_id):

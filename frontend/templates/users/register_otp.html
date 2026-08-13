@@ -77,7 +77,10 @@
                        style="font-size: 1.5rem; letter-spacing: 0.6em; font-family: monospace;" required autofocus>
                 <div class="form-text text-muted mt-2">
                   <i class="bi bi-clock me-1"></i>Code expires in 10 minutes. You have
-                  <span class="text-warning fw-semibold">{{ remaining }}</span> attempt{{ remaining|pluralize }} left.
+                  <span class="text-warning fw-semibold">{{ remaining }}</span> attempt{{ remaining|pluralize }} left
+                  {% if resends_left is not None and resends_left >= 0 %}
+                    and {{ resends_left }} resend{{ resends_left|pluralize }} left.
+                  {% else %}.{% endif %}
                 </div>
               </div>
 

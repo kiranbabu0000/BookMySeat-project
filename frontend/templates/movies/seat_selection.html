@@ -326,32 +326,7 @@
         <i class="bi bi-x-lg"></i>
       </button>
     </div>
-    <div class="ticket-vehicle" id="ticketVehiclePreview" aria-hidden="true">
-      <img class="ticket-vehicle__art ticket-vehicle__art--photo ticket-vehicle__art--one is-visible"
-           src="{% static 'img/vehicle-1.png' %}"
-           alt="Single seater for 1 ticket">
-      <img class="ticket-vehicle__art ticket-vehicle__art--photo ticket-vehicle__art--scooty"
-           src="{% static 'img/vehicle-2-scooty.png' %}"
-           alt="Scooter for 2 tickets">
-      <img class="ticket-vehicle__art ticket-vehicle__art--auto"
-           src="{% static 'img/auto-rickshaw.png' %}"
-           alt="Auto-rickshaw for 3 tickets">
-      <img class="ticket-vehicle__art ticket-vehicle__art--photo ticket-vehicle__art--four"
-           src="{% static 'img/vehicle-4.png' %}"
-           alt="Four-seater for 4 tickets">
-      <img class="ticket-vehicle__art ticket-vehicle__art--photo ticket-vehicle__art--five"
-           src="{% static 'img/vehicle-5.png' %}"
-           alt="Five-seater for 5 tickets">
-      <img class="ticket-vehicle__art ticket-vehicle__art--photo ticket-vehicle__art--six"
-           src="{% static 'img/vehicle-6.png' %}"
-           alt="Six-seater for 6 tickets">
-      <img class="ticket-vehicle__art ticket-vehicle__art--photo ticket-vehicle__art--seven"
-           src="{% static 'img/vehicle-7-8.png' %}"
-           alt="Seven-seater for 7-8 tickets">
-      <img class="ticket-vehicle__art ticket-vehicle__art--photo ticket-vehicle__art--nine"
-           src="{% static 'img/vehicle-9-10.png' %}"
-           alt="Nine-seater for 9-10 tickets">
-    </div>
+    <div class="ticket-people" id="ticketPeoplePreview" aria-hidden="true"></div>
     <div class="ticket-count-grid" role="radiogroup" aria-label="Ticket count">
       {% for n in "1 2 3 4 5 6 7 8 9 10"|split_items:" " %}
       <button type="button" class="ticket-count-chip{% if forloop.first %} is-active{% endif %}"
@@ -370,49 +345,11 @@
 </div>
 {% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/ticket-sheet.css' %}?v=202608">
+{% endblock %}
+
 {% block extra_js %}
-<style>
-  .ticket-count-sheet { position: fixed; inset: 0; z-index: 1080; display: none; }
-  .ticket-count-sheet.is-open { display: block; }
-  .ticket-count-sheet__backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.55); animation: tcFade 0.2s ease; }
-  .ticket-count-sheet__panel {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: min(480px, calc(100% - 2rem));
-    background: var(--bg-card, #fff); color: var(--text-primary, #111);
-    border-radius: 18px; padding: 1.25rem;
-    box-shadow: 0 24px 60px rgba(0,0,0,0.35);
-    animation: tcPop 0.2s ease;
-  }
-  .ticket-count-sheet__handle { display: none; }
-  .ticket-count-sheet__handle { width: 44px; height: 5px; border-radius: 999px; background: var(--border-color, #ddd); margin: 0 auto 0.75rem; }
-  .ticket-count-sheet__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
-  .ticket-count-sheet__title { font-weight: 800; }
-  .ticket-count-sheet__subtitle { font-size: 0.85rem; }
-  .ticket-count-sheet__close { background: transparent; border: 0; color: var(--text-secondary, #666); font-size: 1.2rem; }
-  .ticket-count-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.6rem; margin-bottom: 1.25rem; }
-  .ticket-count-chip {
-    border: 1px solid var(--border-color, #ddd); border-radius: 12px; background: transparent;
-    color: var(--text-primary, #111); font-weight: 700; font-size: 1rem; padding: 0.65rem 0;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s ease;
-  }
-  .ticket-count-chip:hover { border-color: var(--accent-primary, #e11d48); }
-  .ticket-count-chip.is-active { background: var(--accent-primary, #e11d48); border-color: var(--accent-primary, #e11d48); color: #fff; }
-  .ticket-count-chip:disabled { opacity: 0.4; cursor: not-allowed; }
-  .ticket-vehicle { position: relative; height: 104px; margin-bottom: 0.5rem; display: flex; align-items: flex-end; justify-content: center; }
-  .ticket-vehicle__art { position: absolute; bottom: 0; width: 160px; max-width: 76%; display: none; }
-  .ticket-vehicle__art.is-visible { display: block; animation: tvFloat 2.6s ease-in-out infinite; }
-  .ticket-vehicle__art.is-entering { animation: tvIn 0.3s ease, tvFloat 2.6s ease-in-out infinite; }
-  .ticket-vehicle__art--photo, .ticket-vehicle__art--auto { width: auto; height: 100%; max-width: 100%; transform-origin: 50% 100%; }
-  .ticket-vehicle__art--photo { object-fit: contain; filter: drop-shadow(0 6px 12px rgba(15,23,42,0.22)); }
-  [data-theme="dark"] .ticket-vehicle__art--photo { filter: drop-shadow(0 0 8px rgba(226,232,240,0.35)) drop-shadow(0 8px 16px rgba(0,0,0,0.55)); }
-  .ticket-vehicle__art--auto.is-visible, .ticket-vehicle__art--photo.is-visible { animation: tvAutoIdle 2.8s ease-in-out infinite; }
-  .ticket-vehicle__art--auto.is-entering, .ticket-vehicle__art--photo.is-entering { animation: tvIn 0.3s ease, tvAutoIdle 2.8s ease-in-out infinite; }
-  @keyframes tvAutoIdle { 0%, 100% { transform: translateY(0) rotate(0deg); } 30% { transform: translateY(-2px) rotate(-1deg); } 60% { transform: translateY(-5px) rotate(0deg); } 85% { transform: translateY(-2px) rotate(1deg); } }
-  @keyframes tvFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-  @keyframes tvIn { from { opacity: 0; } to { opacity: 1; } }
-  @keyframes tcPop { from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
-  @keyframes tcFade { from { opacity: 0; } to { opacity: 1; } }
-</style>
+<script src="{% static 'js/ticket-people.js' %}?v=202608"></script>
 <script src="{% static 'js/seat-selection.js' %}?v=202608"></script>
 {% endblock %}

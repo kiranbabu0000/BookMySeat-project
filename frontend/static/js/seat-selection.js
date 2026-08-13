@@ -126,6 +126,7 @@
       ? Array.prototype.slice.call(els.ticketSheet.querySelectorAll('[data-ticket-count]'))
       : [];
     els.ticketSheetContinue = document.getElementById('ticketCountContinue');
+    els.ticketPeople = document.getElementById('ticketPeoplePreview');
     els.mobileBar = document.getElementById('mobileActionBar');
     els.mobileTotal = document.getElementById('mobileTotal');
     els.mobileSeatCount = document.getElementById('mobileSeatCount');
@@ -349,12 +350,14 @@
     selectChip(sheetSelection);
     els.ticketSheet.classList.add('is-open');
     els.ticketSheet.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('tc-locked');
   }
 
   function closeTicketSheet() {
     if (!els.ticketSheet) return;
     els.ticketSheet.classList.remove('is-open');
     els.ticketSheet.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('tc-locked');
   }
 
   function selectChip(n) {
@@ -364,26 +367,11 @@
       chip.classList.toggle('is-active', active);
       chip.setAttribute('aria-checked', active ? 'true' : 'false');
     });
-    showVehicle(n);
+    renderPeople(n);
   }
 
-  function showVehicle(n) {
-    if (!els.ticketSheet) return;
-    var target = ({
-      1: 'one', 2: 'scooty', 3: 'auto', 4: 'four', 5: 'five',
-      6: 'six', 7: 'seven', 8: 'seven', 9: 'nine', 10: 'nine'
-    })[n] || 'scooty';
-    els.ticketSheet.querySelectorAll('.ticket-vehicle__art').forEach(function (art) {
-      var visible = art.classList.contains('ticket-vehicle__art--' + target);
-      art.classList.toggle('is-visible', visible);
-      if (visible) {
-        art.classList.remove('is-entering');
-        void art.offsetWidth;
-        art.classList.add('is-entering');
-      } else {
-        art.classList.remove('is-entering');
-      }
-    });
+  function renderPeople(n) {
+    if (window.renderTicketPeople) window.renderTicketPeople(els.ticketPeople, n);
   }
 
   function updateTicketHint(selectedCount) {

@@ -16,11 +16,14 @@ from movies.discovery import trending_movies, recently_released, recommended_for
 from admin_panel.models import AdminProfile, PaymentTransaction, Notification, Genre
 from bookmyseat.ratelimit import is_locked_out, login_failed, login_succeeded
 from .otp import (
+    OTP_MAX_RESENDS,
     can_resend,
     generate_and_store,
     mark_resend,
     mask_email,
     remaining_attempts,
+    resend_count,
+    reset_resend_count,
     send_otp_email,
     verify as verify_otp,
 )
@@ -101,6 +104,7 @@ def register(request):
             user = form.save(commit=False)
             user.is_active = False
             user.save()
+            reset_resend_count(user.id)
             otp = generate_and_store(user)
             if send_otp_email(user, otp):
                 request.session['otp_user_id'] = user.id
@@ -172,6 +176,7 @@ def register_otp(request):
             return render(request, 'users/register_otp.html', {
                 'email': mask_email(user.email),
                 'remaining': remaining_attempts(user.id),
+                'resends_left': max(0, OTP_MAX_RESENDS - resend_count(user.id)),
             })
         user.is_active = True
         user.save(update_fields=['is_active'])
@@ -183,6 +188,7 @@ def register_otp(request):
     return render(request, 'users/register_otp.html', {
         'email': mask_email(user.email),
         'remaining': remaining_attempts(user.id),
+        'resends_left': max(0, OTP_MAX_RESENDS - resend_count(user.id)),
     })
 
 
@@ -193,7 +199,10 @@ def register_otp_resend(request):
     if user is None:
         return redirect('register')
     if not can_resend(user.id):
-        messages.error(request, 'Please wait a moment before requesting another code.')
+        if resend_count(user.id) >= OTP_MAX_RESENDS:
+            messages.error(request, 'You have reached the limit for resend requests. Please sign in again to get a fresh code.')
+        else:
+            messages.error(request, 'Please wait a moment before requesting another code.')
         return redirect('register_otp')
     otp = generate_and_store(user)
     mark_resend(user.id)

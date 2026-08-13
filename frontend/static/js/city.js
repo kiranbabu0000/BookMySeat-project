@@ -78,15 +78,26 @@
     });
   }
 
+  function setDropdownOpen(open) {
+    var btn = document.getElementById('citySelectorBtn');
+    var root = document.getElementById('citySelector');
+    var menu = root ? root.querySelector('.dropdown-menu') : null;
+    if (!btn || !menu) return;
+    btn.classList.toggle('show', open);
+    menu.classList.toggle('show', open);
+    menu.style.display = open ? 'block' : 'none';
+    btn.setAttribute('aria-expanded', String(open));
+  }
+
   function closeDropdown() {
+    setDropdownOpen(false);
+  }
+
+  function toggleDropdown() {
     var btn = document.getElementById('citySelectorBtn');
     if (!btn) return;
-    var dropdown = window.bootstrap && window.bootstrap.Dropdown.getOrCreateInstance
-      ? window.bootstrap.Dropdown.getOrCreateInstance(btn)
-      : null;
-    if (dropdown && dropdown.hide) dropdown.hide();
-    else btn.classList.remove('show');
-    btn.setAttribute('aria-expanded', 'false');
+    var isOpen = btn.getAttribute('aria-expanded') === 'true';
+    setDropdownOpen(!isOpen);
   }
 
   function selectCity(city, options) {
@@ -247,10 +258,21 @@
     var root = document.getElementById('citySelector');
     if (!root) return;
 
+    var btn = document.getElementById('citySelectorBtn');
+    if (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleDropdown();
+      });
+    }
+
     document.addEventListener('click', function (e) {
       var item = e.target.closest('.city-selector__item[data-city]');
       if (!item) return;
       e.preventDefault();
+      e.stopPropagation();
+      closeDropdown();
       try { localStorage.setItem(MANUAL_KEY, '1'); } catch (e2) {}
       selectCity(item.getAttribute('data-city'), { navigate: true });
     });
@@ -258,9 +280,8 @@
       var btn = document.getElementById('citySelectorBtn');
       var menu = root.querySelector('.dropdown-menu');
       if (!btn || !menu) return;
-      if (!root.contains(e.target)) return;
       if (btn.contains(e.target) || menu.contains(e.target)) return;
-      closeDropdown();
+      if (!root.contains(e.target)) closeDropdown();
     });
 
     init();

@@ -55,6 +55,28 @@ class OTPHelpersTests(TestCase):
         self.assertFalse(ok)
         self.assertIn('expired', msg)
 
+    def test_resend_capped_at_absolute_limit(self):
+        from .otp import (
+            OTP_MAX_RESENDS, _cooldown_key, can_resend, mark_resend, resend_count,
+        )
+        generate_and_store(self.user)
+        self.assertTrue(can_resend(self.user.id))
+        for _ in range(OTP_MAX_RESENDS):
+            self.assertTrue(can_resend(self.user.id))
+            mark_resend(self.user.id)
+            cache.delete(_cooldown_key(self.user.id))
+        self.assertEqual(resend_count(self.user.id), OTP_MAX_RESENDS)
+        self.assertFalse(can_resend(self.user.id))
+
+    def test_reset_resend_count_starts_new_flow_at_zero(self):
+        from .otp import can_resend, mark_resend, resend_count, reset_resend_count
+        for _ in range(3):
+            mark_resend(self.user.id)
+        self.assertEqual(resend_count(self.user.id), 3)
+        reset_resend_count(self.user.id)
+        self.assertEqual(resend_count(self.user.id), 0)
+        self.assertTrue(can_resend(self.user.id))
+
 
 @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
 class LoginFlowTests(TestCase):
@@ -274,6 +296,28 @@ class RegisterOtpFlowTests(TestCase):
     def test_resend_without_flow_redirects_to_register(self):
         response = self.client.post(reverse('register_otp_resend'))
         self.assertRedirects(response, reverse('register'))
+
+    def test_resend_blocked_once_limit_reached(self):
+        from .otp import OTP_MAX_RESENDS, _cooldown_key
+        self._register_post()
+        user = User.objects.get(username='carol')
+        base = EmailOutbox.objects.filter(recipient='carol@example.com').count()
+        for _ in range(OTP_MAX_RESENDS):
+            cache.delete(_cooldown_key(user.id))
+            response = self.client.post(reverse('register_otp_resend'))
+            self.assertRedirects(response, reverse('register_otp'))
+        self.assertEqual(
+            EmailOutbox.objects.filter(recipient='carol@example.com').count(),
+            base + OTP_MAX_RESENDS,
+        )
+        cache.delete(_cooldown_key(user.id))
+        response = self.client.post(reverse('register_otp_resend'), follow=True)
+        self.assertRedirects(response, reverse('register_otp'))
+        self.assertContains(response, 'limit for resend requests')
+        self.assertEqual(
+            EmailOutbox.objects.filter(recipient='carol@example.com').count(),
+            base + OTP_MAX_RESENDS,
+        )
 
 
 class LoggedOutGuardTests(TestCase):

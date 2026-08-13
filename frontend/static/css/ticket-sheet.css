@@ -1,0 +1,207 @@
+/* ============================================================
+   Ticket-count sheet + group-of-people visualization
+   Shared by theater_list.html and seat_selection.html
+   ============================================================ */
+
+body.tc-locked { overflow: hidden; }
+
+.ticket-count-sheet {
+  position: fixed; inset: 0; z-index: 1080; display: none;
+}
+.ticket-count-sheet.is-open { display: block; }
+.ticket-count-sheet__backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.55);
+  animation: tcFade 0.2s ease;
+}
+.ticket-count-sheet__panel {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(480px, calc(100% - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg-card, #fff); color: var(--text-primary, #111);
+  border-radius: 18px; padding: 1.25rem;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+  animation: tcPop 0.2s ease;
+}
+.ticket-count-sheet__handle {
+  display: none;
+  width: 44px; height: 5px; border-radius: 999px;
+  background: var(--border-color, #ddd);
+  margin: 0 auto 0.75rem;
+}
+.ticket-count-sheet__head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 1rem; margin-bottom: 1rem;
+}
+.ticket-count-sheet__title { font-weight: 800; }
+.ticket-count-sheet__subtitle { font-size: 0.85rem; }
+.ticket-count-sheet__close {
+  background: transparent; border: 0;
+  color: var(--text-secondary, #666); font-size: 1.2rem;
+  cursor: pointer; padding: 0.2rem 0.5rem;
+  border-radius: 8px; transition: background 0.15s ease;
+}
+.ticket-count-sheet__close:hover {
+  background: var(--bg-tertiary, #f1f5f9);
+}
+.ticket-count-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+.ticket-count-chip {
+  border: 1px solid var(--border-color, #ddd); border-radius: 12px;
+  background: transparent; color: var(--text-primary, #111);
+  font-weight: 700; font-size: 1rem; padding: 0.65rem 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+.ticket-count-chip:hover { border-color: var(--accent-primary, #e11d48); }
+.ticket-count-chip.is-active {
+  background: var(--accent-primary, #e11d48);
+  border-color: var(--accent-primary, #e11d48); color: #fff;
+}
+.ticket-count-chip:disabled { opacity: 0.4; cursor: not-allowed; }
+.ticket-count-sheet__footer .btn { padding: 0.75rem 1rem; }
+
+/* ============================================================
+   Full-size People Emoji Group Visualization
+   ============================================================ */
+
+.ticket-people {
+  position: relative;
+  min-height: 110px;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.75rem 0.5rem;
+  background: var(--bg-tertiary, #f8fafc);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.ticket-people.is-empty {
+  justify-content: center;
+}
+
+.ticket-people__empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.ticket-people__empty i {
+  font-size: 1.1rem;
+}
+
+.ticket-people__stage {
+  display: grid;
+  grid-template-columns: repeat(var(--per-row, 5), auto);
+  justify-content: center;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  padding: 0.25rem 0;
+}
+
+.ticket-person {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(2.2rem, 5vw, 2.75rem);
+  line-height: 1;
+  user-select: none;
+  animation: ticketPersonIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.15));
+  transition: transform 0.2s ease;
+}
+
+.ticket-person:hover {
+  transform: scale(1.18);
+}
+
+.ticket-people__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent-primary, #e11d48);
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 9999px;
+  padding: 0.25rem 0.85rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+/* Dynamic emoji scaling depending on group count */
+.ticket-people[data-count="1"] .ticket-person { font-size: 3.2rem; }
+.ticket-people[data-count="2"] .ticket-person { font-size: 2.8rem; }
+.ticket-people[data-count="3"] .ticket-person { font-size: 2.5rem; }
+.ticket-people[data-count="4"] .ticket-person,
+.ticket-people[data-count="5"] .ticket-person,
+.ticket-people[data-count="6"] .ticket-person { font-size: 2.2rem; }
+.ticket-people[data-count="7"] .ticket-person,
+.ticket-people[data-count="8"] .ticket-person,
+.ticket-people[data-count="9"] .ticket-person,
+.ticket-people[data-count="10"] .ticket-person { font-size: 1.95rem; }
+
+/* Entry animation */
+@keyframes ticketPersonIn {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tcPop {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes tcFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ============================================================
+   Mobile: Bottom Sheet Layout
+   ============================================================ */
+@media (max-width: 575.98px) {
+  .ticket-count-sheet__panel {
+    top: auto; bottom: 0; left: 0; right: 0;
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+    max-height: 88vh;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+    animation: tcSlideUp 0.3s ease;
+  }
+  .ticket-count-sheet__handle { display: block; }
+  .ticket-people { min-height: 100px; }
+  .ticket-count-grid { grid-template-columns: repeat(5, 1fr); gap: 0.5rem; }
+}
+
+@keyframes tcSlideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticket-person { animation: none; }
+  .ticket-count-sheet__panel { animation: none; }
+  .ticket-count-sheet__backdrop { animation: none; }
+}
