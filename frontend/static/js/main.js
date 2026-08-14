@@ -11,7 +11,98 @@
     setActiveNavLink();
     initFitText();
     initImageFallback();
+    initWishlistButtons();
   });
+
+  function bmsToast(options) {
+    var opts = options || {};
+    var type = opts.type === 'error' ? 'error' : (opts.type === 'info' ? 'info' : 'success');
+    var root = document.querySelector('.bms-toast-root');
+    if (!root) {
+      root = document.createElement('div');
+      root.className = 'bms-toast-root';
+      root.setAttribute('aria-live', 'polite');
+      root.setAttribute('aria-atomic', 'false');
+      document.body.appendChild(root);
+    }
+    var icons = { success: 'bi-check-circle-fill', error: 'bi-x-circle-fill', info: 'bi-info-circle-fill' };
+    var toast = document.createElement('div');
+    toast.className = 'bms-toast bms-toast--' + type;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    toast.innerHTML =
+      '<span class="bms-toast__icon"><i class="bi ' + (icons[type] || icons.success) + '" aria-hidden="true"></i></span>' +
+      '<div class="bms-toast__body">' +
+        (opts.title ? '<p class="bms-toast__title"></p>' : '') +
+        (opts.message ? '<p class="bms-toast__message"></p>' : '') +
+      '</div>' +
+      '<button type="button" class="bms-toast__close" aria-label="Dismiss notification"><i class="bi bi-x-lg" aria-hidden="true"></i></button>';
+    if (opts.title) toast.querySelector('.bms-toast__title').textContent = opts.title;
+    if (opts.message) toast.querySelector('.bms-toast__message').textContent = opts.message;
+    root.appendChild(toast);
+
+    var duration = typeof opts.duration === 'number' ? opts.duration : 4000;
+    var timer = null;
+    function dismiss() {
+      if (toast.classList.contains('is-leaving')) return;
+      toast.classList.add('is-leaving');
+      if (timer) clearTimeout(timer);
+      setTimeout(function () { toast.remove(); }, 260);
+    }
+    toast.querySelector('.bms-toast__close').addEventListener('click', dismiss);
+    timer = setTimeout(dismiss, duration);
+  }
+  window.bmsToast = bmsToast;
+
+  function initWishlistButtons() {
+    document.querySelectorAll('form[data-wishlist-form]').forEach(function (form) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var btn = document.getElementById('wishlist-toggle-btn');
+        var icon = document.getElementById('wishlist-icon');
+        var label = document.getElementById('wishlist-label');
+        if (!btn || btn.disabled) return;
+        btn.disabled = true;
+        var csrf = form.querySelector('[name="csrfmiddlewaretoken"]');
+        var body = csrf ? new URLSearchParams({ csrfmiddlewaretoken: csrf.value }) : new URLSearchParams();
+        fetch(form.action, {
+          method: 'POST',
+          headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+          credentials: 'same-origin',
+          body: body.toString()
+        }).then(function (res) {
+          if (!res.ok) throw new Error('Request failed');
+          return res.json();
+        }).then(function (data) {
+          var inWishlist = !!data.in_wishlist;
+          btn.classList.toggle('btn-bms-wishlist', inWishlist);
+          btn.setAttribute('aria-pressed', inWishlist ? 'true' : 'false');
+          if (icon) {
+            icon.classList.toggle('bi-heart-fill', inWishlist);
+            icon.classList.toggle('bi-heart', !inWishlist);
+            icon.classList.remove('heart-pulse');
+            void icon.offsetWidth;
+            icon.classList.add('heart-pulse');
+          }
+          if (label) label.textContent = inWishlist ? 'In Wishlist' : 'Add to Wishlist';
+          bmsToast({
+            type: 'success',
+            title: inWishlist ? 'Added to Wishlist' : 'Removed from Wishlist',
+            message: inWishlist ? 'Found something you love? Book it before it sells out.' : 'Saved for later — browse some more picks.',
+            duration: 3200
+          });
+        }).catch(function () {
+          bmsToast({
+            type: 'error',
+            title: 'Something went wrong',
+            message: 'Could not update your wishlist. Please try again.',
+            duration: 3200
+          });
+        }).finally(function () {
+          btn.disabled = false;
+        });
+      });
+    });
+  }
 
   function initNavbarScroll() {
     var navbar = document.querySelector('.navbar-bms');

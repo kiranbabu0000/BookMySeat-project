@@ -23,6 +23,11 @@
           <span class="movie-card__category-text">{{ movie.get_category_display }}</span>
         </span>
         {% endif %}
+        {% if movie.status == 'coming_soon' %}
+        <span class="movie-card__status movie-card__status--soon"><i class="bi bi-clock-history" aria-hidden="true"></i>Coming Soon</span>
+        {% elif movie.rating >= 8 %}
+        <span class="movie-card__status movie-card__status--top"><i class="bi bi-stars" aria-hidden="true"></i>Top Rated</span>
+        {% endif %}
       </div>
       <div class="movie-card__body">
         <h3 class="movie-card__title">{{ movie.name }}</h3>

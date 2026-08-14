@@ -100,11 +100,11 @@
                 </a>
                 {% endif %}
                 {% if user.is_authenticated %}
-                <form method="post" action="{% url 'toggle_wishlist' movie.id %}" style="display:inline;">
+                <form method="post" action="{% url 'toggle_wishlist' movie.id %}" id="wishlist-form" data-wishlist-form style="display:inline;">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-bms-outline btn-lg {% if in_wishlist %}btn-bms-wishlist{% endif %}" id="wishlist-toggle-btn">
-                    <i class="bi {% if in_wishlist %}bi-heart-fill{% else %}bi-heart{% endif %}"></i>
-                    {% if in_wishlist %}In Wishlist{% else %}Add to Wishlist{% endif %}
+                  <button type="submit" class="btn btn-bms-outline btn-lg {% if in_wishlist %}btn-bms-wishlist{% endif %}" id="wishlist-toggle-btn" aria-pressed="{% if in_wishlist %}true{% else %}false{% endif %}">
+                    <i class="bi {% if in_wishlist %}bi-heart-fill{% else %}bi-heart{% endif %}" id="wishlist-icon"></i>
+                    <span id="wishlist-label">{% if in_wishlist %}In Wishlist{% else %}Add to Wishlist{% endif %}</span>
                   </button>
                 </form>
                 {% endif %}

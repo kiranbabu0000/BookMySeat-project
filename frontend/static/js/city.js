@@ -416,18 +416,20 @@
     }
 
     // Wire up offcanvas trigger to open the same city selector (no duplicate selector markup).
+    // Close the drawer first so the dropdown appears in the top bar, then open it.
     var offTrigger = document.getElementById('offcanvasCityTrigger');
     if (offTrigger && btn) {
       offTrigger.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        // If Bootstrap is available, use its instance toggle by invoking a click on the button.
         try {
-          btn.click();
-        } catch (err) {
-          // Fallback to manual toggle
-          toggleDropdown();
-        }
+          var offcanvasEl = document.getElementById('offcanvasNav');
+          var off = offcanvasEl && bootstrap && bootstrap.Offcanvas && bootstrap.Offcanvas.getInstance(offcanvasEl);
+          if (off && typeof off.hide === 'function') off.hide();
+        } catch (err) { /* ignore */ }
+        setTimeout(function () {
+          try { btn.click(); } catch (err) { toggleDropdown(); }
+        }, 350);
       });
     }
 

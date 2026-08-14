@@ -1517,6 +1517,8 @@ a:hover { color: var(--accent-secondary-hover); }
 .screen-preview__cells {
   display: flex;
   gap: 3px;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .screen-preview__cell {

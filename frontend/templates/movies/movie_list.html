@@ -194,8 +194,19 @@
         <div class="col-lg-9">
           <div id="discoveryResults" class="position-relative">
             <div id="discoveryLoading" class="discovery-loading d-none" role="status" aria-live="polite">
-              <div class="spinner-border text-danger" role="status" aria-hidden="true"></div>
               <span class="visually-hidden">Loading movies&hellip;</span>
+              <div class="row g-3 w-100">
+                {% for i in "12345678"|make_list %}
+                <div class="col-6 col-sm-4 col-md-3 col-lg-3">
+                  <div class="movie-card-skeleton">
+                    <div class="movie-card-skeleton__poster skeleton"></div>
+                    <div class="movie-card-skeleton__line skeleton" style="width: 85%;"></div>
+                    <div class="movie-card-skeleton__line skeleton" style="width: 60%;"></div>
+                    <div class="movie-card-skeleton__btn skeleton"></div>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
             </div>
             {% include 'movies/_movie_results.html' %}
           </div>

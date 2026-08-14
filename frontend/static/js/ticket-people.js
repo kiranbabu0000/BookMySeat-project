@@ -1,7 +1,7 @@
 /**
- * BookMySeat — Dynamic "Group of People" emoji visualization for ticket count & seat selection.
+ * BookMySeat — Dynamic "Group of People" visualization for ticket count & seat selection.
  *
- * Renders full-size person emojis (👤) dynamically grouped into rows:
+ * Renders a clean SVG human icon for each ticket, grouped into rows:
  * - 1 seat: 👤
  * - 2 seats: 👤 👤
  * - 4 seats: 👤 👤 / 👤 👤 (2x2)

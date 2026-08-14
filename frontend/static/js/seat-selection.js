@@ -28,6 +28,9 @@
     expiresAt: null,
     timeOffsetMs: 0,
     mode: 'select',
+    /* Most recent selection snapshot so the user can undo a clear / re-pick. */
+    undoSelection: null,
+    undoTicketCount: null,
   };
   var timerHandle = null;
   var pollHandle = null;
@@ -133,6 +136,10 @@
     els.mobilePrimary = document.getElementById('mobilePrimaryBtn');
     els.mobilePrimaryLabel = document.getElementById('mobilePrimaryLabel');
     els.mobileRelease = document.getElementById('mobileReleaseBtn');
+    els.clearBtn = document.getElementById('clearSelectionBtn');
+    els.undoBtn = document.getElementById('undoClearBtn');
+    els.bestBtn = document.getElementById('bestSeatsBtn');
+    els.mobileBestBtn = document.getElementById('mobileBestBtn');
 
     show = parseJson(document.getElementById('showData').textContent, {});
     if (!show.ticket_price) show.ticket_price = '250';
@@ -194,6 +201,18 @@
       els.mobileRelease.addEventListener('click', function () {
         els.releaseBtn.click();
       });
+    }
+    if (els.clearBtn) {
+      els.clearBtn.addEventListener('click', onClearSeats);
+    }
+    if (els.undoBtn) {
+      els.undoBtn.addEventListener('click', onUndoSelection);
+    }
+    if (els.bestBtn) {
+      els.bestBtn.addEventListener('click', function () { onBestSeats(); });
+    }
+    if (els.mobileBestBtn) {
+      els.mobileBestBtn.addEventListener('click', function () { onBestSeats(); });
     }
 
     if (els.ticketCountBtn) {
@@ -331,6 +350,20 @@
     if (els.mobilePrimary) {
       els.mobilePrimary.disabled = ids.size === 0 || (state.mode !== 'hold' && ids.size !== state.ticketCount);
     }
+    // Toggle Clear Seats button state (disabled when nothing selected/held)
+    if (els.clearBtn) {
+      els.clearBtn.disabled = ids.size === 0;
+    }
+    // Undo available when a snapshot exists and we're not holding
+    if (els.undoBtn) {
+      els.undoBtn.classList.toggle('d-none', state.mode === 'hold' || !state.undoSelection || !state.undoSelection.length);
+    }
+    // Best Seats only meaningful in select mode (never while holding)
+    var bestEnabled = state.mode !== 'hold';
+    if (els.bestBtn) els.bestBtn.disabled = !bestEnabled;
+    if (els.mobileBestBtn) {
+      els.mobileBestBtn.classList.toggle('d-none', !bestEnabled);
+    }
   }
 
   function setTicketCount(n) {
@@ -338,6 +371,7 @@
     n = Math.min(Math.max(Number(n) || 1, 1), MAX_SEATS);
     if (n === state.ticketCount) return;
     state.ticketCount = n;
+    clearUndo();
     updateSummary();
   }
 
@@ -447,7 +481,7 @@
   }
 
   /* ---------- seat interaction ---------- */
-
+  
   function onSeatClick(e) {
     var el = e.target.closest('.seat');
     if (!el || !seatEls.has(el.dataset.seatId)) return;
@@ -457,37 +491,228 @@
       handleSelectSeatClick(el);
     }
   }
+  
+  /*
+   * Auto-select adjacent seats LEFT → RIGHT within the SAME row, starting from
+   * the clicked seat. Only genuinely adjacent, available and compatible seats
+   * are added:
+   *
+   *   - never crosses an aisle (a designed couple pair may straddle one)
+   *   - never jumps over a booked / reserved / already-selected / incompatible seat
+   *   - never changes rows and never exceeds `needed`
+   *
+   * Returns an array of seat IDs to select (always includes the start seat).
+   */
+  function autoSelectAdjacentSeats(startEl, needed) {
+    var selected = [];
+    if (!startEl || needed < 1) return selected;
+
+    var startId = String(startEl.dataset.seatId);
+    var startTier = startEl.getAttribute('data-tier') || '';
+    var startType = startEl.getAttribute('data-type') || '';
+
+    var rowSeats = startEl.closest('.seat-row__seats');
+    if (!rowSeats) return selected;
+    if (!isAutoSelectableSeat(startEl, startTier, startType)) return selected;
+
+    function canTake(id) {
+      return !state.booked.has(id) && !state.reserved.has(id) && !state.selected.has(id);
+    }
+
+    // The clicked seat always starts the sequence.
+    var count = 0;
+    var startExtra = partnerOf(startId);
+    if (startExtra) {
+      var startExtraEl = seatEls.get(startExtra);
+      if (!startExtraEl || !isAdjacentPartner(startEl, startExtraEl) || count + 2 > needed) {
+        return selected;
+      }
+      if (!canTake(startId) || !canTake(startExtra)) return selected;
+      selected.push(startId, String(startExtra));
+      count += 2;
+    } else {
+      if (!canTake(startId)) return selected;
+      selected.push(startId);
+      count += 1;
+    }
+
+    // Walk rightwards. Any unavailable / incompatible seat, or an aisle for a
+    // plain seat, is a hard stop — we never skip over anything. After a start
+    // couple pair resume from its right-hand member (either one may be clicked).
+    var node;
+    if (startExtra) {
+      var startPairRightEl = isNextSeatAfter(startEl, startExtraEl) ? startExtraEl : startEl;
+      node = startPairRightEl.nextElementSibling;
+    } else {
+      node = startEl.nextElementSibling;
+    }
+    var crossedAisle = false;
+
+    while (node && count < needed) {
+      if (node.classList && node.classList.contains('seat-grid__aisle')) {
+        crossedAisle = true;
+        node = node.nextElementSibling;
+        continue;
+      }
+      if (!node.classList || !node.classList.contains('seat')) {
+        node = node.nextElementSibling;
+        continue;
+      }
+
+      var id = String(node.dataset.seatId);
+      if (!isAutoSelectableSeat(node, startTier, startType)) break;
+      // Only a designed couple partner may sit across an aisle.
+      if (crossedAisle && partnerOf(selected[selected.length - 1]) !== id) break;
+
+      var extra = partnerOf(id);
+      if (extra) {
+        if (count + 2 > needed) break;
+        var extraEl = seatEls.get(extra);
+        if (!extraEl || !isAdjacentPartner(node, extraEl)) break;
+        if (!canTake(id) || !canTake(extra)) break;
+        selected.push(id, String(extra));
+        count += 2;
+        node = extraEl.nextElementSibling;
+      } else {
+        if (!canTake(id)) break;
+        selected.push(id);
+        count += 1;
+        node = node.nextElementSibling;
+      }
+      crossedAisle = false;
+    }
+
+    return selected;
+  }
+
+  /*
+   * A seat may be auto-selected only when it is currently rendered as an
+   * available button and is compatible with the starting seat:
+   *   - same tier / category
+   *   - wheelchair seats are special — they are never folded into a normal or
+   *     couple group (and vice-versa); couple seats pair via their partner
+   */
+  function isAutoSelectableSeat(el, tier, type) {
+    if (!el || !el.classList || !el.classList.contains('seat')) return false;
+    if (el.tagName !== 'BUTTON' || !el.classList.contains('seat--available')) return false;
+    var id = String(el.dataset.seatId);
+    if (state.booked.has(id) || state.reserved.has(id) || state.selected.has(id)) return false;
+    if (tier && (el.getAttribute('data-tier') || '') !== tier) return false;
+    var seatType = el.getAttribute('data-type') || '';
+    var startWheelchair = type === 'wheelchair';
+    if ((seatType === 'wheelchair') !== startWheelchair) return false;
+    return true;
+  }
+
+  /*
+   * True when `b` is the next seat element after `a` — an aisle may sit
+   * between them but no other seat.
+   */
+  function isNextSeatAfter(a, b) {
+    var node = a.nextElementSibling;
+    while (node) {
+      if (node.classList && node.classList.contains('seat')) return node === b;
+      if (node.classList && node.classList.contains('seat-grid__aisle')) {
+        node = node.nextElementSibling;
+        continue;
+      }
+      node = node.nextElementSibling;
+    }
+    return false;
+  }
+
+  /*
+   * True when `b` is the next seat element after `a` (or vice-versa) — an
+   * aisle may sit between them but no other seat — i.e. `a`/`b` form a
+   * designed couple pair. Checked in both directions so a pair can be started
+   * by clicking either of its two seats.
+   */
+  function isAdjacentPartner(a, b) {
+    return isNextSeatAfter(a, b) || isNextSeatAfter(b, a);
+  }
+
+  /*
+   * Replays the existing seat-pop animation on the newly auto-selected seats
+   * with a short stagger so the user sees the group expand left → right.
+   */
+  function animateAutoSeats(ids) {
+    ids.forEach(function (id, i) {
+      var el = seatEls.get(id);
+      if (!el) return;
+      (function (seatEl, delay) {
+        setTimeout(function () {
+          if (!state.selected.has(String(seatEl.dataset.seatId))) return;
+          seatEl.classList.remove('seat--selected');
+          void seatEl.offsetWidth; /* reflow so the CSS animation restarts */
+          seatEl.classList.add('seat--selected');
+        }, delay);
+      })(el, i * 90);
+    });
+  }
 
   function handleSelectSeatClick(el) {
     if (busy) return;
-    var id = el.dataset.seatId;
+    var id = String(el.dataset.seatId);
     if (state.booked.has(id) || state.reserved.has(id)) {
       flashMessage('This seat is no longer available.', 'danger');
       return;
     }
     if (state.selected.has(id)) {
+      // Deselection only — never re-trigger auto-selection here.
       removeSelection(id);
-    } else {
-      var extra = partnerOf(id);
-      var limit = state.ticketCount || MAX_SEATS;
-      var add = extra ? 2 : 1;
-      if (state.selected.size + add > limit) {
+      renderSeats();
+      updateSummary();
+      return;
+    }
+
+    var limit = state.ticketCount || MAX_SEATS;
+    var remaining = limit - state.selected.size;
+    if (remaining <= 0) {
+      flashMessage('You can only select up to ' + limit + ' seat' + (limit === 1 ? '' : 's') + ' for this booking.', 'danger');
+      return;
+    }
+
+    var extra = partnerOf(id);
+    if (extra && (state.booked.has(extra) || state.reserved.has(extra) || state.selected.has(extra))) {
+      flashMessage('This couple seat is only available with its partner.', 'danger');
+      return;
+    }
+
+    var toSelect;
+    if (extra) {
+      // Couple seats always come as a pair — this needs at least 2 free slots.
+      if (remaining < 2) {
         flashMessage('You can only select up to ' + limit + ' seat' + (limit === 1 ? '' : 's') + ' for this booking.', 'danger');
         return;
       }
-      if (extra && (state.booked.has(extra) || state.reserved.has(extra))) {
+      var pair = autoSelectAdjacentSeats(el, remaining);
+      if (!pair.length || pair.indexOf(id) === -1 || pair.indexOf(extra) === -1) {
+        // Partner is not genuinely adjacent — never select a broken pair.
         flashMessage('This couple seat is only available with its partner.', 'danger');
         return;
       }
-      state.selected.add(id);
-      if (extra && !state.selected.has(extra)) {
-        state.selected.add(extra);
-        var extraEl = seatEls.get(extra);
-        if (extraEl) extraEl.classList.add('seat--selected');
-      }
+      toSelect = pair;
+    } else if (remaining === 1) {
+      toSelect = [id];
+    } else {
+      toSelect = autoSelectAdjacentSeats(el, remaining);
+      if (!toSelect.length || toSelect.indexOf(id) === -1) toSelect = [id];
     }
+
+    var newly = [];
+    var added = 0;
+    for (var i = 0; i < toSelect.length && added < remaining; i++) {
+      var sid = String(toSelect[i]);
+      if (state.selected.has(sid)) continue;
+      if (state.booked.has(sid) || state.reserved.has(sid)) continue;
+      state.selected.add(sid);
+      newly.push(sid);
+      added += 1;
+    }
+
     renderSeats();
     updateSummary();
+    if (newly.length > 1) animateAutoSeats(newly);
   }
 
   function removeSelection(id) {
@@ -526,6 +751,133 @@
   }
 
   /* ---------- actions ---------- */
+
+  /*
+   * Undo the last clear / automatic selection: restores the seat snapshot
+   * that was active right before the change (and the ticket count).
+   */
+  function onUndoSelection() {
+    if (busy || state.mode === 'hold') return;
+    if (!state.undoSelection || !state.undoSelection.length) return;
+    var toRestore = state.undoSelection.slice();
+    state.undoSelection = null;
+    state.undoTicketCount = null;
+    // Clear current selection then restore the snapshot.
+    state.selected.clear();
+    var limit = state.ticketCount || MAX_SEATS;
+    for (var i = 0; i < toRestore.length; i++) {
+      var id = String(toRestore[i]);
+      if (state.selected.size >= limit) break;
+      if (state.booked.has(id) || state.reserved.has(id)) continue;
+      state.selected.add(id);
+    }
+    renderSeats();
+    updateSummary();
+    if (els.undoBtn) els.undoBtn.classList.add('d-none');
+    flashMessage('Previous selection restored.', 'success');
+  }
+
+  function rememberSelectionForUndo() {
+    if (state.mode === 'hold') return;
+    state.undoSelection = Array.from(state.selected);
+    state.undoTicketCount = state.ticketCount;
+    if (els.undoBtn) {
+      els.undoBtn.classList.toggle('d-none', state.undoSelection.length === 0);
+    }
+  }
+
+  function clearUndo() {
+    state.undoSelection = null;
+    state.undoTicketCount = null;
+    if (els.undoBtn) els.undoBtn.classList.add('d-none');
+  }
+
+  /* Best-seat auto pick: score every possible adjacent group in the layout and
+     select the highest-scoring one that fits the current ticket count. Seats
+     marked as best view score highest, then closeness to the row centre. */
+  function bestGroupScore(ids) {
+    if (!ids || !ids.length) return -Infinity;
+    var bestCount = 0;
+    var rowEl = null;
+    ids.forEach(function (id) {
+      var el = seatEls.get(String(id));
+      if (el) {
+        if (el.classList.contains('seat--best')) bestCount += 1;
+        rowEl = el.closest('.seat-row');
+      }
+    });
+    var centerPenalty = 0;
+    if (rowEl && ids.length) {
+      var all = Array.prototype.slice.call(rowEl.querySelectorAll('.seat'));
+      var positions = ids.map(function (id) {
+        return all.indexOf(seatEls.get(String(id)));
+      }).filter(function (p) { return p !== -1; });
+      if (positions.length) {
+        var centre = (all.length - 1) / 2;
+        var avg = positions.reduce(function (a, b) { return a + b; }, 0) / positions.length;
+        centerPenalty = Math.abs(avg - centre);
+      }
+    }
+    return bestCount * 1000 - centerPenalty * 2 - ids.length;
+  }
+
+  function onBestSeats() {
+    if (busy || state.mode === 'hold') return;
+    var limit = state.ticketCount || MAX_SEATS;
+    rememberSelectionForUndo();
+
+    var bestIds = null;
+    var bestScore = -Infinity;
+    seatEls.forEach(function (el, id) {
+      if (!el || el.tagName !== 'BUTTON' || !el.classList.contains('seat--available')) return;
+      if (state.booked.has(String(id)) || state.reserved.has(String(id)) || state.selected.has(String(id))) return;
+      var group = autoSelectAdjacentSeats(el, limit);
+      if (!group.length || group.indexOf(String(id)) === -1) return;
+      if (group.length !== limit) return;
+      var score = bestGroupScore(group);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIds = group;
+      }
+    });
+
+    if (!bestIds || !bestIds.length) {
+      flashMessage('No adjacent seats available for ' + limit + ' ticket' + (limit === 1 ? '' : 's') + '.', 'danger');
+      return;
+    }
+
+    state.selected.clear();
+    bestIds.forEach(function (id) {
+      if (state.selected.size >= limit) return;
+      state.selected.add(String(id));
+    });
+    renderSeats();
+    updateSummary();
+    animateAutoSeats(Array.from(state.selected));
+    flashMessage('Best available seats selected.', 'success');
+  }
+
+  /*
+   * Clear all of the user's currently selected seats (select mode) or release
+   * the whole held reservation (hold mode) so they can start a new selection.
+   * Uses the existing backend release flow — it never unbooks or releases
+   * another user's seats and keeps the user on the same screen.
+   */
+  function onClearSeats() {
+    if (busy) return;
+    if (state.mode === 'hold') {
+      if (!state.held || state.held.size === 0) return;
+      onRelease();
+      return;
+    }
+    if (!state.selected || state.selected.size === 0) return;
+    rememberSelectionForUndo();
+    state.selected.clear();
+    renderSeats();
+    updateSummary();
+    if (els.undoBtn) els.undoBtn.classList.remove('d-none');
+    flashMessage('All selected seats cleared. Pick a seat to start a new selection.', 'info');
+  }
 
   function onContinue() {
     if (busy) return;
@@ -620,6 +972,7 @@
     state.reservation = res;
     state.mode = 'hold';
     state.selected.clear();
+    clearUndo();
     state.held = new Set(res.seats.map(String));
     state.expiresAt = new Date(res.expires_at);
     if (Number(res.ticket_count) >= 1) state.ticketCount = Math.min(Number(res.ticket_count), MAX_SEATS);
@@ -648,6 +1001,7 @@
     state.mode = 'select';
     state.held.clear();
     state.selected.clear();
+    clearUndo();
     renderSeats();
     updateSummary();
     renderMode();

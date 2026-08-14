@@ -17,9 +17,9 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
 
   <!-- BookMySeat styles -->
-  <link rel="stylesheet" href="{% static 'css/tokens.css' %}?v=202608">
-  <link rel="stylesheet" href="{% static 'css/main.css' %}?v=202608">
-  <link rel="stylesheet" href="{% static 'css/components.css' %}?v=202609">
+  <link rel="stylesheet" href="{% static 'css/tokens.css' %}?v=202611">
+  <link rel="stylesheet" href="{% static 'css/main.css' %}?v=202611">
+  <link rel="stylesheet" href="{% static 'css/components.css' %}?v=202611">
   {% block extra_css %}{% endblock %}
 
   <!-- Theme — apply before paint -->
@@ -118,7 +118,7 @@
   <div id="bmsToastContainer" class="toast-container position-fixed top-0 end-0 p-3" style="z-index:2080"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="{% static 'js/main.js' %}"></script>
+  <script src="{% static 'js/main.js' %}?v=202611"></script>
   <script src="{% static 'js/city.js' %}?v=202608"></script>
   <script>
   function initSearch(input, suggestions, form) {
@@ -288,6 +288,16 @@
       document.getElementById('mobileSearchSuggestions'),
       document.getElementById('mobileSearchForm')
     );
+
+    // Auto-focus the mobile search field when the drawer opens (esp. via the
+    // navbar search icon) so users can start typing immediately.
+    var mobileInput = document.getElementById('mobileSearchInput');
+    var offcanvasEl = document.getElementById('offcanvasNav');
+    if (mobileInput && offcanvasEl && typeof bootstrap !== 'undefined') {
+      offcanvasEl.addEventListener('shown.bs.offcanvas', function () {
+        setTimeout(function () { try { mobileInput.focus(); } catch (e) {} }, 150);
+      });
+    }
   });
   </script>
   {% block extra_js %}{% endblock %}

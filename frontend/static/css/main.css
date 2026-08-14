@@ -256,6 +256,26 @@ a:hover { color: var(--accent-secondary-hover); }
   background: var(--accent-primary); border-radius: var(--radius-full);
 }
 
+.section-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+  margin-bottom: var(--space-xs);
+}
+.section-eyebrow::after {
+  content: '';
+  width: 28px;
+  height: 2px;
+  background: var(--accent-primary);
+  border-radius: var(--radius-full);
+  opacity: 0.55;
+}
+
 .section-link {
   font-size: 0.875rem; font-weight: 600; color: var(--accent-primary);
   display: inline-flex; align-items: center; gap: var(--space-xs);
@@ -371,6 +391,32 @@ a:focus-visible {
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+/* Micro-interactions */
+.btn-bms-primary,
+.btn-bms-outline,
+.btn-outline-bms,
+.btn-bms-ghost,
+.btn-bms-wishlist {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.btn-bms-primary:active,
+.btn-bms-outline:active,
+.btn-outline-bms:active,
+.btn-bms-ghost:active,
+.btn-bms-wishlist:active {
+  transform: scale(0.97);
+}
+
+.section-link {
+  transition: color 0.2s ease;
+}
+.section-link .bi {
+  transition: transform 0.2s ease;
+}
+.section-link:hover .bi {
+  transform: translateX(4px);
 }
 
 @keyframes fadeSlideUp {
