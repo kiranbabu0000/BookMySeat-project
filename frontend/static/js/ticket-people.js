@@ -14,7 +14,12 @@
   'use strict';
 
   function personEmojiMarkup(i) {
-    return '<span class="ticket-person" style="--i:' + i + '" aria-hidden="true" title="Person ' + (i + 1) + '">👤</span>';
+    // Use an inline SVG human icon for consistent appearance across platforms.
+    var svg = '' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-hidden="true" focusable="false">' +
+      '<path fill="currentColor" d="M12 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm-6 20a6 6 0 0 1 12 0h-12z"/>' +
+      '</svg>';
+    return '<span class="ticket-person" style="--i:' + i + '" aria-hidden="true" title="Person ' + (i + 1) + '">' + svg + '</span>';
   }
 
   window.renderTicketPeople = function (container, count) {

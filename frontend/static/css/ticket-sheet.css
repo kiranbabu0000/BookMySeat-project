@@ -125,6 +125,10 @@ body.tc-locked { overflow: hidden; }
   transition: transform 0.2s ease;
 }
 
+.ticket-person svg {
+  width: 1em; height: 1em; display: block; color: var(--text-primary);
+}
+
 .ticket-person:hover {
   transform: scale(1.18);
 }

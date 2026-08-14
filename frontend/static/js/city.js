@@ -213,6 +213,113 @@
     );
   }
 
+  /* Small toast helper that uses Bootstrap Toasts when available. */
+  function showToast(message, type, delay) {
+    type = type || 'danger';
+    delay = typeof delay === 'number' ? delay : 4000;
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>'"]/g, function (c) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c];
+      });
+    }
+    var container = document.getElementById('bmsToastContainer');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'bmsToastContainer';
+      container.className = 'toast-container position-fixed top-0 end-0 p-3';
+      container.style.zIndex = 2080;
+      document.body.appendChild(container);
+    }
+    var toastEl = document.createElement('div');
+    toastEl.className = 'toast align-items-center text-bg-' + type + ' border-0';
+    toastEl.setAttribute('role', 'alert');
+    toastEl.setAttribute('aria-live', 'assertive');
+    toastEl.setAttribute('aria-atomic', 'true');
+    toastEl.dataset.bsDelay = String(delay);
+    toastEl.innerHTML = '<div class="d-flex"><div class="toast-body">' + escapeHtml(message) + '</div>' +
+      '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close toast"></button></div>';
+    container.appendChild(toastEl);
+    try {
+      if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+        var bs = new bootstrap.Toast(toastEl);
+        toastEl.addEventListener('hidden.bs.toast', function () { toastEl.remove(); });
+        bs.show();
+      } else {
+        // Fallback: simple fade and remove
+        setTimeout(function () { toastEl.remove(); }, delay + 300);
+      }
+    } catch (err) {
+      setTimeout(function () { toastEl.remove(); }, delay + 300);
+    }
+  }
+
+  /* Toast helper with an action button. actionLabel: string, actionCallback: function */
+  function showActionToast(message, actionLabel, actionCallback, type, delay) {
+    type = type || 'danger';
+    delay = typeof delay === 'number' ? delay : 6000;
+    var container = document.getElementById('bmsToastContainer');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'bmsToastContainer';
+      container.className = 'toast-container position-fixed top-0 end-0 p-3';
+      container.style.zIndex = 2080;
+      document.body.appendChild(container);
+    }
+    var toastEl = document.createElement('div');
+    toastEl.className = 'toast align-items-center text-bg-' + type + ' border-0';
+    toastEl.setAttribute('role', 'alert');
+    toastEl.setAttribute('aria-live', 'assertive');
+    toastEl.setAttribute('aria-atomic', 'true');
+    toastEl.dataset.bsDelay = String(delay);
+
+    var inner = document.createElement('div');
+    inner.className = 'd-flex w-100 align-items-center';
+    var body = document.createElement('div');
+    body.className = 'toast-body';
+    body.textContent = message;
+    inner.appendChild(body);
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm btn-light ms-2';
+    btn.textContent = actionLabel || 'Action';
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      try { actionCallback && actionCallback(); } catch (err) {}
+      try {
+        if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+          var inst = bootstrap.Toast.getInstance(toastEl) || new bootstrap.Toast(toastEl);
+          inst.hide();
+        } else {
+          toastEl.remove();
+        }
+      } catch (err) { try { toastEl.remove(); } catch (e) {} }
+    });
+
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'btn-close btn-close-white ms-2 m-auto';
+    close.setAttribute('data-bs-dismiss', 'toast');
+    close.setAttribute('aria-label', 'Close toast');
+
+    inner.appendChild(btn);
+    inner.appendChild(close);
+    toastEl.appendChild(inner);
+    container.appendChild(toastEl);
+
+    try {
+      if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+        var bs = new bootstrap.Toast(toastEl);
+        toastEl.addEventListener('hidden.bs.toast', function () { toastEl.remove(); });
+        bs.show();
+      } else {
+        setTimeout(function () { toastEl.remove(); }, delay + 300);
+      }
+    } catch (err) {
+      setTimeout(function () { toastEl.remove(); }, delay + 300);
+    }
+  }
+
   function init() {
     var stored = getStoredCity();
     var cities = getCities();
@@ -259,29 +366,109 @@
     if (!root) return;
 
     var btn = document.getElementById('citySelectorBtn');
+    var usesBootstrap = (typeof bootstrap !== 'undefined' && btn && btn.getAttribute('data-bs-toggle') === 'dropdown');
+
     if (btn) {
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleDropdown();
-      });
+      if (usesBootstrap) {
+        // Let Bootstrap handle opening/closing and positioning. Only stop propagation
+        // so clicks inside the button don't accidentally close offcanvas or trigger other handlers.
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          // Bootstrap will toggle the dropdown; no manual toggle here.
+        });
+      } else {
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleDropdown();
+        });
+      }
     }
 
+    // City item selection: selected city should close the dropdown. Use Bootstrap API when present.
     document.addEventListener('click', function (e) {
       var item = e.target.closest('.city-selector__item[data-city]');
       if (!item) return;
       e.preventDefault();
       e.stopPropagation();
-      closeDropdown();
       try { localStorage.setItem(MANUAL_KEY, '1'); } catch (e2) {}
+      if (usesBootstrap && btn) {
+        // hide via Bootstrap dropdown instance if possible
+        try {
+          var dd = bootstrap.Dropdown.getOrCreateInstance(btn);
+          if (dd && typeof dd.hide === 'function') dd.hide();
+        } catch (err) { /* ignore */ }
+      } else {
+        closeDropdown();
+      }
       selectCity(item.getAttribute('data-city'), { navigate: true });
     });
+
+    // If not relying on Bootstrap, implement outside-click-to-close behavior here.
+    if (!usesBootstrap) {
+      document.addEventListener('click', function (e) {
+        var btn = document.getElementById('citySelectorBtn');
+        var menu = root.querySelector('.dropdown-menu');
+        if (!btn || !menu) return;
+        if (btn.contains(e.target) || menu.contains(e.target)) return;
+        if (!root.contains(e.target)) closeDropdown();
+      });
+    }
+
+    // Wire up offcanvas trigger to open the same city selector (no duplicate selector markup).
+    var offTrigger = document.getElementById('offcanvasCityTrigger');
+    if (offTrigger && btn) {
+      offTrigger.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        // If Bootstrap is available, use its instance toggle by invoking a click on the button.
+        try {
+          btn.click();
+        } catch (err) {
+          // Fallback to manual toggle
+          toggleDropdown();
+        }
+      });
+    }
+
+    // Use-my-location button inside dropdown
     document.addEventListener('click', function (e) {
-      var btn = document.getElementById('citySelectorBtn');
-      var menu = root.querySelector('.dropdown-menu');
-      if (!btn || !menu) return;
-      if (btn.contains(e.target) || menu.contains(e.target)) return;
-      if (!root.contains(e.target)) closeDropdown();
+      var locBtn = e.target.closest('.city-selector__use-location');
+      if (!locBtn) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      var spinner = locBtn.querySelector('.city-selector__use-location-spinner');
+      var label = locBtn.querySelector('.city-selector__use-location-label');
+      if (spinner) spinner.classList.remove('d-none');
+      if (label) label.dataset.orig = label.textContent;
+      if (label) label.textContent = 'Detecting...';
+
+      detectViaGeolocation(function (city) {
+        if (spinner) spinner.classList.add('d-none');
+        if (label && label.dataset.orig) label.textContent = label.dataset.orig;
+        if (!city) {
+          // Optionally notify user — here we just close dropdown and return
+          try {
+            showActionToast('Could not detect your location. Please select city manually.', 'Select manually', function () {
+              try { btn && btn.click(); } catch (err) { try { toggleDropdown(); } catch (e2) {} }
+            }, 'warning', 7000);
+          } catch (e) {}
+          return;
+        }
+        // If bootstrap dropdown present, hide it
+        if (usesBootstrap && btn) {
+          try {
+            var dd = bootstrap.Dropdown.getOrCreateInstance(btn);
+            if (dd && typeof dd.hide === 'function') dd.hide();
+          } catch (err) {}
+        } else {
+          closeDropdown();
+        }
+        // Mark as manual since user explicitly used location control
+        try { localStorage.setItem(MANUAL_KEY, '1'); } catch (e2) {}
+        selectCity(city, { navigate: true });
+      });
     });
 
     init();

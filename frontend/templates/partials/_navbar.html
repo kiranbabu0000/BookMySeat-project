@@ -27,7 +27,7 @@
     <div class="city-selector dropdown" id="citySelector"
          data-movies-url="{% url 'movie_list' %}">
       <button class="city-selector__btn dropdown-toggle" type="button" id="citySelectorBtn"
-              aria-expanded="false" aria-haspopup="true">
+              data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">
         <i class="bi bi-geo-alt-fill city-selector__pin" aria-hidden="true"></i>
         <span class="city-selector__name" data-city-label>
           {% if current_city %}{{ current_city }}{% else %}Select City{% endif %}
@@ -35,6 +35,12 @@
         <i class="bi bi-chevron-down city-selector__caret" aria-hidden="true"></i>
       </button>
       <div class="dropdown-menu city-selector__menu" aria-labelledby="citySelectorBtn">
+        <button type="button" class="dropdown-item city-selector__use-location d-flex align-items-center" data-action="use-location">
+          <i class="bi bi-geo-alt-fill me-2" aria-hidden="true"></i>
+          <span class="city-selector__use-location-label">Use my current location</span>
+          <span class="ms-auto city-selector__use-location-spinner d-none"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span></span>
+        </button>
+        <div class="dropdown-divider"></div>
         <h6 class="dropdown-header city-selector__header">Select City</h6>
         {% for city in all_cities %}
         <button type="button" class="dropdown-item city-selector__item{% if city == current_city %} is-active{% endif %}"
@@ -58,7 +64,6 @@
       <div class="dropdown-menu mobile-category-menu" aria-label="Category selector">
         <h6 class="dropdown-header city-selector__header">Select Category</h6>
         <a class="dropdown-item" href="{% url 'movie_list' %}">All Movies</a>
-        <a class="dropdown-item" href="{% url 'movie_list' %}?category=movie">Movies</a>
         <a class="dropdown-item" href="{% url 'movie_list' %}?category=live_concert">Live Concerts</a>
         <a class="dropdown-item" href="{% url 'movie_list' %}?category=laughing_therapy">Laughing Therapy</a>
       </div>
