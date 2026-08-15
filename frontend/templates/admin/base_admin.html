@@ -15,7 +15,7 @@
   <link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'css/tokens.css' %}?v=202610">
   <link rel="stylesheet" href="{% static 'css/main.css' %}?v=202607">
-  <link rel="stylesheet" href="{% static 'admin/css/admin.css' %}?v=202611">
+  <link rel="stylesheet" href="{% static 'admin/css/admin.css' %}?v=202612">
   <script src="{% static 'js/theme.js' %}?v=202608"></script>
   <style>
     .skip-link { position: absolute; top: -100px; left: 0; z-index: 9999; padding: 0.5rem 1rem; background: var(--accent-primary); color: #fff; text-decoration: none; font-weight: 600; }
@@ -96,7 +96,64 @@
 
     <div class="admin-main" id="adminMain">
       {% if user.is_authenticated and user.is_staff %}
-        {% include 'admin/partials/_topbar.html' %}
+      <header class="admin-topbar">
+        <div class="topbar-left">
+          <button class="sidebar-toggle" type="button" aria-label="Toggle sidebar" aria-expanded="false" aria-controls="adminSidebar">
+            <i class="bi bi-list"></i>
+          </button>
+          <nav aria-label="breadcrumb" class="topbar-breadcrumb">
+            <ol class="breadcrumb">
+              <li class="breadcrumb-item"><a href="{% url 'admin_dashboard' %}"><i class="bi bi-house-fill me-1"></i>Home</a></li>
+              <li class="breadcrumb-item active" aria-current="page">{% block page_title %}Dashboard{% endblock %}</li>
+            </ol>
+          </nav>
+        </div>
+
+        <div class="topbar-search-area">
+          <div class="admin-search" id="adminSearch">
+            <div class="admin-search__wrap">
+              <i class="bi bi-search admin-search__icon"></i>
+              <input type="search" class="admin-search__input" id="adminSearchInput" placeholder="Search movies, users, bookings..." autocomplete="off" spellcheck="false" aria-label="Global search" aria-haspopup="listbox">
+              <span class="admin-search__kbd" aria-hidden="true">/</span>
+            </div>
+            <div class="admin-search__results" id="adminSearchResults" role="listbox" aria-label="Search results"></div>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <a href="{% url 'admin_notification_list' %}" class="notification-btn notification-badge" title="Notifications" aria-label="Notifications">
+            <i class="bi bi-bell-fill"></i>
+            {% if notifications > 0 %}
+            <span class="badge rounded-pill bg-danger">{{ notifications }}</span>
+            {% endif %}
+          </a>
+          <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme" aria-pressed="false">
+            <i class="bi bi-sun-fill" id="themeIcon"></i>
+          </button>
+          <div class="dropdown user-avatar-dropdown">
+            <button class="btn btn-sm dropdown-toggle d-flex align-items-center gap-2" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu">
+              <div class="user-avatar">
+                {{ user.username|first|upper }}
+              </div>
+              <span class="d-none d-md-inline fw-medium">{{ user.username }}</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+              <li><h6 class="dropdown-header fw-semibold">{{ user.get_full_name|default:user.username }}</h6></li>
+              <li><a class="dropdown-item" href="{% url 'admin_profile' %}"><i class="bi bi-person-circle me-2"></i>Profile</a></li>
+              <li><a class="dropdown-item" href="{% url 'admin_settings' %}"><i class="bi bi-gear me-2"></i>Settings</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <form method="post" action="{% url 'admin_logout' %}">
+                  {% csrf_token %}
+                  <button type="submit" class="dropdown-item text-danger" style="background:none; border:none; width:100%; cursor:pointer; display:flex; align-items:center; gap:0.5rem;">
+                    <i class="bi bi-box-arrow-left me-2"></i>Logout
+                  </button>
+                </form>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </header>
       {% endif %}
 
       <div class="admin-content" id="adminMainContent">
@@ -128,7 +185,7 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
-  <script src="{% static 'admin/js/admin.js' %}"></script>
+  <script src="{% static 'admin/js/admin.js' %}?v=202612"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       var toastElList = [].slice.call(document.querySelectorAll('.toast'));

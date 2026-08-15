@@ -35,6 +35,7 @@
     <div class="card-bms mt-3">
       <div class="card-bms-header">Seat Categories</div>
       <div class="card-bms-body">
+        <div class="table-responsive">
         <table class="table table-bms mb-3 align-middle">
           <thead><tr><th>Name</th><th>Rows</th><th class="text-end">Price Slots</th></tr></thead>
           <tbody>
@@ -49,6 +50,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
         <form method="post" action="{% url 'admin_pricing_config' %}">
           {% csrf_token %}
           <input type="hidden" name="action" value="add_category">

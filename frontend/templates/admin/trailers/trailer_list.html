@@ -25,6 +25,7 @@
     <a href="{% url 'admin_trailer_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Add Trailer</a>
   </div>
   <div class="card-bms-body p-0">
+    <div class="table-responsive">
     <table class="table table-bms mb-0">
       <thead><tr><th>{% if request.GET.sort == 'id' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='id' order='desc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'id' %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID</a>{% endif %}</th><th>{% if request.GET.sort == 'movie__name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='movie__name' order='desc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'movie__name' %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie</a>{% endif %}</th><th>{% if request.GET.sort == 'title' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='title' order='desc' %}" class="text-decoration-none text-reset">Title <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'title' %}<a href="?{% url_replace sort='title' order='asc' %}" class="text-decoration-none text-reset">Title <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='title' order='asc' %}" class="text-decoration-none text-reset">Title</a>{% endif %}</th><th>URL</th><th>{% if request.GET.sort == 'is_featured' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='is_featured' order='desc' %}" class="text-decoration-none text-reset">Featured <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'is_featured' %}<a href="?{% url_replace sort='is_featured' order='asc' %}" class="text-decoration-none text-reset">Featured <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='is_featured' order='asc' %}" class="text-decoration-none text-reset">Featured</a>{% endif %}</th><th>Actions</th></tr></thead>
       <tbody>
@@ -47,6 +48,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
 </div>

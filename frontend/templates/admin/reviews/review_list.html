@@ -38,6 +38,7 @@
     </form>
   </div>
   <div class="card-bms-body p-0">
+    <div class="table-responsive">
     <table class="table table-bms mb-0">
       <thead><tr><th>{% if request.GET.sort == 'id' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='id' order='desc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'id' %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID</a>{% endif %}</th><th>{% if request.GET.sort == 'movie__name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='movie__name' order='desc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'movie__name' %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie</a>{% endif %}</th><th>{% if request.GET.sort == 'user__username' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='user__username' order='desc' %}" class="text-decoration-none text-reset">User <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'user__username' %}<a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User</a>{% endif %}</th><th>{% if request.GET.sort == 'rating' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='rating' order='desc' %}" class="text-decoration-none text-reset">Rating <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'rating' %}<a href="?{% url_replace sort='rating' order='asc' %}" class="text-decoration-none text-reset">Rating <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='rating' order='asc' %}" class="text-decoration-none text-reset">Rating</a>{% endif %}</th><th>Comment</th><th>{% if request.GET.sort == 'created_at' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='created_at' order='desc' %}" class="text-decoration-none text-reset">Date <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'created_at' %}<a href="?{% url_replace sort='created_at' order='asc' %}" class="text-decoration-none text-reset">Date <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='created_at' order='asc' %}" class="text-decoration-none text-reset">Date</a>{% endif %}</th><th>Reported</th><th>Hidden</th><th>Approved</th><th>Actions</th></tr></thead>
       <tbody>
@@ -83,6 +84,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
 </div>

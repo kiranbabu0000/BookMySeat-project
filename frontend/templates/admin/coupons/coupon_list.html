@@ -19,6 +19,7 @@
     <a href="{% url 'admin_coupon_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Add Coupon</a>
   </div>
   <div class="card-bms-body p-0">
+    <div class="table-responsive">
     <table class="table table-bms mb-0">
       <thead><tr><th>{% if request.GET.sort == 'code' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='code' order='desc' %}" class="text-decoration-none text-reset">Code <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'code' %}<a href="?{% url_replace sort='code' order='asc' %}" class="text-decoration-none text-reset">Code <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='code' order='asc' %}" class="text-decoration-none text-reset">Code</a>{% endif %}</th><th>Discount</th><th>{% if request.GET.sort == 'valid_from' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='valid_from' order='desc' %}" class="text-decoration-none text-reset">Valid From <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'valid_from' %}<a href="?{% url_replace sort='valid_from' order='asc' %}" class="text-decoration-none text-reset">Valid From <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='valid_from' order='asc' %}" class="text-decoration-none text-reset">Valid From</a>{% endif %}</th><th>{% if request.GET.sort == 'valid_to' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='valid_to' order='desc' %}" class="text-decoration-none text-reset">Valid To <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'valid_to' %}<a href="?{% url_replace sort='valid_to' order='asc' %}" class="text-decoration-none text-reset">Valid To <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='valid_to' order='asc' %}" class="text-decoration-none text-reset">Valid To</a>{% endif %}</th><th>Uses</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>
@@ -40,6 +41,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
 </div>

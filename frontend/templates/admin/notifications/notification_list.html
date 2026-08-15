@@ -19,6 +19,7 @@
     <a href="{% url 'admin_notification_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Create Notification</a>
   </div>
   <div class="card-bms-body p-0">
+    <div class="table-responsive">
     <table class="table table-bms mb-0">
       <thead><tr><th>{% if request.GET.sort == 'title' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='title' order='desc' %}" class="text-decoration-none text-reset">Title <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'title' %}<a href="?{% url_replace sort='title' order='asc' %}" class="text-decoration-none text-reset">Title <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='title' order='asc' %}" class="text-decoration-none text-reset">Title</a>{% endif %}</th><th>Message</th><th>{% if request.GET.sort == 'notification_type' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='notification_type' order='desc' %}" class="text-decoration-none text-reset">Type <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'notification_type' %}<a href="?{% url_replace sort='notification_type' order='asc' %}" class="text-decoration-none text-reset">Type <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='notification_type' order='asc' %}" class="text-decoration-none text-reset">Type</a>{% endif %}</th><th>User</th><th>Read</th><th>{% if request.GET.sort == 'created_at' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='created_at' order='desc' %}" class="text-decoration-none text-reset">Date <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'created_at' %}<a href="?{% url_replace sort='created_at' order='asc' %}" class="text-decoration-none text-reset">Date <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='created_at' order='asc' %}" class="text-decoration-none text-reset">Date</a>{% endif %}</th><th>Actions</th></tr></thead>
       <tbody>
@@ -54,6 +55,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
 </div>

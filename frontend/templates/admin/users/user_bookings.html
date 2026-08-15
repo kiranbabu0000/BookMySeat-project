@@ -12,6 +12,7 @@
     <a href="{% url 'admin_user_list' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Users</a>
   </div>
   <div class="card-bms-body p-0">
+    <div class="table-responsive">
     <table class="table table-bms mb-0">
       <thead><tr><th>ID</th><th>Movie</th><th>Theatre</th><th>Seat</th><th>Amount</th><th>Date</th></tr></thead>
       <tbody>
@@ -29,6 +30,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
 </div>
 {% endblock %}

@@ -4,8 +4,13 @@
   function setSidebar(show) {
     const sidebar = document.getElementById('adminSidebar');
     const backdrop = document.getElementById('sidebarBackdrop');
+    const toggleBtn = document.querySelector('.sidebar-toggle');
     if (sidebar) sidebar.classList.toggle('show', show);
     if (backdrop) backdrop.classList.toggle('show', show);
+    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', show ? 'true' : 'false');
+    if (window.innerWidth < 992) {
+      document.body.classList.toggle('sidebar-open', show);
+    }
   }
 
   function toggleSidebar() {
@@ -55,6 +60,12 @@
 
     document.addEventListener('click', handleClickOutsideSidebar);
 
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        closeSidebar();
+      }
+    });
+
     window.addEventListener('resize', function () {
       if (window.innerWidth >= 992) {
         setSidebar(false);
@@ -101,7 +112,7 @@
     }
 
     function fetchUnreadCount() {
-      fetch('/notifications/unread-count/')
+      fetch('/admin-notifications/unread-count/')
         .then(function (res) {
           if (!res.ok) throw new Error('Network error');
           return res.json();
@@ -213,7 +224,13 @@
             scales: {
               x: {
                 grid: { color: gridColor, drawBorder: false },
-                ticks: { color: textColor, font: { size: 11 } },
+                ticks: {
+                  color: textColor,
+                  font: { size: 11 },
+                  maxRotation: 0,
+                  autoSkip: true,
+                  maxTicksLimit: 12,
+                },
               },
               y: {
                 grid: { color: gridColor, drawBorder: false },

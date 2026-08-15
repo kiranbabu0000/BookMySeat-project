@@ -99,11 +99,11 @@ urlpatterns = [
     path('coupons/<int:pk>/edit/', views.CouponUpdateView.as_view(), name='admin_coupon_edit'),
     path('coupons/<int:pk>/delete/', views.CouponDeleteView.as_view(), name='admin_coupon_delete'),
 
-    path('notifications/', views.NotificationListView.as_view(), name='admin_notification_list'),
-    path('notifications/add/', views.notification_create, name='admin_notification_add'),
-    path('notifications/<int:pk>/mark-read/', views.notification_mark_read, name='admin_notification_mark_read'),
-    path('notifications/<int:pk>/delete/', views.notification_delete, name='admin_notification_delete'),
-    path('notifications/unread-count/', views.get_notifications, name='admin_notification_count'),
+    path('admin-notifications/', views.NotificationListView.as_view(), name='admin_notification_list'),
+    path('admin-notifications/add/', views.notification_create, name='admin_notification_add'),
+    path('admin-notifications/<int:pk>/mark-read/', views.notification_mark_read, name='admin_notification_mark_read'),
+    path('admin-notifications/<int:pk>/delete/', views.notification_delete, name='admin_notification_delete'),
+    path('admin-notifications/unread-count/', views.get_notifications, name='admin_notification_count'),
 
     path('reviews/', views.ReviewListView.as_view(), name='admin_review_list'),
     path('reviews/<int:pk>/approve/', views.review_approve, name='admin_review_approve'),

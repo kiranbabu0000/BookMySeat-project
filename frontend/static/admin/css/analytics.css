@@ -32,11 +32,25 @@
 
 .analytics-chart-wrap {
   position: relative;
-  height: 280px;
+  height: clamp(220px, 30vw, 300px);
+  min-height: 220px;
+  width: 100%;
 }
 
 .analytics-chart-wrap canvas {
-  max-height: 280px;
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.analytics-toolbar {
+  flex-wrap: wrap;
+  row-gap: 0.5rem;
+}
+
+.analytics-toolbar .btn {
+  min-height: 40px;
 }
 
 /* Heatmap */

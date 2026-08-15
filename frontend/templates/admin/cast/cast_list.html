@@ -25,6 +25,7 @@
     <a href="{% url 'admin_cast_add' %}" class="btn btn-bms-primary btn-sm"><i class="bi bi-plus-lg"></i> Add Cast</a>
   </div>
   <div class="card-bms-body p-0">
+    <div class="table-responsive">
     <table class="table table-bms mb-0">
       <thead><tr><th>Image</th><th>{% if request.GET.sort == 'name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='name' order='desc' %}" class="text-decoration-none text-reset">Name <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'name' %}<a href="?{% url_replace sort='name' order='asc' %}" class="text-decoration-none text-reset">Name <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='name' order='asc' %}" class="text-decoration-none text-reset">Name</a>{% endif %}</th><th>{% if request.GET.sort == 'movie__name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='movie__name' order='desc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'movie__name' %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie</a>{% endif %}</th><th>Character</th><th>Role</th><th>Actions</th></tr></thead>
       <tbody>
@@ -51,6 +52,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% if page_obj.paginator.num_pages > 1 %}<div class="card-bms-footer">{% include 'admin/partials/_pagination.html' %}</div>{% endif %}
 </div>

@@ -31,7 +31,7 @@
 </div>
 
 <div class="row g-4 mb-4">
-  <div class="col-lg-8">
+  <div class="col-lg-7">
     <div class="card-bms h-100">
       <div class="card-bms-header">
         <div class="card-bms-header-actions w-100">
@@ -60,14 +60,14 @@
             <span class="text-muted small">this month</span>
           </div>
         </div>
-        <div style="height: 300px;">
-          <canvas id="businessChart" height="100"></canvas>
+        <div class="chart-wrap">
+          <canvas id="businessChart"></canvas>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="col-lg-4">
+  <div class="col-lg-5">
     <div class="card-bms h-100">
       <div class="card-bms-header">
         <div class="d-flex align-items-center gap-2">
@@ -81,7 +81,7 @@
           {% for op in operations %}
           <a href="{{ op.link }}" class="op-tile" style="--op-color: {{ op.color }};">
             <span class="op-tile__icon"><i class="bi {{ op.icon }}"></i></span>
-            <span>
+            <span class="op-tile__text">
               <span class="op-tile__value">{{ op.value }}</span>
               <span class="op-tile__label d-block">{{ op.label }}</span>
             </span>
