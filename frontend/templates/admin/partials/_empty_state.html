@@ -1,0 +1,10 @@
+<div class="empty-state">
+  <div class="empty-state__icon"><i class="bi {{ icon|default:'bi-inbox' }}"></i></div>
+  <p class="empty-state__title">{{ title|default:'Nothing here yet' }}</p>
+  {% if text %}<p class="empty-state__text">{{ text }}</p>{% endif %}
+  {% if action_url and action_label %}
+  <a href="{{ action_url }}" class="btn btn-bms btn-sm empty-state__action">
+    <i class="bi bi-plus-lg me-1"></i>{{ action_label }}
+  </a>
+  {% endif %}
+</div>

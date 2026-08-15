@@ -25,7 +25,7 @@
     <div class="card border-0 shadow-sm" style="background: var(--bg-card); border: 1px solid var(--border-color) !important; border-radius: var(--radius-xl);">
       <ul class="list-group list-group-flush">
         {% for notification in notifications %}
-        <li class="list-group-item d-flex align-items-start gap-3 px-4 py-3 {% if not notification.is_read %}fw-semibold{% endif %}"
+        <li class="list-group-item d-flex align-items-start gap-3 px-4 py-3 {% if not notification.is_read %}is-unread fw-semibold{% endif %}"
             style="background: transparent; border-color: var(--border-color);">
           <i class="bi bi-{% if notification.notification_type == 'success' %}check-circle{% elif notification.notification_type == 'warning' %}exclamation-triangle{% elif notification.notification_type == 'danger' %}x-circle{% else %}info-circle{% endif %} fs-4 mt-1"
              style="color: {% if notification.notification_type == 'success' %}var(--success){% elif notification.notification_type == 'warning' %}var(--warning){% elif notification.notification_type == 'danger' %}var(--danger){% else %}var(--primary){% endif %};"></i>

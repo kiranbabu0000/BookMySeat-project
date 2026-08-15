@@ -354,6 +354,236 @@
     };
   }
 
+  function initSidebarGroups() {
+    const storeKey = 'bms-admin-sidebar-groups';
+    let saved = {};
+    try {
+      saved = JSON.parse(localStorage.getItem(storeKey) || '{}');
+    } catch (e) {
+      saved = {};
+    }
+
+    document.querySelectorAll('.sidebar-group[data-group]').forEach(function (group) {
+      const name = group.getAttribute('data-group');
+      const hasActive = group.querySelector('.sidebar-link.active');
+      const toggle = group.querySelector('[data-sidebar-group-toggle]');
+
+      if (hasActive) {
+        saved[name] = false;
+      }
+      if (saved[name]) {
+        group.classList.add('collapsed');
+        if (toggle) toggle.setAttribute('aria-expanded', 'false');
+      }
+
+      if (toggle) {
+        toggle.addEventListener('click', function () {
+          const collapsed = group.classList.toggle('collapsed');
+          toggle.setAttribute('aria-expanded', String(!collapsed));
+          saved[name] = collapsed;
+          try {
+            localStorage.setItem(storeKey, JSON.stringify(saved));
+          } catch (e) {}
+        });
+      }
+    });
+  }
+
+  function initGlobalSearch() {
+    const container = document.getElementById('adminSearch');
+    const input = document.getElementById('adminSearchInput');
+    const results = document.getElementById('adminSearchResults');
+    if (!container || !input || !results) return;
+
+    const GROUP_ICONS = {
+      movies: 'bi-film',
+      users: 'bi-people',
+      bookings: 'bi-ticket-perforated',
+      theatres: 'bi-building',
+      shows: 'bi-calendar-event',
+    };
+
+    let debounceTimer = null;
+    let lastQuery = '';
+    let items = [];
+    let activeIndex = -1;
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    function setActiveItem() {
+      results.querySelectorAll('.admin-search__item').forEach(function (el, i) {
+        el.style.background = i === activeIndex ? 'var(--surface-muted)' : '';
+      });
+    }
+
+    function moveActive(dir) {
+      if (!items.length) return;
+      activeIndex = (activeIndex + dir + items.length) % items.length;
+      setActiveItem();
+    }
+
+    function closeResults() {
+      results.classList.remove('open');
+      items = [];
+      activeIndex = -1;
+    }
+
+    function render(data) {
+      let html = '';
+      let total = 0;
+      items = [];
+      activeIndex = -1;
+
+      Object.keys(data.results || {}).forEach(function (group) {
+        const list = data.results[group];
+        if (!list || !list.length) return;
+        html += '<div class="admin-search__group-title">' + esc(group) + '</div>';
+        list.forEach(function (item) {
+          items.push(item);
+          html +=
+            '<a href="' + item.url + '" class="admin-search__item">' +
+              '<span class="admin-search__item-icon"><i class="bi ' + (GROUP_ICONS[group] || 'bi-search') + '"></i></span>' +
+              '<span style="min-width:0;flex:1;">' +
+                '<span class="admin-search__item-title d-block">' + esc(item.title) + '</span>' +
+                '<span class="admin-search__item-sub d-block">' + esc(item.subtitle || '') + '</span>' +
+              '</span>' +
+            '</a>';
+          total += 1;
+        });
+      });
+
+      if (!total) {
+        html = '<div class="admin-search__empty"><i class="bi bi-search me-2"></i>No results for &ldquo;' + esc(lastQuery) + '&rdquo;</div>';
+      }
+
+      html +=
+        '<div class="admin-search__footer">' +
+          '<span><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>' +
+          '<span><kbd>Enter</kbd> open</span>' +
+          '<span><kbd>Esc</kbd> close</span>' +
+        '</div>';
+
+      results.innerHTML = html;
+      results.classList.add('open');
+    }
+
+    function fetchResults(q) {
+      results.innerHTML = '<div class="admin-search__loading">Searching&hellip;</div>';
+      results.classList.add('open');
+      fetch('/admin-search/?q=' + encodeURIComponent(q))
+        .then(function (res) {
+          if (!res.ok) throw new Error('Network error');
+          return res.json();
+        })
+        .then(function (data) {
+          render(data);
+        })
+        .catch(function () {
+          results.innerHTML = '<div class="admin-search__empty">Something went wrong. Please try again.</div>';
+          results.classList.add('open');
+        });
+    }
+
+    input.addEventListener('input', function () {
+      const q = input.value.trim();
+      if (!q) {
+        lastQuery = '';
+        items = [];
+        closeResults();
+        return;
+      }
+      lastQuery = q;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function () {
+        fetchResults(q);
+      }, 250);
+    });
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        closeResults();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        moveActive(1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveActive(-1);
+      } else if (e.key === 'Enter') {
+        if (activeIndex >= 0 && items[activeIndex]) {
+          e.preventDefault();
+          window.location.href = items[activeIndex].url;
+        }
+      }
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!container.contains(e.target)) {
+        closeResults();
+      }
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
+        e.preventDefault();
+        input.focus();
+        input.select();
+      }
+    });
+  }
+
+  function initDashboardChart() {
+    const canvas = document.getElementById('businessChart');
+    const ranges = window.BMS_DASHBOARD_RANGES;
+    if (!canvas || typeof Chart === 'undefined' || !ranges) return;
+
+    let chart = null;
+
+    function buildChart(rangeKey) {
+      const data = ranges[rangeKey];
+      if (!data) return;
+      if (chart) chart.destroy();
+      chart = window.BMS.chart.createLineChart('businessChart', {
+        labels: data.labels,
+        datasets: [
+          {
+            label: 'Revenue',
+            data: data.revenue,
+            borderColor: '#e50914',
+            backgroundColor: 'rgba(229,9,20,0.10)',
+            fill: true,
+          },
+          {
+            label: 'Bookings',
+            data: data.bookings,
+            borderColor: '#2563eb',
+            backgroundColor: 'rgba(37,99,235,0.08)',
+            fill: false,
+          },
+        ],
+        showLegend: true,
+        beginAtZero: true,
+      });
+    }
+
+    buildChart('7d');
+
+    document.querySelectorAll('[data-range]').forEach(function (pill) {
+      pill.addEventListener('click', function () {
+        document.querySelectorAll('[data-range]').forEach(function (p) {
+          p.classList.remove('active');
+          p.setAttribute('aria-selected', 'false');
+        });
+        pill.classList.add('active');
+        pill.setAttribute('aria-selected', 'true');
+        buildChart(pill.getAttribute('data-range'));
+      });
+    });
+  }
+
   function init() {
     initSidebar();
     initTooltips();
@@ -362,6 +592,9 @@
     initAlertAutoHide();
     initConfirmDialogs();
     initCharts();
+    initSidebarGroups();
+    initGlobalSearch();
+    initDashboardChart();
   }
 
   if (document.readyState === 'loading') {

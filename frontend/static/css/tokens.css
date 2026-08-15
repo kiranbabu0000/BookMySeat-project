@@ -44,6 +44,7 @@
   --accent-secondary-hover: #1d4ed8;
   --accent-gold: #d97706;
   --accent-success: #16a34a;
+  --accent-tint: rgba(220, 38, 38, 0.07);
   --border-color: #e2e8f0;
   --border-subtle: #f1f5f9;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
@@ -98,6 +99,7 @@
   --accent-secondary-hover: #74a9ff;
   --accent-gold: #d4af37;
   --accent-success: #22c55e;
+  --accent-tint: rgba(229, 9, 20, 0.15);
   --border-color: #263042;
   --border-subtle: #1a2332;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
@@ -212,4 +214,34 @@
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-old(root),
   ::view-transition-new(root) { animation-duration: 0.01ms !important; }
+}
+
+/* ============================================================
+   Semantic aliases — component-level colors (theme aware)
+   ============================================================ */
+
+:root {
+  --primary: var(--accent-primary);
+  --primary-hover: var(--accent-primary-hover);
+  --primary-soft: var(--accent-tint);
+  --success: var(--accent-success);
+  --success-soft: color-mix(in srgb, var(--accent-success) 14%, transparent);
+  --warning: var(--accent-gold);
+  --warning-soft: color-mix(in srgb, var(--accent-gold) 16%, transparent);
+  --danger: var(--accent-primary);
+  --danger-soft: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  --info: var(--accent-secondary);
+  --info-soft: color-mix(in srgb, var(--accent-secondary) 12%, transparent);
+  --surface: var(--bg-card);
+  --surface-muted: var(--bg-tertiary);
+  --surface-elevated: var(--bg-elevated);
+  --border: var(--border-color);
+  --brand-gradient: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-primary-hover) 100%);
+}
+
+/* Admin layout dimensions shared by base_admin / sidebar / topbar */
+:root {
+  --sidebar-width: 264px;
+  --sidebar-width-collapsed: 76px;
+  --topbar-height: 64px;
 }

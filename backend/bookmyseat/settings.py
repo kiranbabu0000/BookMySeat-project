@@ -216,6 +216,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'admin_panel.context_processors.admin_notifications',
                 'movies.context_processors.bms_cities',
+                'users.context_processors.unread_notifications',
             ],
         },
     },
@@ -333,3 +334,11 @@ WHITENOISE_USE_FINDERS = True
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --- Test-only performance tweaks -------------------------------------------
+# Real users keep the strong PBKDF2 hasher above. Under `manage.py test`, users
+# live only in the throwaway test database, so hashing can be the (instant,
+# insecure) MD5 hasher. This drops the full suite from minutes to seconds
+# without any effect on production password storage.
+if 'test' in sys.argv:
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']

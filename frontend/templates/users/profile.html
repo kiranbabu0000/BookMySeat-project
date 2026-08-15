@@ -110,19 +110,19 @@
                         <i class="bi bi-film"></i>
                       </div>
                       {% endif %}
-                      <div class="flex-grow-1" style="min-width: 200px;">
+                      <div class="flex-grow-1" style="min-width: 200px; max-width: 100%; overflow-wrap: break-word; min-width: min(200px, 100%);">
                         <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
                           <div>
                             <h3 class="h5 fw-bold mb-1" style="color: var(--text-primary);">{{ group.primary.movie.name }}</h3>
                             {% if group.status_display %}
-                            <span class="badge me-1" style="{% if group.status_display == 'On Now' %}background: rgba(220,38,38,0.15); color: var(--accent-primary); border: 1px solid rgba(220,38,38,0.35);{% elif group.status_display == 'Upcoming' %}background: rgba(22,163,74,0.15); color: var(--accent-success); border: 1px solid rgba(22,163,74,0.35);{% else %}background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color);{% endif %} font-weight:600;">{{ group.status_display }}</span>
+                            <span class="status-badge me-1 {% if group.status_display == 'On Now' %}status-badge--pending{% elif group.status_display == 'Upcoming' %}status-badge--success{% else %}status-badge--cancelled{% endif %}">{{ group.status_display }}</span>
                             {% endif %}
                             {% if group.language_label %}
                             <span class="badge me-1" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); font-weight:600;">{{ group.language_label }}</span>
                             {% endif %}
-                            <span class="badge" style="background: rgba(212,175,55,0.15); color: var(--accent-gold); border: 1px solid rgba(212,175,55,0.35); font-weight:600;">2D / 4K</span>
+                            <span class="status-badge status-badge--gold">2D / 4K</span>
                             {% if group.cancelled %}
-                            <span class="badge ms-1" style="background: rgba(220,38,38,0.15); color: var(--accent-primary); font-weight:600;">Cancelled</span>
+                            <span class="status-badge status-badge--cancelled ms-1">Cancelled</span>
                             {% endif %}
                           </div>
                           <div class="text-end">
@@ -293,13 +293,13 @@
                     <div class="text-end">
                       <div class="fw-bold" style="color: var(--text-primary);">₹{{ tx.amount }}</div>
                       {% if tx.status == 'captured' %}
-                        <span class="badge rounded-pill" style="background: rgba(22,163,74,0.15); color: var(--accent-success);">Paid</span>
+                        <span class="status-badge status-badge--success">Paid</span>
                       {% elif tx.status == 'refunded' %}
-                        <span class="badge rounded-pill" style="background: rgba(220,38,38,0.15); color: var(--accent-primary);">Refunded</span>
+                        <span class="status-badge status-badge--cancelled">Refunded</span>
                       {% elif tx.status == 'failed' %}
-                        <span class="badge rounded-pill" style="background: rgba(245,158,11,0.15); color: #d97706;">Failed</span>
+                        <span class="status-badge status-badge--failed">Failed</span>
                       {% else %}
-                        <span class="badge rounded-pill" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color);">{{ tx.get_status_display }}</span>
+                        <span class="status-badge">{{ tx.get_status_display }}</span>
                       {% endif %}
                     </div>
                   </div>

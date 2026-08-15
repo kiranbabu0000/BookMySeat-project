@@ -63,7 +63,7 @@
       </button>
       {% if user.is_authenticated %}
       <a class="nav-link" href="{% url 'wishlist' %}"><i class="bi bi-heart" aria-hidden="true"></i></a>
-      <a class="nav-link" href="{% url 'my_notifications' %}"><i class="bi bi-bell" aria-hidden="true"></i></a>
+      <a class="nav-link position-relative" href="{% url 'my_notifications' %}"><i class="bi bi-bell" aria-hidden="true"></i><span class="notif-badge{% if not unread_notification_count %} d-none{% endif %}">{% if unread_notification_count > 9 %}9+{% else %}{{ unread_notification_count }}{% endif %}</span><span class="visually-hidden">Notifications{% if unread_notification_count %} ({{ unread_notification_count }} unread){% endif %}</span></a>
       <a class="nav-link" href="{% url 'profile' %}">Profile</a>
       {% else %}
       <a class="nav-link me-2" href="{% url 'login' %}">Login</a>
@@ -100,8 +100,9 @@
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="{% url 'my_notifications' %}">
+          <a class="nav-link position-relative" href="{% url 'my_notifications' %}">
             <i class="bi bi-bell me-1" aria-hidden="true"></i>Notifications
+            <span class="notif-badge{% if not unread_notification_count %} d-none{% endif %}">{% if unread_notification_count > 9 %}9+{% else %}{{ unread_notification_count }}{% endif %}</span>
           </a>
         </li>
         <li class="nav-item">

@@ -822,24 +822,18 @@ class ReservationApiTests(TestCase):
             and a[0].startswith('ticket_') and a[2] == 'application/pdf'
         ]
         self.assertTrue(pdf_attachments, 'confirmation email must carry a PDF ticket')
-        self.assertIn('Booking confirmed', message.subject)
+        self.assertIn('Booking Confirmed', message.subject)
         pdf_bytes = pdf_attachments[0][1]
         self.assertTrue(pdf_bytes.startswith(b'%PDF'))
         html_parts = [a[0] for a in message.alternatives if a[1] == 'text/html']
         self.assertTrue(html_parts, 'confirmation email must include an HTML body')
         self.assertIn(
-            'cid:qr_ticket', html_parts[0],
-            'HTML must reference the QR by Content-ID (Gmail blocks data URIs)',
+            'data:image/png;base64,', html_parts[0],
+            'HTML must embed the QR inline as a data URI, not an attachment',
         )
-        qr_parts = [
-            a for a in message.attachments
-            if getattr(a, 'get', None) and a.get('Content-ID') == '<qr_ticket>'
-        ]
-        self.assertEqual(len(qr_parts), 1, 'QR must be attached as an inline image')
-        self.assertEqual(qr_parts[0].get_content_type(), 'image/png')
-        self.assertTrue(
-            qr_parts[0].get_payload(decode=True).startswith(b'\x89PNG'),
-            'the inline QR must be a real PNG',
+        self.assertNotIn(
+            'cid:qr_ticket', html_parts[0],
+            'no leftover Content-ID reference once the QR is embedded',
         )
         self.assertEqual(
             EmailOutbox.objects.filter(status='sent').count(), 1,

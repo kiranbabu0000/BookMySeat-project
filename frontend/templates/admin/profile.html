@@ -3,11 +3,21 @@
 {% block title %}My Profile{% endblock %}
 {% block page_title %}My Profile{% endblock %}
 {% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-breadcrumb">
+      <i class="bi bi-person me-1"></i>
+      <span>Account</span>
+    </div>
+    <h1 class="page-title">My Profile</h1>
+    <p class="page-subtitle">Manage your personal details and password</p>
+  </div>
+</div>
 <div class="row g-4">
   <div class="col-md-4">
     <div class="card-bms">
       <div class="card-bms-body text-center py-4">
-        <div class="user-avatar mx-auto mb-3" style="width: 80px; height: 80px; font-size: 2rem; border-radius: 50%; background: linear-gradient(135deg, var(--accent-primary), #991b1b); color: #fff; display: flex; align-items: center; justify-content: center;">
+        <div class="user-avatar mx-auto mb-3" style="width: 80px; height: 80px; font-size: 2rem; border-radius: 50%; background: var(--brand-gradient); color: #fff; display: flex; align-items: center; justify-content: center;">
           {{ user.username|first|upper }}
         </div>
         <h4>{{ user.get_full_name|default:user.username }}</h4>

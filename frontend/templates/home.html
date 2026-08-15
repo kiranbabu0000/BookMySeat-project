@@ -5,34 +5,68 @@
 
 {% block content %}
 <!-- Hero Carousel -->
-{% with hero_movies=trending|default:movies|default:recently_released %}
 <section class="hero-carousel" aria-label="Featured promotions">
   <div id="heroCarousel" class="carousel slide carousel-fade" data-bs-ride="carousel" data-bs-interval="7000">
-    {% if hero_movies %}
+    {% if carousel_slides %}
     <div class="carousel-indicators">
-      {% for movie in hero_movies|slice:":5" %}
+      {% for slide in carousel_slides %}
       <button type="button" data-bs-target="#heroCarousel" data-bs-slide-to="{{ forloop.counter0 }}" class="{% if forloop.first %}active{% endif %}" {% if forloop.first %}aria-current="true"{% endif %} aria-label="Slide {{ forloop.counter }}"></button>
       {% endfor %}
     </div>
     <div class="carousel-inner">
-      {% for movie in hero_movies|slice:":5" %}
+      {% for slide in carousel_slides %}
       <div class="carousel-item{% if forloop.first %} active{% endif %}">
-        {% if movie.banner %}
-        <div class="hero-slide" style="background-image: linear-gradient(90deg, rgba(7,10,18,0.95) 0%, rgba(7,10,18,0.78) 45%, rgba(7,10,18,0.38) 100%), url('{{ movie.banner.url }}');"></div>
-        {% elif movie.image %}
-        <div class="hero-slide" style="background-image: linear-gradient(90deg, rgba(7,10,18,0.95) 0%, rgba(7,10,18,0.78) 45%, rgba(7,10,18,0.38) 100%), url('{{ movie.image.url }}');"></div>
+        {% if slide.type == 'offer' %}
+        <div class="hero-slide hero-slide--offer"></div>
         {% else %}
-        <div class="hero-slide"></div>
+        {% with movie=slide.movie %}
+        <div class="hero-media">
+          {% if movie.banner %}
+          <img src="{{ movie.banner.url }}" class="hero-media__img hero-media__img--desktop" alt="" aria-hidden="true"{% if forloop.first %} loading="eager" fetchpriority="high"{% else %} loading="lazy"{% endif %}>
+          {% endif %}
+          {% if movie.image %}
+          <img src="{{ movie.image.url }}" class="hero-media__img hero-media__img--mobile" alt="" aria-hidden="true"{% if forloop.first %} loading="eager"{% else %} loading="lazy"{% endif %}>
+          {% endif %}
+        </div>
+        {% endwith %}
         {% endif %}
+        <div class="hero-slide__overlay"></div>
+        {% if slide.type == 'offer' %}
+        <div class="hero-caption hero-caption--offer container-bms">
+          <div class="hero-caption__body">
+            <span class="hero-badge hero-badge--offer"><i class="bi bi-tag-fill me-1" aria-hidden="true"></i>Special Offer</span>
+            {% if slide.coupon.discount_percent %}
+            <h2 class="hero-title">Flat {{ slide.coupon.discount_percent }}% Off</h2>
+            {% else %}
+            <h2 class="hero-title">Flat ₹{{ slide.coupon.discount_amount }} Off</h2>
+            {% endif %}
+            <p class="hero-description">{{ slide.coupon.description|default:"Unlock exclusive savings on your next movie night." }}</p>
+            <div class="hero-actions">
+              {% if slide.coupon.code %}
+              <span class="hero-code"><span>Use code</span><strong>{{ slide.coupon.code }}</strong></span>
+            </div>
+            <div class="hero-actions">
+              {% endif %}
+              <a href="{% url 'movie_list' %}" class="btn btn-bms-primary btn-lg">
+                <i class="bi bi-lightning-charge-fill" aria-hidden="true"></i> Book Now
+              </a>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        {% with movie=slide.movie %}
         <div class="hero-caption container-bms">
           <div class="hero-caption__grid">
             {% if movie.image %}
-            <div class="hero-caption__poster d-none d-md-block">
+            <div class="hero-caption__poster">
               <img src="{{ movie.image.url }}" alt="{{ movie.name }} poster" loading="lazy">
             </div>
             {% endif %}
             <div class="hero-caption__body">
-              <span class="hero-badge"><i class="bi bi-fire me-1" aria-hidden="true"></i>{% if movie.category != 'movie' %}{{ movie.get_category_display|upper }}{% else %}Trending Now{% endif %}</span>
+              <span class="hero-badge">
+                <i class="bi {% if slide.type == 'event' %}bi-mic-fill{% else %}bi-fire{% endif %} me-1" aria-hidden="true"></i>
+                {% if slide.type == 'event' %}Live Event{% elif movie.category != 'movie' %}{{ movie.get_category_display|upper }}{% else %}Trending Now{% endif %}
+              </span>
               {% if forloop.first %}
               <h1 class="hero-title">{{ movie.name }}</h1>
               {% else %}
@@ -66,6 +100,8 @@
             </div>
           </div>
         </div>
+        {% endwith %}
+        {% endif %}
       </div>
       {% endfor %}
     </div>
@@ -110,7 +146,6 @@
     </button>
   </div>
 </section>
-{% endwith %}
 
 {% if not user.is_authenticated %}
 <section class="container-bms pt-4">
@@ -143,6 +178,27 @@
       </a>
       {% endfor %}
     </nav>
+  </div>
+</section>
+{% endif %}
+
+<!-- Trending in your city -->
+{% if current_city and city_trending %}
+<section class="page-section page-section--alt">
+  <div class="container-bms">
+    <div class="section-header">
+      <div>
+        <span class="section-eyebrow"><i class="bi bi-geo-alt-fill me-1"></i>{{ current_city }}</span>
+        <h2 class="section-title">Trending in {{ current_city }}</h2>
+        <p class="section-subtitle text-muted mb-0">Now showing at theatres near you</p>
+      </div>
+      <a href="{% url 'movie_list' %}?city={{ current_city|urlencode }}" class="section-link">View All <i class="bi bi-arrow-right"></i></a>
+    </div>
+    <div class="movie-rail stagger-children">
+      {% for movie in city_trending|slice:":10" %}
+        {% include 'partials/_movie_card.html' with movie=movie rail=True %}
+      {% endfor %}
+    </div>
   </div>
 </section>
 {% endif %}

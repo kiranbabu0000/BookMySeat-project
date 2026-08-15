@@ -18,6 +18,7 @@ from django.http import JsonResponse, HttpResponseRedirect
 import json
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
+from urllib.parse import quote_plus
 
 import sys
 import django
@@ -114,6 +115,109 @@ def admin_logout_view(request):
     return redirect('admin_login')
 
 
+def _dashboard_pct(current, previous):
+    """Percentage change of ``current`` vs ``previous`` (None when undefined)."""
+    if previous is None or previous == 0:
+        return None
+    return round((current - previous) / abs(previous) * 100, 1)
+
+
+def _dashboard_occupancy(day):
+    """Return (occupancy_pct, booked_seats, total_seats) for shows on ``day``."""
+    seats = Seat.objects.filter(theater__time__date=day)
+    total = seats.count()
+    booked = seats.filter(is_booked=True).count()
+    if total == 0:
+        return 0, booked, total
+    return round(booked / total * 100), booked, total
+
+
+def _dashboard_series(days):
+    """Daily revenue (completed payments) and booking counts, oldest first."""
+    start_date = timezone.now().date() - timedelta(days=days - 1)
+    start = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+    rev_map = {
+        row['day']: row['total']
+        for row in (
+            Payment.objects.filter(status='completed', paid_at__gte=start)
+            .annotate(day=TruncDate('paid_at'))
+            .values('day')
+            .annotate(total=Sum('amount'))
+        )
+    }
+    book_map = {
+        row['day']: row['count']
+        for row in (
+            Booking.objects.filter(booked_at__gte=start)
+            .annotate(day=TruncDate('booked_at'))
+            .values('day')
+            .annotate(count=Count('id'))
+        )
+    }
+    labels, revenue, bookings = [], [], []
+    for k in range(days):
+        day = start_date + timedelta(days=k)
+        labels.append(day.strftime('%d %b'))
+        revenue.append(float(rev_map.get(day, 0)))
+        bookings.append(book_map.get(day, 0))
+    return labels, revenue, bookings
+
+
+def _dashboard_monthly(months=12):
+    """Monthly revenue + booking counts for the last ``months`` months."""
+    today = timezone.now().date()
+    starts = []
+    for k in range(months - 1, -1, -1):
+        offset = today.month - k
+        starts.append(date(today.year + (offset - 1) // 12, (offset - 1) % 12 + 1, 1))
+    start = timezone.make_aware(datetime.combine(starts[0], datetime.min.time()))
+    rev_map = {
+        row['month'].date(): row['total']
+        for row in (
+            Payment.objects.filter(status='completed', paid_at__gte=start)
+            .annotate(month=TruncMonth('paid_at'))
+            .values('month')
+            .annotate(total=Sum('amount'))
+        )
+    }
+    book_map = {
+        row['month'].date(): row['count']
+        for row in (
+            Booking.objects.filter(booked_at__gte=start)
+            .annotate(month=TruncMonth('booked_at'))
+            .values('month')
+            .annotate(count=Count('id'))
+        )
+    }
+    labels, revenue, bookings = [], [], []
+    for s in starts:
+        labels.append(s.strftime('%b %y'))
+        revenue.append(float(rev_map.get(s, 0)))
+        bookings.append(book_map.get(s, 0))
+    return labels, revenue, bookings
+
+
+def _dashboard_sparkline(values, width=120, height=32):
+    """Return (line_points, area_path) strings for an inline SVG sparkline."""
+    if not values:
+        return '', ''
+    mn, mx = min(values), max(values)
+    rng = (mx - mn) or 1
+    n = len(values)
+    points = []
+    for i, v in enumerate(values):
+        x = round(2 + i * (width - 4) / (n - 1), 1) if n > 1 else width / 2
+        y = round(height - 3 - (v - mn) / rng * (height - 8), 1)
+        points.append((x, y))
+    line = ' '.join(f'{x},{y}' for x, y in points)
+    area = (
+        f'M{points[0][0]},{height - 2} '
+        + ' '.join(f'L{x},{y}' for x, y in points)
+        + f' L{points[-1][0]},{height - 2} Z'
+    )
+    return line, area
+
+
 class DashboardView(AdminSessionMixin, TemplateView):
     template_name = 'admin/dashboard.html'
 
@@ -121,98 +225,232 @@ class DashboardView(AdminSessionMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         today = timezone.now().date()
         yesterday = today - timedelta(days=1)
-        week_start = today - timedelta(days=7)
+        week_start = today - timedelta(days=6)
         month_start = today.replace(day=1)
+        context['today'] = today
 
-        today_bookings = Booking.objects.filter(booked_at__date=today)
-        yesterday_bookings = Booking.objects.filter(booked_at__date=yesterday)
-        weekly_bookings = Booking.objects.filter(booked_at__date__gte=week_start)
-        monthly_bookings = Booking.objects.filter(booked_at__date__gte=month_start)
+        def revenue_on(day):
+            return Payment.objects.filter(status='completed', paid_at__date=day).aggregate(
+                total=Sum('amount')
+            )['total'] or Decimal('0.00')
 
+        today_revenue = revenue_on(today)
+        yesterday_revenue = revenue_on(yesterday)
+        week_revenue = Payment.objects.filter(
+            status='completed', paid_at__date__gte=week_start
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        month_revenue = Payment.objects.filter(
+            status='completed', paid_at__date__gte=month_start
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        today_bookings = Booking.objects.filter(booked_at__date=today).count()
+        yesterday_bookings = Booking.objects.filter(booked_at__date=yesterday).count()
+        week_bookings = Booking.objects.filter(booked_at__date__gte=week_start).count()
+        month_bookings = Booking.objects.filter(booked_at__date__gte=month_start).count()
+
+        occupancy_today, today_booked_seats, today_total_seats = _dashboard_occupancy(today)
+        occupancy_yesterday, _, _ = _dashboard_occupancy(yesterday)
+
+        active_shows_today = Theater.objects.filter(time__date=today, status='active').count()
+        active_shows_yesterday = Theater.objects.filter(time__date=yesterday, status='active').count()
+        upcoming_shows = Theater.objects.filter(time__date__gte=today).exclude(status='cancelled').count()
+        total_shows = Theater.objects.exclude(status='cancelled').count()
+
+        cancelled_today = Booking.objects.filter(status='cancelled', booked_at__date=today).count()
+        pending_refunds = PaymentTransaction.objects.filter(status='refund_requested').count()
+        active_reservations = Reservation.objects.filter(status='active').count()
+        held_seats = ReservedSeat.objects.filter(reservation__status='active').count()
+        unread_notifications = Notification.objects.filter(is_read=False).count()
+
+        # --- 7-day sparklines powering the KPI trend area ---
+        _, spark_revenue, spark_bookings = _dashboard_series(7)
+        spark_occupancy = [
+            _dashboard_occupancy(today - timedelta(days=i))[0] for i in range(6, -1, -1)
+        ]
+        spark_shows = [
+            Theater.objects.filter(time__date=today - timedelta(days=i), status='active').count()
+            for i in range(6, -1, -1)
+        ]
+        rev_line, rev_area = _dashboard_sparkline(spark_revenue)
+        book_line, book_area = _dashboard_sparkline(spark_bookings)
+        occ_line, occ_area = _dashboard_sparkline(spark_occupancy)
+        show_line, show_area = _dashboard_sparkline(spark_shows)
+
+        context['kpis'] = [
+            {
+                'key': 'revenue',
+                'label': "Today's Revenue",
+                'value': '\u20b9{:,.0f}'.format(today_revenue),
+                'icon': 'bi-currency-rupee',
+                'color': 'var(--accent-primary)',
+                'change': _dashboard_pct(today_revenue, yesterday_revenue),
+                'link': reverse('admin_payment_list'),
+                'spark_line': rev_line,
+                'spark_area': rev_area,
+            },
+            {
+                'key': 'bookings',
+                'label': "Today's Bookings",
+                'value': str(today_bookings),
+                'icon': 'bi-ticket-perforated',
+                'color': 'var(--accent-secondary)',
+                'change': _dashboard_pct(today_bookings, yesterday_bookings),
+                'link': reverse('admin_booking_list'),
+                'spark_line': book_line,
+                'spark_area': book_area,
+            },
+            {
+                'key': 'shows',
+                'label': 'Active Shows Today',
+                'value': str(active_shows_today),
+                'icon': 'bi-calendar-check',
+                'color': 'var(--accent-gold)',
+                'change': _dashboard_pct(active_shows_today, active_shows_yesterday),
+                'link': reverse('admin_show_list'),
+                'spark_line': show_line,
+                'spark_area': show_area,
+            },
+            {
+                'key': 'occupancy',
+                'label': "Today's Occupancy",
+                'value': f'{occupancy_today}%',
+                'icon': 'bi-grid-3x3-gap-fill',
+                'color': 'var(--accent-success)',
+                'change': _dashboard_pct(occupancy_today, occupancy_yesterday),
+                'link': reverse('admin_analytics_occupancy'),
+                'spark_line': occ_line,
+                'spark_area': occ_area,
+            },
+        ]
+
+        # --- Business performance chart data for 7 / 30 / 90 days + 12 months ---
+        d7_labels, d7_rev, d7_book = _dashboard_series(7)
+        d30_labels, d30_rev, d30_book = _dashboard_series(30)
+        d90_labels, d90_rev, d90_book = _dashboard_series(90)
+        m_labels, m_rev, m_book = _dashboard_monthly(12)
+        context['chart_ranges'] = json.dumps({
+            '7d': {'labels': d7_labels, 'revenue': d7_rev, 'bookings': d7_book},
+            '30d': {'labels': d30_labels, 'revenue': d30_rev, 'bookings': d30_book},
+            '90d': {'labels': d90_labels, 'revenue': d90_rev, 'bookings': d90_book},
+            '12m': {'labels': m_labels, 'revenue': m_rev, 'bookings': m_book},
+        })
+
+        # --- Today's operations status tiles ---
+        context['operations'] = [
+            {
+                'label': 'Shows Running Today', 'value': active_shows_today,
+                'icon': 'bi-play-circle', 'color': 'var(--accent-gold)',
+                'link': reverse('admin_show_list'),
+            },
+            {
+                'label': 'Active Reservations', 'value': active_reservations,
+                'icon': 'bi-hourglass-split', 'color': 'var(--accent-secondary)',
+                'link': reverse('admin_reservation_list'),
+            },
+            {
+                'label': 'Held Seats', 'value': held_seats,
+                'icon': 'bi-grid-1x2', 'color': 'var(--accent-secondary)',
+                'link': reverse('admin_reservation_list'),
+            },
+            {
+                'label': 'Pending Refunds', 'value': pending_refunds,
+                'icon': 'bi-arrow-counterclockwise', 'color': 'var(--accent-gold)',
+                'link': reverse('admin_payment_list') + '?status=refund_requested',
+            },
+            {
+                'label': 'Cancelled Today', 'value': cancelled_today,
+                'icon': 'bi-x-octagon', 'color': 'var(--accent-primary)',
+                'link': reverse('admin_booking_list') + '?status=cancelled',
+            },
+            {
+                'label': 'Unread Notifications', 'value': unread_notifications,
+                'icon': 'bi-bell', 'color': 'var(--accent-secondary)',
+                'link': reverse('admin_notification_list'),
+            },
+        ]
+
+        # --- Recent bookings with payment/refund status ---
+        context['recent_bookings'] = (
+            Booking.objects
+            .select_related('user', 'movie', 'theater', 'seat')
+            .order_by('-booked_at')[:8]
+        )
+
+        # --- Top performing content across all categories (this month) ---
+        context['top_content'] = (
+            Movie.objects.filter(is_deleted=False)
+            .annotate(
+                recent_bookings=Count(
+                    'booking',
+                    filter=Q(booking__booked_at__date__gte=month_start, booking__status='confirmed'),
+                ),
+                recent_revenue=Coalesce(
+                    Sum(
+                        'booking__total',
+                        filter=Q(booking__booked_at__date__gte=month_start, booking__status='confirmed'),
+                    ),
+                    Decimal('0.00'),
+                ),
+            )
+            .order_by('-recent_bookings')[:5]
+        )
+
+        # --- Theatre performance by venue name (occupancy + shows) ---
+        theatre_perf = []
+        for row in (
+            Theater.objects.values('name')
+            .annotate(
+                shows=Count('id', distinct=True),
+                total_seats=Count('seats'),
+                booked_seats=Count('seats', filter=Q(seats__is_booked=True)),
+            )
+            .order_by('-shows')[:5]
+        ):
+            total = row['total_seats'] or 0
+            booked = row['booked_seats'] or 0
+            theatre_perf.append({
+                'name': row['name'],
+                'shows': row['shows'],
+                'total_seats': total,
+                'booked_seats': booked,
+                'available_seats': total - booked,
+                'occupancy': round(booked / total * 100) if total else 0,
+            })
+        context['theatre_perf'] = theatre_perf
+
+        # --- Platform inventory summary ---
         completed_payments = Payment.objects.filter(status='completed')
-        revenue = lambda qs: qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        today_revenue = revenue(completed_payments.filter(paid_at__date=today))
-        yesterday_revenue = revenue(completed_payments.filter(paid_at__date=yesterday))
-        weekly_revenue = revenue(completed_payments.filter(paid_at__date__gte=week_start))
-        monthly_revenue = revenue(completed_payments.filter(paid_at__date__gte=month_start))
-
-        context['today_bookings'] = today_bookings.count()
-        context['today_revenue'] = today_revenue
-        context['yesterday_revenue'] = yesterday_revenue
-        context['weekly_revenue'] = weekly_revenue
-        context['monthly_revenue'] = monthly_revenue
-        context['total_movies'] = Movie.objects.count()
+        context['total_movies'] = Movie.objects.filter(is_deleted=False).count()
         context['total_bookings'] = Booking.objects.count()
         context['total_users'] = User.objects.count()
         context['total_staff'] = AdminProfile.objects.count()
         context['total_theatres'] = Theater.objects.values('name').distinct().count()
         context['total_screens'] = Screen.objects.count()
-        context['total_shows'] = Theater.objects.count()
-        context['active_movies'] = Movie.objects.filter(status='now_showing').count()
-        context['upcoming_movies'] = Movie.objects.filter(status='coming_soon').count()
-        context['pending_refunds'] = PaymentTransaction.objects.filter(
-            status='refund_requested'
-        ).count()
+        context['total_shows'] = total_shows
+        context['active_movies'] = Movie.objects.filter(status='now_showing', is_deleted=False).count()
+        context['upcoming_movies'] = Movie.objects.filter(status='coming_soon', is_deleted=False).count()
+        context['pending_refunds'] = pending_refunds
         context['total_payments'] = Payment.objects.count()
         context['total_transactions'] = PaymentTransaction.objects.count()
-        context['total_revenue'] = revenue(completed_payments)
-        total_seats = Seat.objects.count()
-        booked_seats = Seat.objects.filter(is_booked=True).count()
+        context['total_revenue'] = completed_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
         context['total_available_seats'] = Seat.objects.filter(is_booked=False).count()
-        context['total_booked_seats'] = booked_seats
-        context['total_active_reservations'] = Reservation.objects.filter(status='active').count()
-        context['held_seats'] = ReservedSeat.objects.filter(reservation__status='active').count()
-        context['occupancy_rate'] = round((booked_seats / total_seats * 100) if total_seats > 0 else 0)
-
-        trending = Movie.objects.annotate(booking_count=Count('booking')).order_by('-booking_count').first()
-        context['trending_movie'] = trending
-
-        context['cancelled_today'] = 0
-        context['recent_bookings'] = Booking.objects.select_related('user', 'movie', 'theater').order_by('-booked_at')[:10]
-        context['shows_running_today'] = Theater.objects.filter(time__date=today).count()
-        context['todays_shows'] = Theater.objects.filter(time__date=today).count()
-        context['upcoming_shows'] = Theater.objects.filter(time__date__gte=today).count()
-        context['notifications'] = Notification.objects.filter(is_read=False).count()
-
-        context['recent_movies'] = Movie.objects.all().order_by('-id')[:5]
-        context['recent_theatres'] = Theater.objects.select_related('movie').all().order_by('-id')[:5]
-        context['recent_shows'] = Theater.objects.select_related('movie').all().order_by('-time')[:5]
-        context['upcoming_movies_list'] = Movie.objects.filter(status='coming_soon').order_by('release_date')[:5]
-
-        context['total_reviews'] = Review.objects.count()
-        context['total_coupons'] = Coupon.objects.count()
-
-        context['quick_stats'] = json.dumps([
-            {'label': 'Today Bookings', 'value': context['today_bookings']},
-            {'label': 'Today Revenue', 'value': str(context['today_revenue'])},
-            {'label': 'Active Movies', 'value': context['active_movies']},
-            {'label': 'Occupancy', 'value': f"{context['occupancy_rate']}%"},
-        ])
-
-        months = []
-        for k in range(5, -1, -1):
-            yr = today.year
-            mth = today.month - k
-            while mth <= 0:
-                mth += 12
-                yr -= 1
-            start = date(yr, mth, 1)
-            end = date(yr + 1, 1, 1) if mth == 12 else date(yr, mth + 1, 1)
-            months.append((start, end))
-        monthly_counts = {
-            (row['month'].year, row['month'].month): row['count']
-            for row in (
-                Booking.objects
-                .filter(booked_at__gte=months[0][0], booked_at__lt=months[-1][1])
-                .annotate(month=TruncMonth('booked_at'))
-                .values('month')
-                .annotate(count=Count('id'))
-            )
-        }
-        context['monthly_labels'] = json.dumps([s.strftime('%b %Y') for s, _ in months])
-        context['monthly_data'] = json.dumps([
-            monthly_counts.get((s.year, s.month), 0) for s, _ in months
-        ])
+        context['total_booked_seats'] = Seat.objects.filter(is_booked=True).count()
+        context['total_active_reservations'] = active_reservations
+        context['held_seats'] = held_seats
+        context['cancelled_today'] = cancelled_today
+        context['today_bookings'] = today_bookings
+        context['today_revenue'] = today_revenue
+        context['week_bookings'] = week_bookings
+        context['week_revenue'] = week_revenue
+        context['month_bookings'] = month_bookings
+        context['month_revenue'] = month_revenue
+        context['todays_shows'] = active_shows_today
+        context['upcoming_shows'] = upcoming_shows
+        context['occupancy_rate'] = occupancy_today
+        context['today_booked_seats'] = today_booked_seats
+        context['today_total_seats'] = today_total_seats
+        context['recent_movies'] = Movie.objects.filter(is_deleted=False).order_by('-id')[:5]
+        context['upcoming_movies_list'] = Movie.objects.filter(status='coming_soon', is_deleted=False).order_by('release_date')[:5]
 
         return context
 
@@ -584,6 +822,72 @@ def search_suggestions(request):
             'type': 'result',
         })
     return JsonResponse(results, safe=False)
+
+
+@admin_session_required
+def admin_global_search(request):
+    """Unified global search across Movies, Users, Bookings, Theatres, Shows."""
+    q = request.GET.get('q', '').strip()
+    if not q:
+        return JsonResponse({'results': {}})
+    limit = 5
+    results = {'movies': [], 'users': [], 'bookings': [], 'theatres': [], 'shows': []}
+
+    for m in Movie.objects.filter(is_deleted=False).filter(
+        Q(name__icontains=q) | Q(director__icontains=q) | Q(category__icontains=q)
+    )[:limit]:
+        results['movies'].append({
+            'id': m.id,
+            'title': m.name,
+            'subtitle': m.get_category_display() + (f' · {m.director}' if m.director else ''),
+            'url': reverse('admin_movie_detail', args=[m.id]),
+        })
+
+    for u in User.objects.filter(
+        Q(username__icontains=q) | Q(email__icontains=q)
+        | Q(first_name__icontains=q) | Q(last_name__icontains=q)
+    )[:limit]:
+        results['users'].append({
+            'id': u.id,
+            'title': u.username,
+            'subtitle': u.email or u.get_full_name() or 'User',
+            'url': reverse('admin_user_bookings', args=[u.id]),
+        })
+
+    for b in Booking.objects.select_related('movie', 'user').filter(
+        Q(booking_ref__icontains=q) | Q(id__icontains=q)
+    )[:limit]:
+        results['bookings'].append({
+            'id': b.id,
+            'title': b.booking_ref or f'#{b.id}',
+            'subtitle': (b.movie.name + ' · ' + b.user.username) if b.user_id else b.movie.name,
+            'url': reverse('admin_booking_detail', args=[b.id]),
+        })
+
+    theatre_names = (
+        Theater.objects.filter(name__icontains=q)
+        .values_list('name', flat=True)
+        .distinct()[:limit]
+    )
+    for name in theatre_names:
+        results['theatres'].append({
+            'id': name,
+            'title': name,
+            'subtitle': 'Theatre',
+            'url': reverse('admin_show_list') + '?theatre=' + quote_plus(name),
+        })
+
+    for s in Theater.objects.select_related('movie').filter(
+        Q(name__icontains=q) | Q(movie__name__icontains=q)
+    )[:limit]:
+        results['shows'].append({
+            'id': s.id,
+            'title': f'{s.name} · {s.movie.name}',
+            'subtitle': s.time.strftime('%d %b %Y, %I:%M %p'),
+            'url': reverse('admin_pricing_show_edit', args=[s.id]),
+        })
+
+    return JsonResponse({'results': results})
 
 
 @admin_session_required
@@ -2836,7 +3140,6 @@ class AuditLogListView(AdminSessionMixin, ListView):
         return qs
 
 
-@admin_session_required
 @admin_session_required
 def get_notifications(request):
     count = Notification.objects.filter(is_read=False).count()

@@ -1,0 +1,35 @@
+{% with color=kpi.color|default:'var(--accent-primary)' %}
+<div class="col-md-6 col-xl-3">
+  <div class="kpi-card" style="--kpi-color: {{ color }};">
+    <div class="kpi-card__top">
+      <div class="kpi-card__icon"><i class="bi {{ kpi.icon }}"></i></div>
+      {% if kpi.change is not None %}
+      <span class="kpi-card__change {% if kpi.change > 0 %}up{% elif kpi.change < 0 %}down{% else %}flat{% endif %}" title="vs previous period">
+        {% if kpi.change > 0 %}<i class="bi bi-arrow-up-right"></i>
+        {% elif kpi.change < 0 %}<i class="bi bi-arrow-down-right"></i>{% endif %}
+        {{ kpi.change|floatformat:1 }}%
+      </span>
+      {% else %}
+      <span class="kpi-card__change flat" title="No previous period data">&mdash;</span>
+      {% endif %}
+    </div>
+    <div class="kpi-card__value">{{ kpi.value }}</div>
+    <div class="kpi-card__label">{{ kpi.label }}</div>
+    {% if kpi.spark_line %}
+    <svg class="kpi-card__spark" viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="spark-fill-{{ kpi.key }}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="{{ color }}" stop-opacity="0.35"></stop>
+          <stop offset="100%" stop-color="{{ color }}" stop-opacity="0.02"></stop>
+        </linearGradient>
+      </defs>
+      <path d="{{ kpi.spark_area }}" fill="url(#spark-fill-{{ kpi.key }})"></path>
+      <polyline points="{{ kpi.spark_line }}" fill="none" stroke="{{ color }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+    </svg>
+    {% endif %}
+    {% if kpi.link %}
+    <a class="kpi-card__link" href="{{ kpi.link }}">View details <i class="bi bi-arrow-right"></i></a>
+    {% endif %}
+  </div>
+</div>
+{% endwith %}

@@ -167,7 +167,7 @@ class RegisterOtpFlowTests(TestCase):
         self.assertFalse(user.is_active)
         outbox = EmailOutbox.objects.filter(recipient='carol@example.com').first()
         self.assertIsNotNone(outbox)
-        self.assertIn('verify', outbox.subject.lower())
+        self.assertIn('verification code', outbox.subject.lower())
         self.assertRegex(outbox.plain_body, r'\b\d{6}\b')
         self.assertEqual(self.client.session.get('otp_user_id'), user.id)
 

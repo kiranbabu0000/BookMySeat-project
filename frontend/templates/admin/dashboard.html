@@ -2,279 +2,300 @@
 {% load static %}
 {% block title %}Dashboard{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
+
 {% block content %}
 
-<div class="row g-4 mb-4">
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-primary);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Total Movies</p>
-          <h3 class="stat-value">{{ total_movies }}</h3>
-        </div>
-        <div class="stat-icon" style="background: rgba(220,38,38,0.1); color: var(--accent-primary);">
-          <i class="bi bi-film"></i>
-        </div>
-      </div>
-      <a href="{% url 'admin_movie_list' %}" class="stat-link">View Movies <i class="bi bi-arrow-right"></i></a>
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="page-breadcrumb">
+      <i class="bi bi-grid-1x2-fill me-1"></i>
+      <span>{{ today|date:"l, d M Y" }}</span>
     </div>
+    <h1 class="page-title">Dashboard</h1>
+    <p class="page-subtitle">Real-time overview of your cinema business</p>
   </div>
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-secondary);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Total Theatres</p>
-          <h3 class="stat-value">{{ total_theatres }}</h3>
-        </div>
-        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-secondary) 12%, transparent); color: var(--accent-secondary);">
-          <i class="bi bi-building"></i>
-        </div>
-      </div>
-      <a href="{% url 'admin_theatre_list' %}" class="stat-link">View Theatres <i class="bi bi-arrow-right"></i></a>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-success);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Total Screens</p>
-          <h3 class="stat-value">{{ total_screens }}</h3>
-        </div>
-        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-success) 12%, transparent); color: var(--accent-success);">
-          <i class="bi bi-tv"></i>
-        </div>
-      </div>
-      <a href="{% url 'admin_screen_list' %}" class="stat-link">View Screens <i class="bi bi-arrow-right"></i></a>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-primary);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Total Shows</p>
-          <h3 class="stat-value">{{ total_shows }}</h3>
-        </div>
-        <div class="stat-icon" style="background: rgba(220,38,38,0.1); color: var(--accent-primary);">
-          <i class="bi bi-calendar-event"></i>
-        </div>
-      </div>
-      <a href="{% url 'admin_show_list' %}" class="stat-link">View Shows <i class="bi bi-arrow-right"></i></a>
-    </div>
+  <div class="d-flex align-items-center gap-2">
+    <a href="{% url 'admin_booking_reserve' %}" class="btn btn-bms-outline btn-sm">
+      <i class="bi bi-ticket-perforated me-1"></i>Reserve Ticket
+    </a>
+    <a href="{% url 'admin_show_add' %}" class="btn btn-bms btn-sm">
+      <i class="bi bi-plus-lg me-1"></i>Create Show
+    </a>
   </div>
 </div>
 
 <div class="row g-4 mb-4">
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-gold);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Total Bookings</p>
-          <h3 class="stat-value">{{ total_bookings }}</h3>
-        </div>
-        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-gold) 12%, transparent); color: var(--accent-gold);">
-          <i class="bi bi-ticket-perforated"></i>
-        </div>
-      </div>
-      <a href="{% url 'admin_booking_list' %}" class="stat-link">View Bookings <i class="bi bi-arrow-right"></i></a>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-secondary);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Total Users</p>
-          <h3 class="stat-value">{{ total_users }}</h3>
-        </div>
-        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-secondary) 12%, transparent); color: var(--accent-secondary);">
-          <i class="bi bi-people"></i>
-        </div>
-      </div>
-      <a href="{% url 'admin_user_list' %}" class="stat-link">View Users <i class="bi bi-arrow-right"></i></a>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-success);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Available Seats</p>
-          <h3 class="stat-value">{{ total_available_seats }}</h3>
-        </div>
-        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-success) 12%, transparent); color: var(--accent-success);">
-          <i class="bi bi-check-circle"></i>
-        </div>
-      </div>
-      <a href="{% url 'admin_seat_management' %}" class="stat-link">Manage Seats <i class="bi bi-arrow-right"></i></a>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-primary);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Booked Seats</p>
-          <h3 class="stat-value">{{ total_booked_seats }}</h3>
-        </div>
-        <div class="stat-icon" style="background: rgba(220,38,38,0.1); color: var(--accent-primary);">
-          <i class="bi bi-x-circle"></i>
-        </div>
-      </div>
-      <a href="{% url 'admin_seat_management' %}" class="stat-link">View Seats <i class="bi bi-arrow-right"></i></a>
-    </div>
-  </div>
+  {% for kpi in kpis %}
+    {% include 'admin/partials/_kpi_card.html' %}
+  {% endfor %}
 </div>
 
 <div class="row g-4 mb-4">
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-success);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Total Payments</p>
-          <h3 class="stat-value">{{ total_payments }}</h3>
-        </div>
-        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-success) 12%, transparent); color: var(--accent-success);">
-          <i class="bi bi-credit-card"></i>
-        </div>
-      </div>
-      <a href="{% url 'admin_payment_list' %}" class="stat-link">View Payments <i class="bi bi-arrow-right"></i></a>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-gold);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Total Revenue</p>
-          <h3 class="stat-value"><i class="bi bi-currency-rupee"></i>{{ total_revenue|floatformat:0 }}</h3>
-        </div>
-        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-gold) 12%, transparent); color: var(--accent-gold);">
-          <i class="bi bi-graph-up-arrow"></i>
-        </div>
-      </div>
-      <a href="{% url 'admin_payment_list' %}" class="stat-link">View Revenue <i class="bi bi-arrow-right"></i></a>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-secondary);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Gateway Transactions</p>
-          <h3 class="stat-value">{{ total_transactions }}</h3>
-        </div>
-        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-secondary) 12%, transparent); color: var(--accent-secondary);">
-          <i class="bi bi-arrow-repeat"></i>
-        </div>
-      </div>
-      <a href="{% url 'admin_payment_list' %}" class="stat-link">View Transactions <i class="bi bi-arrow-right"></i></a>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-primary);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Pending Refunds</p>
-          <h3 class="stat-value">{{ pending_refunds }}</h3>
-        </div>
-        <div class="stat-icon" style="background: rgba(220,38,38,0.1); color: var(--accent-primary);">
-          <i class="bi bi-arrow-counterclockwise"></i>
-        </div>
-      </div>
-      <a href="{% url 'admin_payment_list' %}?status=refund_requested" class="stat-link">View Refunds <i class="bi bi-arrow-right"></i></a>
-    </div>
-  </div>
-</div>
-
-<div class="row g-4 mb-4">
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-gold);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Today's Shows</p>
-          <h3 class="stat-value">{{ todays_shows }}</h3>
-        </div>
-        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-gold) 12%, transparent); color: var(--accent-gold);">
-          <i class="bi bi-calendar-day"></i>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-secondary);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Upcoming Shows</p>
-          <h3 class="stat-value">{{ upcoming_shows }}</h3>
-        </div>
-        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-secondary) 12%, transparent); color: var(--accent-secondary);">
-          <i class="bi bi-calendar-week"></i>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-success);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Active Movies</p>
-          <h3 class="stat-value">{{ active_movies }}</h3>
-        </div>
-        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-success) 12%, transparent); color: var(--accent-success);">
-          <i class="bi bi-play-circle"></i>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card" style="border-left: 4px solid var(--accent-gold);">
-      <div class="d-flex justify-content-between align-items-center">
-        <div>
-          <p class="stat-label">Upcoming Movies</p>
-          <h3 class="stat-value">{{ upcoming_movies }}</h3>
-        </div>
-        <div class="stat-icon" style="background: color-mix(in srgb, var(--accent-gold) 12%, transparent); color: var(--accent-gold);">
-          <i class="bi bi-clock"></i>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-4 mb-4">
-  <div class="col-md-8">
-    <div class="card-bms">
+  <div class="col-lg-8">
+    <div class="card-bms h-100">
       <div class="card-bms-header">
-        <h5 class="mb-0"><i class="bi bi-lightning-fill me-2"></i>Quick Actions</h5>
+        <div class="card-bms-header-actions w-100">
+          <div class="d-flex align-items-center gap-2 me-auto">
+            <i class="bi bi-graph-up-arrow" style="color: var(--accent-primary);"></i>
+            <h5 class="mb-0">Business Performance</h5>
+          </div>
+          <div class="range-pills" role="tablist" aria-label="Chart period">
+            <button type="button" class="range-pill active" data-range="7d" role="tab" aria-selected="true">7D</button>
+            <button type="button" class="range-pill" data-range="30d" role="tab" aria-selected="false">30D</button>
+            <button type="button" class="range-pill" data-range="90d" role="tab" aria-selected="false">90D</button>
+            <button type="button" class="range-pill" data-range="12m" role="tab" aria-selected="false">12M</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-bms-body">
+        <div class="d-flex flex-wrap gap-3 mb-3">
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge-bms-danger"><i class="bi bi-circle-fill me-1"></i>Revenue</span>
+            <strong class="small">&#8377;{{ month_revenue|floatformat:0 }}</strong>
+            <span class="text-muted small">this month</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge-bms-info"><i class="bi bi-circle-fill me-1"></i>Bookings</span>
+            <strong class="small">{{ month_bookings }}</strong>
+            <span class="text-muted small">this month</span>
+          </div>
+        </div>
+        <div style="height: 300px;">
+          <canvas id="businessChart" height="100"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card-bms h-100">
+      <div class="card-bms-header">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-activity" style="color: var(--accent-secondary);"></i>
+          <h5 class="mb-0">Today's Operations</h5>
+        </div>
+        <a href="{% url 'admin_show_list' %}" class="view-all-link">Shows <i class="bi bi-arrow-right"></i></a>
+      </div>
+      <div class="card-bms-body">
+        <div class="op-grid">
+          {% for op in operations %}
+          <a href="{{ op.link }}" class="op-tile" style="--op-color: {{ op.color }};">
+            <span class="op-tile__icon"><i class="bi {{ op.icon }}"></i></span>
+            <span>
+              <span class="op-tile__value">{{ op.value }}</span>
+              <span class="op-tile__label d-block">{{ op.label }}</span>
+            </span>
+          </a>
+          {% endfor %}
+        </div>
+        <hr style="border-color: var(--border-subtle); margin: 1rem 0;">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="text-muted small">Occupancy (today's shows)</span>
+          <div class="d-flex align-items-center gap-2">
+            <span class="small fw-semibold">{{ occupancy_rate }}%</span>
+          </div>
+        </div>
+        <div class="occ-bar mb-3" role="progressbar" aria-valuenow="{{ occupancy_rate }}" aria-valuemin="0" aria-valuemax="100" aria-label="Today's occupancy">
+          <div class="occ-bar__fill" style="width: {{ occupancy_rate }}%; --bar-color: var(--accent-success);"></div>
+        </div>
+        <div class="d-flex justify-content-between text-muted small">
+          <span>{{ today_booked_seats }} seats booked</span>
+          <span>{{ today_total_seats }} seats total</span>
+        </div>
+        <hr style="border-color: var(--border-subtle); margin: 1rem 0;">
+        <div class="row g-2 text-center">
+          <div class="col-6">
+            <div class="p-2 rounded-3" style="background: var(--surface-muted);">
+              <div class="fw-bold" style="color: var(--accent-secondary);">&#8377;{{ week_revenue|floatformat:0 }}</div>
+              <div class="text-muted" style="font-size: 0.7rem;">This Week</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-2 rounded-3" style="background: var(--surface-muted);">
+              <div class="fw-bold" style="color: var(--accent-gold);">{{ week_bookings }}</div>
+              <div class="text-muted" style="font-size: 0.7rem;">Bookings / 7 Days</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-7">
+    <div class="card-bms h-100">
+      <div class="card-bms-header">
+        <div class="card-bms-header-actions">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-clock-history" style="color: var(--accent-gold);"></i>
+            <h5 class="mb-0">Recent Bookings</h5>
+          </div>
+          <a href="{% url 'admin_booking_list' %}" class="view-all-link">View all <i class="bi bi-arrow-right"></i></a>
+        </div>
+      </div>
+      <div class="card-bms-body p-0">
+        {% if recent_bookings %}
+        <div class="table-responsive">
+          <table class="table table-bms mb-0">
+            <thead>
+              <tr>
+                <th>Ref</th>
+                <th>User</th>
+                <th>Movie</th>
+                <th>Theatre</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for booking in recent_bookings %}
+              <tr>
+                <td>
+                  <a href="{% url 'admin_booking_detail' booking.id %}" class="fw-semibold" style="color: var(--accent-secondary); text-decoration: none;">{{ booking.booking_ref|default:booking.id }}</a>
+                </td>
+                <td>{{ booking.user.username }}</td>
+                <td>{{ booking.movie.name|truncatechars:28 }}</td>
+                <td>{{ booking.theater.name|truncatechars:22 }}</td>
+                <td>&#8377;{{ booking.total|floatformat:0 }}</td>
+                <td>
+                  {% if booking.status == 'confirmed' %}
+                  <span class="badge-bms-success">Confirmed</span>
+                  {% else %}
+                  <span class="badge-bms-danger">Cancelled</span>
+                  {% endif %}
+                </td>
+                <td class="text-muted small">{{ booking.booked_at|date:"d M, g:i A" }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        {% url 'admin_booking_reserve' as reserve_url %}
+        {% include 'admin/partials/_empty_state.html' with icon="bi-ticket-perforated" title="No bookings yet" text="Bookings will appear here as customers reserve tickets." action_url=reserve_url action_label="Reserve Ticket" %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card-bms h-100">
+      <div class="card-bms-header">
+        <div class="card-bms-header-actions">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-fire" style="color: var(--accent-primary);"></i>
+            <h5 class="mb-0">Top Performing Content</h5>
+          </div>
+          <a href="{% url 'admin_analytics_movies' %}" class="view-all-link">Analytics <i class="bi bi-arrow-right"></i></a>
+        </div>
+      </div>
+      <div class="card-bms-body p-0">
+        {% if top_content %}
+        {% for m in top_content %}
+        <a href="{% url 'admin_movie_detail' m.id %}" class="dash-list-item text-decoration-none">
+          <div class="dash-list-item__avatar">
+            <i class="bi {% if m.category == 'live_concert' %}bi-music-note-beamed{% elif m.category == 'laughing_therapy' %}bi-emoji-laughing{% else %}bi-film{% endif %}"></i>
+          </div>
+          <div class="dash-list-item__main">
+            <div class="dash-list-item__title">{{ m.name }}</div>
+            <div class="dash-list-item__sub">{{ m.get_category_display }} &middot; {{ m.recent_bookings }} bookings this month</div>
+          </div>
+          <div class="dash-list-item__meta">
+            <div class="fw-bold" style="color: var(--accent-gold); font-size: 0.85rem;">&#8377;{{ m.recent_revenue|floatformat:0 }}</div>
+            <div class="text-muted" style="font-size: 0.7rem;">this month</div>
+          </div>
+        </a>
+        {% endfor %}
+        {% else %}
+        {% include 'admin/partials/_empty_state.html' with icon="bi-fire" title="No performance data" text="Confirmed bookings this month will rank your movies, concerts and shows here." %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-7">
+    <div class="card-bms h-100">
+      <div class="card-bms-header">
+        <div class="card-bms-header-actions">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-buildings" style="color: var(--accent-secondary);"></i>
+            <h5 class="mb-0">Theatre Performance</h5>
+          </div>
+          <a href="{% url 'admin_analytics_theaters' %}" class="view-all-link">Analytics <i class="bi bi-arrow-right"></i></a>
+        </div>
+      </div>
+      <div class="card-bms-body p-0">
+        {% if theatre_perf %}
+        {% for t in theatre_perf %}
+        <div class="dash-list-item">
+          <div class="dash-list-item__avatar" style="color: var(--accent-secondary);">
+            <i class="bi bi-buildings"></i>
+          </div>
+          <div class="dash-list-item__main">
+            <div class="dash-list-item__title">{{ t.name }}</div>
+            <div class="dash-list-item__sub">{{ t.shows }} shows &middot; {{ t.booked_seats }} of {{ t.total_seats }} seats booked</div>
+            <div class="occ-bar mt-2" role="progressbar" aria-valuenow="{{ t.occupancy }}" aria-valuemin="0" aria-valuemax="100" aria-label="{{ t.name }} occupancy">
+              <div class="occ-bar__fill" style="width: {{ t.occupancy }}%; --bar-color: {% if t.occupancy >= 75 %}var(--accent-success){% elif t.occupancy >= 40 %}var(--accent-gold){% else %}var(--accent-primary){% endif %};"></div>
+            </div>
+          </div>
+          <div class="dash-list-item__meta">
+            <div class="fw-bold" style="font-size: 0.95rem;">{{ t.occupancy }}%</div>
+            <div class="text-muted" style="font-size: 0.7rem;">occupied</div>
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        {% include 'admin/partials/_empty_state.html' with icon="bi-buildings" title="No theatre data" text="Shows scheduled at your theatres will appear here." %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card-bms h-100">
+      <div class="card-bms-header">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-lightning-charge-fill" style="color: var(--accent-gold);"></i>
+          <h5 class="mb-0">Quick Actions</h5>
+        </div>
       </div>
       <div class="card-bms-body">
         <div class="row g-3">
-          <div class="col-6 col-md-4 col-lg-2">
+          <div class="col-6 col-md-4">
             <a href="{% url 'admin_movie_add' %}" class="quick-action-card">
               <i class="bi bi-film"></i>
               <span>Add Movie</span>
             </a>
           </div>
-          <div class="col-6 col-md-4 col-lg-2">
+          <div class="col-6 col-md-4">
             <a href="{% url 'admin_theatre_add' %}" class="quick-action-card">
               <i class="bi bi-building"></i>
               <span>Add Theatre</span>
             </a>
           </div>
-          <div class="col-6 col-md-4 col-lg-2">
+          <div class="col-6 col-md-4">
             <a href="{% url 'admin_show_add' %}" class="quick-action-card">
               <i class="bi bi-calendar-event"></i>
               <span>Create Show</span>
             </a>
           </div>
-          <div class="col-6 col-md-4 col-lg-2">
+          <div class="col-6 col-md-4">
             <a href="{% url 'admin_booking_reserve' %}" class="quick-action-card">
               <i class="bi bi-ticket"></i>
               <span>Reserve Ticket</span>
             </a>
           </div>
-          <div class="col-6 col-md-4 col-lg-2">
+          <div class="col-6 col-md-4">
             <a href="{% url 'admin_coupon_add' %}" class="quick-action-card">
               <i class="bi bi-tags"></i>
               <span>Create Coupon</span>
             </a>
           </div>
-          <div class="col-6 col-md-4 col-lg-2">
+          <div class="col-6 col-md-4">
             <a href="{% url 'admin_staff_add' %}" class="quick-action-card">
               <i class="bi bi-person-badge"></i>
               <span>Add Staff</span>
@@ -284,253 +305,75 @@
       </div>
     </div>
   </div>
-  <div class="col-md-4">
-    <div class="card-bms">
-      <div class="card-bms-header">
-        <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Quick Overview</h5>
-      </div>
-      <div class="card-bms-body">
-        <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted small">Theatres</span>
-          <strong>{{ total_theatres }}</strong>
-        </div>
-        <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted small">Screens</span>
-          <strong>{{ total_screens }}</strong>
-        </div>
-        <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted small">Shows Running Today</span>
-          <strong>{{ shows_running_today }}</strong>
-        </div>
-        <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted small">Notifications</span>
-          <strong>{{ notifications }}</strong>
-        </div>
-        <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted small">Active Reservations</span>
-          <strong><a href="{% url 'admin_reservation_list' %}" class="text-reset">{{ total_active_reservations }}</a></strong>
-        </div>
-        <div class="d-flex justify-content-between mb-2">
-          <span class="text-muted small">Held Seats</span>
-          <strong>{{ held_seats }}</strong>
-        </div>
-        <div class="d-flex justify-content-between">
-          <span class="text-muted small">Pending Refunds</span>
-          <strong><a href="{% url 'admin_payment_list' %}?status=refund_requested" class="text-reset">{{ pending_refunds }}</a></strong>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-4 mb-4">
-  <div class="col-md-6">
-    <div class="card-bms">
-      <div class="card-bms-header">
-        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Bookings</h5>
-      </div>
-      <div class="card-bms-body p-0">
-        <div class="table-responsive">
-          <table class="table table-bms mb-0">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>User</th>
-                <th>Movie</th>
-                <th>Theatre</th>
-                <th>Seat</th>
-                <th>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for booking in recent_bookings %}
-              <tr>
-                <td>{{ booking.id }}</td>
-                <td>{{ booking.user.username }}</td>
-                <td>{{ booking.movie.name|truncatechars:30 }}</td>
-                <td>{{ booking.theater.name|truncatechars:25 }}</td>
-                <td>{{ booking.seat.seat_number }}</td>
-                <td>{{ booking.booked_at|date:"d M Y, g:i A" }}</td>
-              </tr>
-              {% empty %}
-              <tr><td colspan="6" class="text-center text-muted py-4">No bookings yet.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-6">
-    <div class="card-bms">
-      <div class="card-bms-header">
-        <h5 class="mb-0"><i class="bi bi-film me-2"></i>Recently Added Movies</h5>
-      </div>
-      <div class="card-bms-body p-0">
-        <div class="table-responsive">
-          <table class="table table-bms mb-0">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Movie</th>
-                <th>Rating</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for m in recent_movies %}
-              <tr>
-                <td>{{ m.id }}</td>
-                <td>{{ m.name|truncatechars:30 }}</td>
-                <td>{{ m.rating }}/10</td>
-                <td>
-                  {% if m.status == 'now_showing' %}
-                  <span class="badge-bms-success">Now Showing</span>
-                  {% elif m.status == 'coming_soon' %}
-                  <span class="badge-bms-warning">Coming Soon</span>
-                  {% else %}
-                  <span class="badge-bms-secondary">Ended</span>
-                  {% endif %}
-                </td>
-                <td><a href="{% url 'admin_movie_detail' m.id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a></td>
-              </tr>
-              {% empty %}
-              <tr><td colspan="5" class="text-center text-muted py-4">No movies yet.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-4 mb-4">
-  <div class="col-md-6">
-    <div class="card-bms">
-      <div class="card-bms-header">
-        <h5 class="mb-0"><i class="bi bi-building me-2"></i>Recent Shows / Screenings</h5>
-      </div>
-      <div class="card-bms-body p-0">
-        <div class="table-responsive">
-          <table class="table table-bms mb-0">
-            <thead>
-              <tr>
-                <th>Theatre</th>
-                <th>Movie</th>
-                <th>Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for s in recent_shows %}
-              <tr>
-                <td>{{ s.name|truncatechars:25 }}</td>
-                <td>{{ s.movie.name|truncatechars:30 }}</td>
-                <td>{{ s.time|date:"d M Y, g:i A" }}</td>
-              </tr>
-              {% empty %}
-              <tr><td colspan="3" class="text-center text-muted py-4">No shows yet.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-6">
-    <div class="card-bms">
-      <div class="card-bms-header">
-        <h5 class="mb-0"><i class="bi bi-calendar-event me-2"></i>Upcoming Movies</h5>
-      </div>
-      <div class="card-bms-body p-0">
-        <div class="table-responsive">
-          <table class="table table-bms mb-0">
-            <thead>
-              <tr>
-                <th>Movie</th>
-                <th>Release Date</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for m in upcoming_movies_list %}
-              <tr>
-                <td>{{ m.name|truncatechars:30 }}</td>
-                <td>{{ m.release_date|date:"d M Y"|default:'TBA' }}</td>
-                <td><a href="{% url 'admin_movie_detail' m.id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a></td>
-              </tr>
-              {% empty %}
-              <tr><td colspan="3" class="text-center text-muted py-4">No upcoming movies.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
 </div>
 
 <div class="row g-4">
-  <div class="col-md-12">
+  <div class="col-12">
     <div class="card-bms">
       <div class="card-bms-header">
-        <h5 class="mb-0"><i class="bi bi-grid-3x3-gap me-2"></i>Quick Access</h5>
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-box-seam" style="color: var(--accent-success);"></i>
+          <h5 class="mb-0">Platform at a Glance</h5>
+        </div>
       </div>
       <div class="card-bms-body">
         <div class="row g-3">
-          <div class="col-md-4 col-lg-2">
-            <div class="card-bms h-100 text-center p-3" style="border: 1px solid var(--border-color);">
-              <i class="bi bi-film fs-1" style="color: var(--accent-primary);"></i>
-              <h6 class="mt-2">Movies</h6>
-              <p class="small text-muted mb-2">{{ total_movies }} total</p>
-              <a href="{% url 'admin_movie_list' %}" class="btn btn-sm btn-bms-outline w-100">View</a>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="text-center p-2 rounded-3" style="background: var(--surface-muted);">
+              <div class="fs-4 fw-bold" style="color: var(--accent-primary);">{{ total_movies }}</div>
+              <div class="text-muted small">Movies</div>
             </div>
           </div>
-          <div class="col-md-4 col-lg-2">
-            <div class="card-bms h-100 text-center p-3" style="border: 1px solid var(--border-color);">
-              <i class="bi bi-building fs-1" style="color: var(--accent-secondary);"></i>
-              <h6 class="mt-2">Theatres</h6>
-              <p class="small text-muted mb-2">{{ total_theatres }} total</p>
-              <a href="{% url 'admin_theatre_list' %}" class="btn btn-sm btn-bms-outline w-100">View</a>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="text-center p-2 rounded-3" style="background: var(--surface-muted);">
+              <div class="fs-4 fw-bold" style="color: var(--accent-secondary);">{{ total_theatres }}</div>
+              <div class="text-muted small">Theatres</div>
             </div>
           </div>
-          <div class="col-md-4 col-lg-2">
-            <div class="card-bms h-100 text-center p-3" style="border: 1px solid var(--border-color);">
-              <i class="bi bi-tv fs-1" style="color: var(--accent-success);"></i>
-              <h6 class="mt-2">Screens</h6>
-              <p class="small text-muted mb-2">{{ total_screens }} total</p>
-              <a href="{% url 'admin_screen_list' %}" class="btn btn-sm btn-bms-outline w-100">View</a>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="text-center p-2 rounded-3" style="background: var(--surface-muted);">
+              <div class="fs-4 fw-bold" style="color: var(--accent-success);">{{ total_screens }}</div>
+              <div class="text-muted small">Screens</div>
             </div>
           </div>
-          <div class="col-md-4 col-lg-2">
-            <div class="card-bms h-100 text-center p-3" style="border: 1px solid var(--border-color);">
-              <i class="bi bi-calendar-event fs-1" style="color: var(--accent-gold);"></i>
-              <h6 class="mt-2">Shows</h6>
-              <p class="small text-muted mb-2">{{ total_shows }} total</p>
-              <a href="{% url 'admin_show_list' %}" class="btn btn-sm btn-bms-outline w-100">View</a>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="text-center p-2 rounded-3" style="background: var(--surface-muted);">
+              <div class="fs-4 fw-bold" style="color: var(--accent-gold);">{{ total_shows }}</div>
+              <div class="text-muted small">Shows</div>
             </div>
           </div>
-          <div class="col-md-4 col-lg-2">
-            <div class="card-bms h-100 text-center p-3" style="border: 1px solid var(--border-color);">
-              <i class="bi bi-grid-3x3-gap-fill fs-1" style="color: var(--accent-primary);"></i>
-              <h6 class="mt-2">Seats</h6>
-              <p class="small text-muted mb-2">{{ total_available_seats }} free</p>
-              <a href="{% url 'admin_seat_management' %}" class="btn btn-sm btn-bms-outline w-100">Manage</a>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="text-center p-2 rounded-3" style="background: var(--surface-muted);">
+              <div class="fs-4 fw-bold" style="color: var(--accent-secondary);">{{ total_users }}</div>
+              <div class="text-muted small">Users</div>
             </div>
           </div>
-          <div class="col-md-4 col-lg-2">
-            <div class="card-bms h-100 text-center p-3" style="border: 1px solid var(--border-color);">
-              <i class="bi bi-ticket-perforated fs-1" style="color: var(--accent-secondary);"></i>
-              <h6 class="mt-2">Bookings</h6>
-              <p class="small text-muted mb-2">{{ total_bookings }} total</p>
-              <a href="{% url 'admin_booking_list' %}" class="btn btn-sm btn-bms-outline w-100">View</a>
+          <div class="col-6 col-md-4 col-lg-2">
+            <div class="text-center p-2 rounded-3" style="background: var(--surface-muted);">
+              <div class="fs-4 fw-bold" style="color: var(--accent-primary);">{{ total_bookings }}</div>
+              <div class="text-muted small">Bookings</div>
             </div>
           </div>
+        </div>
+        <hr style="border-color: var(--border-subtle); margin: 1rem 0;">
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
+          <div class="d-flex flex-wrap gap-2">
+            <span class="badge-bms-info"><i class="bi bi-credit-card me-1"></i>&#8377;{{ total_revenue|floatformat:0 }} lifetime revenue</span>
+            <span class="badge-bms-warning"><i class="bi bi-calendar-week me-1"></i>{{ upcoming_shows }} upcoming shows</span>
+            <span class="badge-bms-success"><i class="bi bi-play-circle me-1"></i>{{ active_movies }} now showing</span>
+            <span class="badge-bms-secondary"><i class="bi bi-hourglass-split me-1"></i>{{ total_active_reservations }} active reservations</span>
+          </div>
+          <a href="{% url 'admin_analytics_overview' %}" class="view-all-link">Open Analytics <i class="bi bi-arrow-right"></i></a>
         </div>
       </div>
     </div>
   </div>
 </div>
 
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  window.BMS_DASHBOARD_RANGES = {{ chart_ranges|safe }};
+</script>
 {% endblock %}

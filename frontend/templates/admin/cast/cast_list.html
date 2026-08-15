@@ -6,7 +6,7 @@
 <div class="card-bms">
   <div class="card-bms-header d-flex justify-content-between align-items-center flex-wrap gap-2">
     <form method="get" class="d-flex gap-2 align-items-center">
-      <input type="search" name="search" class="form-control form-control-sm" placeholder="Search cast..." value="{{ request.GET.search|default:'' }}" style="width: 200px;">
+      <input type="search" name="search" class="form-control form-control-sm" placeholder="Search cast..." value="{{ request.GET.search|default:'' }}" style="width: min(200px, 100%);">
       <select name="movie" class="form-select form-select-sm" style="width: auto;">
         <option value="">All Movies</option>
         {% for m in movies %}

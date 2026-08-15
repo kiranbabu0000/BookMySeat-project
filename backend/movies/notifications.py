@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
+from django.core.mail.message import make_msgid
 from django.template.loader import render_to_string
 from django.urls import reverse
 
@@ -154,7 +155,7 @@ def _email_content(user, show, bookings, total, payment_tx=None, reservation=Non
             'cid:qr_ticket', _data_uri(qr_bytes)
         )
     return {
-        'subject': 'Booking confirmed — {}'.format(show.movie.name),
+        'subject': 'BookMySeat — Booking Confirmed: {} (#{})'.format(show.movie.name, booking_ref),
         'plain_body': '\n'.join(plain_lines),
         'html_body': html_body,
         'pdf_filename': 'ticket_{}.pdf'.format(booking_ref),
@@ -290,7 +291,9 @@ def send_payment_failed_email(tx):
         })
         outbox = EmailOutbox.objects.create(
             recipient=recipient,
-            subject='Payment failed \u2014 {}'.format(movie_name),
+            subject='BookMySeat — Payment Failed: {} (#{})'.format(
+                movie_name, tx.gateway_order_id or getattr(reservation, 'booking_ref', '') or tx.pk
+            ),
             plain_body='\n'.join(plain_lines),
             html_body=html_body,
             max_attempts=getattr(settings, 'EMAIL_OUTBOX_MAX_ATTEMPTS', 6),
@@ -391,6 +394,9 @@ def send_outbox_message(outbox):
                     bytes(outbox.pdf_attachment),
                     'application/pdf',
                 )
+            # Fresh, unique Message-ID per delivery so mail clients never thread
+            # separate bookings/notifications together as one conversation.
+            message.extra_headers['Message-ID'] = make_msgid()
             message.send(fail_silently=False)
         logger.info(
             'EMAIL SENT outbox=%s recipient=%s', outbox.pk, outbox.recipient,

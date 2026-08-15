@@ -25,7 +25,7 @@
         <option value="">Visibility</option>
         <option value="1" {% if request.GET.hidden == '1' %}selected{% endif %}>Hidden</option>
       </select>
-      <input type="search" name="search" class="form-control form-control-sm" placeholder="Search reviews..." value="{{ request.GET.search|default:'' }}" style="width: 200px;">
+      <input type="search" name="search" class="form-control form-control-sm" placeholder="Search reviews..." value="{{ request.GET.search|default:'' }}" style="width: min(200px, 100%);">
       <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-funnel"></i> Filter</button>
       <a href="{% url 'admin_review_list' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear</a>
       <label class="small text-muted ms-2 me-1">Show</label>

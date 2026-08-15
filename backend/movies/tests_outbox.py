@@ -191,7 +191,8 @@ class BookingEnqueueTests(TestCase):
         self.assertEqual(pending.count(), 1, 'exactly one confirmation email enqueued')
         message = pending.first()
         self.assertEqual(message.recipient, 'alice@example.com')
-        self.assertIn('Booking confirmed', message.subject)
+        self.assertIn('Booking Confirmed', message.subject)
+        self.assertIn('#', message.subject, 'subject should carry the booking reference')
         self.assertTrue(
             message.pdf_attachment.startswith(b'%PDF'),
             'the enqueued message must carry a generated PDF ticket',
@@ -261,10 +262,10 @@ class BookingEnqueueTests(TestCase):
         self.assertEqual(messages.count(), 1, 'exactly one email for a failed payment')
         message = messages.first()
         self.assertEqual(message.recipient, 'alice@example.com')
-        self.assertIn('Payment failed', message.subject)
-        self.assertNotIn('Booking confirmed', message.subject)
+        self.assertIn('Payment Failed', message.subject)
+        self.assertNotIn('Booking Confirmed', message.subject)
         self.assertIn('Card declined', message.plain_body)
-        self.assertNotIn('Booking confirmed', message.html_body)
+        self.assertNotIn('Booking Confirmed', message.html_body)
         self.assertEqual(mail.outbox, [], 'email must not be sent inside the request')
 
     def test_failed_payment_email_is_sent_only_once(self):

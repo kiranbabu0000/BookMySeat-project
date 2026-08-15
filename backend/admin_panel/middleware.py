@@ -8,8 +8,8 @@ ADMIN_URL_PREFIXES = (
     '/cast/', '/theatres/', '/screens/', '/shows/', '/pricing/',
     '/trailers/', '/images/', '/seats/', '/bookings/', '/reservations/',
     '/payments/', '/users/', '/staff/', '/coupons/', '/notifications/',
-    '/reviews/', '/logs/', '/settings/', '/search-suggestions/',
-    '/analytics/',
+    '/reviews/', '/logs/', '/settings/', '/search-suggestions/', '/admin-search/',
+    '/analytics/', '/account/',
 )
 
 

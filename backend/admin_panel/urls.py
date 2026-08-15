@@ -6,7 +6,7 @@ urlpatterns = [
     path('admin-login/', views.admin_login_view, name='admin_login'),
     path('admin-logout/', views.admin_logout_view, name='admin_logout'),
     path('dashboard/', views.DashboardView.as_view(), name='admin_dashboard'),
-    path('profile/', views.profile_view, name='admin_profile'),
+    path('account/', views.profile_view, name='admin_profile'),
 
     path('admin-movies/', views.MovieListView.as_view(), name='admin_movie_list'),
     path('admin-movies/add/', views.MovieCreateView.as_view(), name='admin_movie_add'),
@@ -115,6 +115,7 @@ urlpatterns = [
 
     path('settings/', views.SettingsView.as_view(), name='admin_settings'),
     path('search-suggestions/', views.search_suggestions, name='search_suggestions'),
+    path('admin-search/', views.admin_global_search, name='admin_global_search'),
 
     path('analytics/', analytics_views.OverviewView.as_view(), name='admin_analytics_overview'),
     path('analytics/revenue/', analytics_views.RevenueView.as_view(), name='admin_analytics_revenue'),

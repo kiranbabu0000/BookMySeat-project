@@ -13,7 +13,7 @@ from django.http import JsonResponse
 from django.urls import reverse
 from movies.models import Movie, Booking, Reservation, Wishlist, TicketDownload
 from movies.discovery import trending_movies, recently_released, recommended_for_user, _min_price_subquery
-from admin_panel.models import AdminProfile, PaymentTransaction, Notification, Genre
+from admin_panel.models import AdminProfile, PaymentTransaction, Notification, Genre, Coupon
 from bookmyseat.ratelimit import is_locked_out, login_failed, login_succeeded
 from .otp import (
     OTP_MAX_RESENDS,
@@ -63,6 +63,32 @@ def home(request):
         .annotate(min_price=_min_price_subquery())
         .order_by('-rating', '-release_date')[:8]
     )
+    city = (request.COOKIES.get('bms_city') or '').strip()
+    city_trending = []
+    if city:
+        city_trending = list(
+            Movie.objects.filter(
+                status='now_showing',
+                is_deleted=False,
+                category='movie',
+                shows__theatre__city__iexact=city,
+                shows__status='active',
+            )
+            .distinct()
+            .annotate(min_price=_min_price_subquery())[:10]
+        )
+    carousel_slides = []
+    for movie in list(movies)[:3]:
+        carousel_slides.append({'type': 'movie', 'movie': movie})
+    event = (live_concerts.first() or laughing_therapy.first())
+    if event:
+        carousel_slides.append({'type': 'event', 'movie': event})
+    offer = Coupon.objects.filter(
+        is_active=True,
+        valid_to__gte=timezone.now(),
+    ).exclude(discount_percent=0, discount_amount=0).order_by('-discount_percent').first()
+    if offer:
+        carousel_slides.append({'type': 'offer', 'coupon': offer})
     coming_soon = list(
         Movie.objects.filter(status='coming_soon', is_deleted=False, category='movie')
         .order_by('release_date')[:8]
@@ -95,6 +121,9 @@ def home(request):
         'top_rated': top_rated,
         'coming_soon': coming_soon,
         'genres': genre_links,
+        'carousel_slides': carousel_slides,
+        'city_trending': city_trending,
+        'current_city': city,
     })
 
 def register(request):

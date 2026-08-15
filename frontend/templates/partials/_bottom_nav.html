@@ -1,0 +1,37 @@
+<!-- Mobile bottom navigation (hidden on lg+; not shown in the booking flow) -->
+<nav class="bottom-nav d-lg-none" aria-label="Quick navigation">
+  <a class="bottom-nav__item{% if request.resolver_match.url_name == 'home' %} is-active{% endif %}" href="{% url 'home' %}"{% if request.resolver_match.url_name == 'home' %} aria-current="page"{% endif %}>
+    <i class="bi bi-house-door-fill" aria-hidden="true"></i>
+    <span>Home</span>
+  </a>
+  <a class="bottom-nav__item{% if request.resolver_match.url_name == 'movie_list' and not request.GET.category %} is-active{% endif %}" href="{% url 'movie_list' %}"{% if request.resolver_match.url_name == 'movie_list' and not request.GET.category %} aria-current="page"{% endif %}>
+    <i class="bi bi-film" aria-hidden="true"></i>
+    <span>Movies</span>
+  </a>
+  <a class="bottom-nav__item{% if request.GET.category == 'live_concert' %} is-active{% endif %}" href="{% url 'movie_list' %}?category=live_concert"{% if request.GET.category == 'live_concert' %} aria-current="page"{% endif %}>
+    <i class="bi bi-music-note-beamed" aria-hidden="true"></i>
+    <span>Events</span>
+  </a>
+  {% if user.is_authenticated %}
+  <a class="bottom-nav__item{% if request.resolver_match.url_name == 'profile' %} is-active{% endif %}" href="{% url 'profile' %}"{% if request.resolver_match.url_name == 'profile' %} aria-current="page"{% endif %}>
+    <i class="bi bi-ticket-perforated" aria-hidden="true"></i>
+    <span>My Tickets</span>
+  </a>
+  {% else %}
+  <a class="bottom-nav__item" href="{% url 'login' %}">
+    <i class="bi bi-ticket-perforated" aria-hidden="true"></i>
+    <span>My Tickets</span>
+  </a>
+  {% endif %}
+  {% if user.is_authenticated %}
+  <a class="bottom-nav__item{% if request.resolver_match.url_name == 'profile' %} is-active{% endif %}" href="{% url 'profile' %}"{% if request.resolver_match.url_name == 'profile' %} aria-current="page"{% endif %}>
+    <i class="bi bi-person-fill" aria-hidden="true"></i>
+    <span>Profile</span>
+  </a>
+  {% else %}
+  <a class="bottom-nav__item" href="{% url 'login' %}">
+    <i class="bi bi-person-fill" aria-hidden="true"></i>
+    <span>Login</span>
+  </a>
+  {% endif %}
+</nav>

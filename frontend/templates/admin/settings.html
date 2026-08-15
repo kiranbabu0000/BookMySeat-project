@@ -2,6 +2,16 @@
 {% block title %}Settings{% endblock %}
 {% block page_title %}System Settings{% endblock %}
 {% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-breadcrumb">
+      <i class="bi bi-gear me-1"></i>
+      <span>{{ server_time|date:"l, d M Y" }}</span>
+    </div>
+    <h1 class="page-title">System Settings</h1>
+    <p class="page-subtitle">Platform configuration and environment information</p>
+  </div>
+</div>
 <div class="row g-4">
   <div class="col-md-6">
     <div class="card-bms">

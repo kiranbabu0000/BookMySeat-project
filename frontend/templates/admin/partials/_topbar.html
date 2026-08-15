@@ -13,12 +13,14 @@
     </nav>
   </div>
   <div class="d-flex align-items-center gap-2">
-    <form class="search-form d-none d-md-block" method="GET" action="" role="search">
-      <div class="search-input-wrap">
-        <i class="bi bi-search search-input-icon"></i>
-        <input type="text" name="search" class="form-control form-control-sm search-input" placeholder="Search..." value="{{ request.GET.search|default:'' }}" aria-label="Search">
+    <div class="admin-search" id="adminSearch">
+      <div class="admin-search__wrap">
+        <i class="bi bi-search admin-search__icon"></i>
+        <input type="search" class="admin-search__input" id="adminSearchInput" placeholder="Search movies, users, bookings..." autocomplete="off" spellcheck="false" aria-label="Global search" aria-haspopup="listbox">
+        <span class="admin-search__kbd" aria-hidden="true">/</span>
       </div>
-    </form>
+      <div class="admin-search__results" id="adminSearchResults" role="listbox" aria-label="Search results"></div>
+    </div>
     <a href="{% url 'admin_notification_list' %}" class="notification-badge btn btn-sm" title="Notifications" aria-label="Notifications" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-secondary); position: relative;">
       <i class="bi bi-bell-fill"></i>
       {% if notifications > 0 %}
