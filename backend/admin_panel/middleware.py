@@ -9,7 +9,7 @@ ADMIN_URL_PREFIXES = (
     '/trailers/', '/images/', '/seats/', '/bookings/', '/reservations/',
     '/payments/', '/users/', '/staff/', '/coupons/', '/notifications/', '/admin-notifications/',
     '/reviews/', '/logs/', '/settings/', '/search-suggestions/', '/admin-search/',
-    '/analytics/', '/account/',
+    '/analytics/', '/account/', '/scanner/', '/scans/',
 )
 
 

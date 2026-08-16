@@ -85,6 +85,25 @@ class ScannerAccessTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Camera Scanner')
 
+    def test_scanner_page_works_with_admin_session_only(self):
+        """Regression: scanner paths must be covered by AdminIdentityMiddleware.
+
+        In production the admin portal does not set Django's ``_auth_user_id``;
+        ``request.user`` is resolved from the admin session keys. If the
+        middleware does not know the path it leaves ``request.user`` anonymous
+        and the scanner redirects to /admin-login/ forever.
+        """
+        session = self.client.session
+        session['admin_user_id'] = self.admin.id
+        session['is_admin_authenticated'] = True
+        session['admin_login_time'] = str(timezone.now())
+        session.save()
+        session['admin_session_id'] = session.session_key
+        session.save()
+        response = self.client.get(reverse('admin_ticket_scanner'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Camera Scanner')
+
     def test_scan_history_requires_admin_login(self):
         response = self.client.get(reverse('admin_ticket_scan_history'))
         self.assertEqual(response.status_code, 302)
