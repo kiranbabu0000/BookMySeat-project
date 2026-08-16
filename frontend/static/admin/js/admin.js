@@ -126,7 +126,10 @@
     }
 
     fetchUnreadCount();
-    setInterval(fetchUnreadCount, 30000);
+    var pollInterval = setInterval(fetchUnreadCount, 30000);
+    window.addEventListener('pagehide', function () {
+      clearInterval(pollInterval);
+    });
   }
 
   function initAlertAutoHide() {

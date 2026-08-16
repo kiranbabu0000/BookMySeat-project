@@ -137,9 +137,10 @@
     function highlightName(name, term) {
       var text = escapeHtml(name);
       if (!term) return text;
-      var idx = name.toLowerCase().indexOf(term.toLowerCase());
+      var escapedTerm = escapeHtml(term);
+      var idx = text.toLowerCase().indexOf(escapedTerm.toLowerCase());
       if (idx === -1) return text;
-      return text.slice(0, idx) + '<mark>' + text.slice(idx, idx + term.length) + '</mark>' + text.slice(idx + term.length);
+      return text.slice(0, idx) + '<mark>' + text.slice(idx, idx + escapedTerm.length) + '</mark>' + text.slice(idx + escapedTerm.length);
     }
     function getRecent() {
       try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch (e) { return []; }

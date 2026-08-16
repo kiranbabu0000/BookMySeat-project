@@ -821,6 +821,7 @@ class PaymentAdminTests(TestCase):
         session = self.client.session
         session['admin_user_id'] = self.admin.id
         session['is_admin_authenticated'] = True
+        session['admin_login_time'] = str(timezone.now())
         session.save()
 
     def test_payment_list_page_renders(self):
@@ -852,4 +853,4 @@ class PaymentAdminTests(TestCase):
     def test_dashboard_shows_revenue(self):
         response = self.client.get(reverse('admin_dashboard'))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Total Revenue')
+        self.assertContains(response, 'Revenue')

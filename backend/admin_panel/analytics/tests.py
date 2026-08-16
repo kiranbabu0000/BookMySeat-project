@@ -328,6 +328,7 @@ class AnalyticsViewTests(TestCase):
         session['admin_user_id'] = user.id
         session['is_admin_authenticated'] = True
         session['admin_session_id'] = session.session_key
+        session['admin_login_time'] = str(timezone.now())
         session.save()
 
     def test_anonymous_redirected_to_admin_login(self):
@@ -488,6 +489,7 @@ class AnalyticsPageRenderTests(AnalyticsDataTestCase):
         session['admin_user_id'] = self.superuser.id
         session['is_admin_authenticated'] = True
         session['admin_session_id'] = session.session_key
+        session['admin_login_time'] = str(timezone.now())
         session.save()
 
     def test_overview_shows_seeded_totals(self):
@@ -532,3 +534,66 @@ class AnalyticsPageRenderTests(AnalyticsDataTestCase):
                      'theaters', 'peak', 'payments', 'refunds', 'users'):
             url = '/analytics/' if area == 'overview' else f'/analytics/{area}/'
             self.assertEqual(self.client.get(f'{url}?range=last_7_days').status_code, 200)
+
+
+class MonthGranularitySeriesTests(TestCase):
+    """Regression: month-bucketed series must not be all zeros.
+
+    TruncMonth returns an aware datetime on the 1st of the month. The series
+    builder previously normalised window starts to ``date`` objects, so every
+    lookup missed and any range wider than ~92 days (this_year, previous_year,
+    long custom ranges) rendered an all-zero chart.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user('series_user', 'series@example.com', 'password123')
+        cls.movie = Movie.objects.create(name='Series Movie', rating=7.5, status='now_showing')
+        cls.theater = Theater.objects.create(name='Series PVR', movie=cls.movie, time=_at(0, hour=5))
+        cls.seats = [
+            Seat.objects.create(theater=cls.theater, seat_number=f'C{i}')
+            for i in range(1, 4)
+        ]
+        cls.reservation = Reservation.objects.create(
+            token='series-tok-1', user=cls.user, show=cls.theater,
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+        cls._seat_cursor = 0
+
+    def _payment(self, when, amount):
+        seat = self.seats[self._seat_cursor]
+        self._seat_cursor += 1
+        booking = Booking.objects.create(
+            user=self.user, seat=seat, movie=self.movie, theater=self.theater,
+            status='confirmed', booking_ref=generate_booking_ref(),
+            total=Decimal(amount), ticket_price=Decimal(amount),
+            gst_rate=Decimal('18.00'),
+        )
+        payment = Payment.objects.create(
+            booking=booking, amount=Decimal(amount), status='completed',
+            payment_method='upi',
+        )
+        _backdate(Payment, payment.pk, paid_at=when)
+        return payment
+
+    def test_month_series_buckets_are_populated(self):
+        jan = timezone.make_aware(
+            timezone.datetime(2024, 1, 5, 14, 0, 0))
+        jun = timezone.make_aware(
+            timezone.datetime(2024, 6, 15, 14, 0, 0))
+        dec = timezone.make_aware(
+            timezone.datetime(2024, 12, 25, 14, 0, 0))
+        self._payment(jan, '100.00')
+        self._payment(jun, '200.00')
+        self._payment(dec, '300.00')
+
+        rng = analytics.resolve_range('custom', date(2024, 1, 1), date(2024, 12, 31))
+        labels, values, gran = analytics._series(
+            Payment.objects.filter(status='completed'), 'paid_at', rng, 'sum', 'amount')
+        self.assertEqual(gran, 'month')
+        self.assertEqual(len(labels), 12)
+        self.assertEqual(labels[0].startswith('Jan'), True)
+        self.assertEqual(values[0], Decimal('100.00'))
+        self.assertEqual(values[5], Decimal('200.00'))
+        self.assertEqual(values[11], Decimal('300.00'))
+        self.assertEqual(sum(values), Decimal('600.00'))

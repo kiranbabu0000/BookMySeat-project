@@ -197,15 +197,6 @@
           if (form) form.submit();
         }
       });
-
-      document.addEventListener('click', function(e) {
-        var btn = e.target.closest('[data-confirm]');
-        if (btn) {
-          if (!confirm(btn.getAttribute('data-confirm') || 'Are you sure?')) {
-            e.preventDefault();
-          }
-        }
-      });
     });
   </script>
   {% block extra_js %}{% endblock %}

@@ -5,6 +5,7 @@ Concurrency is protected with select_for_update() row locking; the unique
 OneToOne relationship on ReservedSeat.seat provides a database-level backstop
 so the same seat can never be part of two active reservations.
 """
+import logging
 import secrets
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -24,6 +25,8 @@ from .models import (
     ShowPrice,
     Theater,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _round2(value):
@@ -827,6 +830,25 @@ def create_walkin_bookings(user, movie, show, seat_count, payment_method='manual
                 pricing['total'] - sum(charged[:-1], Decimal('0.00'))
             )
 
+        reservation = Reservation.objects.create(
+            token=secrets.token_urlsafe(24),
+            booking_ref=_generate_reservation_booking_ref(),
+            ticket_count=count,
+            user=user,
+            show=show,
+            status='booked',
+            payment_status='completed',
+            subtotal_amount=pricing['subtotal'],
+            convenience_fee=pricing['convenience_fee'],
+            platform_fee=pricing['platform_fee'],
+            misc_fee=pricing['misc_fee'],
+            gst_rate=pricing['gst_rate'],
+            gst_amount=pricing['gst'],
+            discount_amount=pricing['discount'],
+            total_amount=pricing['total'],
+            expires_at=now + timedelta(seconds=RESERVATION_HOLD_SECONDS),
+        )
+
         bookings = []
         for idx, entry in enumerate(pricing['seats']):
             seat = Seat.objects.get(pk=entry['seat_id'])
@@ -835,6 +857,7 @@ def create_walkin_bookings(user, movie, show, seat_count, payment_method='manual
                 seat=seat,
                 movie=movie,
                 theater=show,
+                reservation=reservation,
                 booking_ref=_generate_booking_ref(),
                 seat_category=entry['category'],
                 ticket_price=entry['price'],
@@ -855,7 +878,7 @@ def create_walkin_bookings(user, movie, show, seat_count, payment_method='manual
             )
             bookings.append(booking)
         show.bump_seat_revision()
-        return bookings
+        return bookings, reservation
 
 
 def cancel_booking(user, booking_id):
@@ -883,7 +906,20 @@ def cancel_booking(user, booking_id):
             from .payments import refund_reservation_transactions
             refund_reservation_transactions(booking.reservation)
         except Exception:
-            pass
+            logger.warning(
+                'Gateway refund for booking %s failed.',
+                booking.booking_ref or booking.id,
+                exc_info=True,
+            )
+        if PaymentTransaction.objects.filter(
+            reservation=booking.reservation, status='captured'
+        ).exists():
+            logger.warning(
+                'Booking %s cancelled but captured payment transaction(s) remain '
+                'unrefunded for reservation %s.',
+                booking.booking_ref or booking.id,
+                booking.reservation_id,
+            )
         Seat.objects.filter(pk=booking.seat_id).update(is_booked=False)
         booking.theater.bump_seat_revision()
         booking.status = 'cancelled'
@@ -921,7 +957,19 @@ def cancel_reservation_booking(user, booking_ref):
             from .payments import refund_reservation_transactions
             refund_reservation_transactions(reservation)
         except Exception:
-            pass
+            logger.warning(
+                'Gateway refund for reservation %s failed.',
+                reservation.booking_ref or reservation.id,
+                exc_info=True,
+            )
+        if PaymentTransaction.objects.filter(
+            reservation=reservation, status='captured'
+        ).exists():
+            logger.warning(
+                'Reservation %s cancelled but captured payment transaction(s) '
+                'remain unrefunded.',
+                reservation.booking_ref or reservation.id,
+            )
         seat_ids = [b.seat_id for b in bookings]
         Seat.objects.filter(pk__in=seat_ids).update(is_booked=False)
         Booking.objects.filter(pk__in=[b.pk for b in bookings]).update(

@@ -1,6 +1,6 @@
 {% extends 'admin/base_admin.html' %}
-{% block title %}Booking #{{ booking.id }}{% endblock %}
-{% block page_title %}Booking #{{ booking.id }}{% endblock %}
+{% block title %}Booking #{{ booking_ref }}{% endblock %}
+{% block page_title %}Booking #{{ booking_ref }}{% endblock %}
 {% block content %}
 <div class="row g-4">
   <div class="col-md-8">
@@ -11,7 +11,7 @@
           <div class="col-md-6">
             <div class="detail-item">
               <span class="text-muted small">Booking ID</span>
-              <h5 class="mb-0">#{{ booking.id }}</h5>
+              <h5 class="mb-0">{{ booking_ref }}</h5>
             </div>
           </div>
           <div class="col-md-6">
@@ -35,41 +35,55 @@
           <div class="col-md-6">
             <div class="detail-item">
               <span class="text-muted small">Screen</span>
-              <h5 class="mb-0">--</h5>
+              <h5 class="mb-0">{{ booking.theater.screen_name|default:'--' }}</h5>
             </div>
           </div>
           <div class="col-md-6">
             <div class="detail-item">
-              <span class="text-muted small">Seat</span>
-              <h5 class="mb-0">{{ booking.seat.seat_number }}</h5>
+              <span class="text-muted small">Seats</span>
+              <h5 class="mb-0">
+                {% if bookings %}{% for b in bookings %}{% if not forloop.first %}, {% endif %}{{ b.seat.seat_number }}{% endfor %}{% else %}—{% endif %}
+              </h5>
             </div>
           </div>
           <div class="col-md-6">
             <div class="detail-item">
-              <span class="text-muted small">Date & Time</span>
+              <span class="text-muted small">Ticket Count</span>
+              <h5 class="mb-0">{{ bookings|length }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Showtime</span>
+              <h5 class="mb-0">{{ booking.theater.time|date:"g:i A, d M Y" }}</h5>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="detail-item">
+              <span class="text-muted small">Booking Date</span>
               <h5 class="mb-0">{{ booking.booked_at|date:"d M Y, g:i A" }}</h5>
             </div>
           </div>
           <div class="col-md-6">
             <div class="detail-item">
               <span class="text-muted small">Total Amount</span>
-              <h5 class="mb-0 text-success"><i class="bi bi-currency-rupee"></i>{% if booking.payment %}{{ booking.payment.amount }}{% else %}—{% endif %}</h5>
+              <h5 class="mb-0 text-success"><i class="bi bi-currency-rupee"></i>{{ total_amount|floatformat:2 }}</h5>
             </div>
           </div>
           <div class="col-md-6">
             <div class="detail-item">
-              <span class="text-muted small">Status</span>
+              <span class="text-muted small">Payment Status</span>
               <h5 class="mb-0">
-                {% if booking.payment %}
-                {% if booking.payment.status == 'completed' %}
-                <span class="badge-bms-success">Completed</span>
-                {% elif booking.payment.status == 'refunded' %}
+                {% if payment_status == 'completed' %}
+                <span class="badge-bms-success">Paid</span>
+                {% elif payment_status == 'refunded' %}
                 <span class="badge-bms-danger">Refunded</span>
+                {% elif payment_status == 'pending' %}
+                <span class="badge-bms-info">Pending</span>
+                {% elif payment_status == 'failed' %}
+                <span class="badge-bms-danger">Failed</span>
                 {% else %}
-                <span class="badge-bms-info">{{ booking.payment.status }}</span>
-                {% endif %}
-                {% else %}
-                <span class="badge-bms-secondary">Pending</span>
+                <span class="badge-bms-secondary">{{ payment_status|default:'—' }}</span>
                 {% endif %}
               </h5>
             </div>
@@ -77,12 +91,54 @@
         </div>
       </div>
     </div>
+    {% if bookings|length > 1 %}
+    <div class="card-bms mt-3">
+      <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-grid-3x3-gap me-2"></i>Tickets ({{ bookings|length }})</h5></div>
+      <div class="card-bms-body p-0">
+        <div class="table-responsive">
+          <table class="table table-bms mb-0">
+            <thead>
+              <tr>
+                <th>Seat</th>
+                <th>Category</th>
+                <th>Amount</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for b in bookings %}
+              <tr>
+                <td>{{ b.seat.seat_number }}</td>
+                <td>{{ b.seat_category|default:'—' }}</td>
+                <td><i class="bi bi-currency-rupee"></i>{{ b.total|floatformat:2 }}</td>
+                <td>
+                  {% if b.status == 'cancelled' %}
+                  <span class="badge-bms-danger">Cancelled</span>
+                  {% elif b.payment and b.payment.status == 'completed' %}
+                  <span class="badge-bms-success">Confirmed</span>
+                  {% else %}
+                  <span class="badge-bms-info">{{ b.status }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
   <div class="col-md-4">
     <div class="card-bms">
       <div class="card-bms-header"><h5 class="mb-0"><i class="bi bi-gear me-2"></i>Actions</h5></div>
       <div class="card-bms-body">
         <div class="d-grid gap-2">
+          {% if reservation %}
+          <a href="{% url 'admin_booking_transaction_cancel' reservation.id %}" class="btn btn-outline-danger" data-confirm="Cancel this entire booking?">
+            <i class="bi bi-x-circle me-2"></i>Cancel Booking
+          </a>
+          {% else %}
           <a href="{% url 'admin_booking_cancel' booking.id %}" class="btn btn-outline-danger" data-confirm="Cancel this booking?">
             <i class="bi bi-x-circle me-2"></i>Cancel Booking
           </a>
@@ -92,6 +148,7 @@
           <a href="{% url 'admin_booking_resend' booking.id %}" class="btn btn-outline-info">
             <i class="bi bi-envelope me-2"></i>Resend Confirmation
           </a>
+          {% endif %}
           <a href="{% url 'admin_booking_list' %}" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left me-2"></i>Back to List
           </a>

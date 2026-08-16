@@ -308,13 +308,18 @@ def send_payment_failed_email(tx):
         return None
 
 
-def send_manual_booking_confirmation(user, bookings):
-    """Enqueue a confirmation for admin/walk-in bookings that have no reservation."""
+def send_manual_booking_confirmation(user, bookings, reservation=None):
+    """Enqueue a confirmation for admin/walk-in bookings.
+
+    ``reservation`` is optional; when supplied (walk-in bookings created
+    through ``create_walkin_bookings``) the shared transaction-level booking
+    reference is used in the email instead of the per-seat references.
+    """
     if not bookings:
         return
     show = bookings[0].theater
     total = sum((b.total for b in bookings), 0)
-    _enqueue(user, show, bookings, total)
+    _enqueue(user, show, bookings, total, reservation=reservation)
     _create_in_app_notification(user, show, bookings)
 
 

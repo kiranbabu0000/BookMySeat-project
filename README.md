@@ -1,81 +1,148 @@
 # BookMySeat
 
+Online movie ticket booking platform built with Django (server-rendered). Customers can discover movies, select seats on a live seat map, pay through Razorpay, and receive PDF/QR tickets by email — while administrators manage content and monitor the business through an analytics dashboard.
 
-Online movie ticket booking platform built with Django (server-rendered).
+## Features
 
-## Project structure
+- Movie discovery with search, filters, sorting and personalised recommendations
+- Movie details with trailers, gallery, cast, reviews and ratings
+- Theater and show selection
+- Live seat selection with temporary reservation holds
+- Razorpay payment with verification, webhooks, retries and refunds
+- PDF/QR M-ticket generation and email confirmation
+- Booking history in the user profile
+- Admin portal for movies, shows, seats, bookings, reviews and notifications
+- Analytics dashboard with revenue, bookings, occupancy and refund reporting
+- Responsive, mobile-friendly interface
 
-The project is split into a separated **frontend** (templates + static assets)
-and **backend** (Django application).
+## Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.13, Django 6.0.7 |
+| Frontend | HTML5, CSS3, JavaScript, Bootstrap 5 |
+| Database | SQLite (local), PostgreSQL (production) |
+| Payments | Razorpay |
+| PDF / QR | ReportLab, qrcode |
+| Email | SMTP or Brevo API via a database-backed outbox worker |
+| Deployment | Render, Vercel |
+
+## Project Structure
 
 ```
 BookMySeat/
-│
-├── frontend/
-│   ├── templates/            # Django templates (base, movies, users, admin, partials, emails)
-│   └── static/               # CSS, JS, images (css/, js/, img/, admin/)
-│
+├── frontend/                # Django templates and static assets
 ├── backend/
-│   ├── manage.py
-│   ├── requirements.txt
-│   ├── .env                  # local secrets (gitignored)
-│   ├── bookmyseat/           # Django project settings/urls/wsgi/asgi
-│   ├── movies/               # app: models, views, payments, services, qr, pdf
-│   ├── users/                # app: auth, OTP, forms, views
-│   ├── admin_panel/          # app: admin CMS, analytics, layouts
-│   ├── media/                # user-uploaded posters/banners/thumbnails
-│   └── db.sqlite3            # local SQLite database
-│
-├── .gitignore
+│   ├── bookmyseat/          # Django project settings/urls/wsgi
+│   ├── movies/              # movies, seats, reservations, payments, tickets, email outbox
+│   ├── users/               # customer auth, OTP, home, profile
+│   ├── admin_panel/         # admin portal and analytics
+│   └── manage.py
+├── render.yaml
 ├── vercel.json
 └── README.md
 ```
 
-## Running locally
+## Installation
+
+1. Clone the repository:
+
+   ```bash
+   git clone <repository-url>
+   cd BookMySeat
+   ```
+
+2. Create and activate a virtual environment:
+
+   ```bash
+   python -m venv venv
+   venv\Scripts\activate        # Windows
+   source venv/bin/activate     # Linux / macOS
+   ```
+
+3. Install dependencies:
+
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   ```
+
+4. Configure your environment file:
+
+   ```bash
+   copy .env.example .env       # Windows
+   cp .env.example .env         # Linux / macOS
+   ```
+
+   Fill in the values you need (see below).
+
+5. Apply database migrations:
+
+   ```bash
+   python manage.py migrate
+   ```
+
+6. (Optional) Seed sample data:
+
+   ```bash
+   python manage.py seed_data
+   python manage.py seed_events
+   ```
+
+## Environment Variables
+
+Configuration is read from `.env` (local development) or from environment variables on the hosting platform.
+
+**Django**
+- `DJANGO_DEBUG` — `True` in development, `False` in production
+- `DJANGO_SECRET_KEY` — Django secret key (required in production)
+- `DJANGO_ALLOWED_HOSTS` — comma-separated allowed hosts
+
+**Database**
+- `DATABASE_URL` — PostgreSQL connection string (omit to use local SQLite)
+- `DATABASE_SSL_REQUIRE` — whether the Postgres connection requires SSL
+
+**Payment**
+- `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` — Razorpay API keys
+- `RAZORPAY_WEBHOOK_SECRET` — secret used to verify Razorpay webhooks
+- `RAZORPAY_DEMO_MODE` — `True` simulates payments locally without real keys
+
+**Email**
+- `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` — SMTP settings (leave `EMAIL_HOST` empty to print emails to the console in development)
+- `DEFAULT_FROM_EMAIL` — sender address
+- `BREVO_API_KEY` — optional; when set, emails are sent via Brevo's HTTPS API instead of SMTP
+
+> Administrative access credentials are provided separately for evaluation purposes.
+
+## Running the Project
 
 ```bash
 cd backend
-pip install -r requirements.txt
 python manage.py runserver
 ```
 
 Then open http://127.0.0.1:8000
 
-## Email worker (confirmation emails)
+The runserver command auto-starts the background email worker, so booking confirmation emails are sent without any extra setup.
 
-Booking emails are enqueued to `EmailOutbox` and delivered asynchronously by the
-`process_email_outbox` worker — they are NOT sent during the booking request.
-
-`python manage.py runserver` **auto-starts this worker in the background**, so
-local bookings email you with no extra command (you'll see
-`Email outbox worker started` in the runserver console). In production the
-worker must run on its own (Render cron job); it is the same command.
-
-To run the worker manually — e.g. flush whatever is currently queued once:
+## Testing
 
 ```bash
 cd backend
-python manage.py process_email_outbox
+python manage.py test
 ```
 
-or run it forever in a second terminal (for a plain `runserver` build or a
-different dev server):
+## Deployment
 
-```bash
-python manage.py process_email_outbox --loop
-```
+The repository includes configuration for two platforms:
 
-Failed sends are retried with exponential backoff up to `EMAIL_OUTBOX_MAX_ATTEMPTS`.
+- **Render** — a `render.yaml` blueprint provisions a Python web service and a managed PostgreSQL database.
+- **Vercel** — a `vercel.json` deploys the Django WSGI app.
 
-## Notes
+Set the environment variables listed above on the hosting platform before deploying.
 
-- `backend/bookmyseat/settings.py` points Django's template loader and static
-  finder at `frontend/templates` and `frontend/static` via `FRONTEND_DIR`.
-- Media uploads are stored under `backend/media` (`MEDIA_ROOT = BASE_DIR/media`).
-- Local secrets live in `backend/.env` (loaded explicitly by settings).
-- Optional commands:
-  - `python manage.py seed_data` — seed the database
-  - `python manage.py seed_events` — seed event categories
-  - `python manage.py process_email_outbox` — flush queued emails
-  - `python manage.py release_expired_reservations` — free expired holds
-  - `python manage.py test` — run the test suite
+## Internship Project
+
+This project was developed as part of an internship and contains the six assigned tasks covering movie management, seat reservation, payments, the admin dashboard, movie discovery, and ticket/email automation.
+
+[View Internship Report](REPORT.md)

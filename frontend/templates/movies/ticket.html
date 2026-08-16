@@ -178,7 +178,7 @@
     <script>
       function openWhatsApp() {
         var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-        window.open(isMobile ? '{{ wa_link|safe }}' : '{{ wa_web_link|safe }}', '_blank', 'noopener,noreferrer');
+        window.open(isMobile ? '{{ wa_link|escapejs }}' : '{{ wa_web_link|escapejs }}', '_blank', 'noopener,noreferrer');
       }
     </script>
     {% endif %}

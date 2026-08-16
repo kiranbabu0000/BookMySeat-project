@@ -360,10 +360,12 @@
   (function () {
     'use strict';
     function pad(n) { return String(n).padStart(2, '0'); }
+    var serverNow = new Date('{% now "c" %}').getTime();
+    var timeOffsetMs = serverNow - Date.now();
     function tick() {
       document.querySelectorAll('[data-countdown]').forEach(function (el) {
         var expiry = new Date(el.getAttribute('data-countdown')).getTime();
-        var remaining = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
+        var remaining = Math.max(0, Math.floor((expiry - timeOffsetMs - Date.now()) / 1000));
         el.textContent = pad(Math.floor(remaining / 60)) + ':' + pad(remaining % 60);
         if (remaining <= 0) {
           el.closest('.d-flex') && el.closest('.d-flex').remove();
@@ -371,7 +373,8 @@
       });
     }
     tick();
-    setInterval(tick, 1000);
+    var countdownInterval = setInterval(tick, 1000);
+    window.addEventListener('pagehide', function () { clearInterval(countdownInterval); });
 
     var updateCard = document.getElementById('profileUpdateCollapse');
     var updateToggle = document.getElementById('profileUpdateToggle');

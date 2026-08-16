@@ -423,8 +423,11 @@ def refund_reservation_transactions(reservation):
         try:
             refund_transaction(tx, reason='Booking cancelled')
             count += 1
-        except Exception:
-            continue
+        except Exception as exc:
+            logger.warning(
+                'Gateway refund failed for transaction %s (order %s): %s',
+                tx.id, tx.gateway_order_id, exc,
+            )
     return count
 
 

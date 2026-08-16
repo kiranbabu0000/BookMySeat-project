@@ -986,6 +986,7 @@ class MovieRestoreVisibilityTests(TestCase):
         session = self.client.session
         session['admin_user_id'] = user.id
         session['is_admin_authenticated'] = True
+        session['admin_login_time'] = str(timezone.now())
         session.save()
 
         response = self.client.post(reverse('admin_movie_restore', args=[movie.pk]))

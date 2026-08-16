@@ -191,7 +191,10 @@ def _series(queryset, date_field, rng, aggregate='count', sum_field=None):
     elif granularity == 'month':
         grouped = qs.annotate(bucket=TruncMonth(date_field)).values('bucket').annotate(v=agg)
         lookup = {row['bucket']: row['v'] for row in grouped}
-        key = lambda w: w[0].date().replace(day=1)
+        # TruncMonth returns an aware datetime on the 1st of the month, which
+        # matches the _aware(cursor) window start directly. Converting it to a
+        # date here made every lookup miss, zeroing month-granularity series.
+        key = lambda w: w[0]
     else:
         grouped = qs.annotate(bucket=ExtractYear(date_field)).values('bucket').annotate(v=agg)
         lookup = {row['bucket']: row['v'] for row in grouped}

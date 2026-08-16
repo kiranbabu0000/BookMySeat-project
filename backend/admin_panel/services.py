@@ -6,11 +6,12 @@ These helpers bridge the two so that shows created in the admin panel become
 bookable on the customer side and status changes are reflected both ways.
 """
 from datetime import datetime, timedelta
+from decimal import Decimal
 from math import ceil
 
 from django.utils import timezone
 
-from movies.models import Movie, Seat, SeatCategory, ShowPrice, Theater
+from movies.models import Booking, Movie, Seat, SeatCategory, ShowPrice, Theater
 
 from .layouts import build_layout_spec
 from .models import Show
@@ -232,3 +233,144 @@ def ensure_rolling_schedule(horizon=SCHEDULE_HORIZON_DAYS):
         ensure_movie_schedule(movie, horizon)
         for movie in Movie.objects.filter(pk__in=movie_ids)
     )
+
+
+def _natural_seat_key(seat_number):
+    """Sort seat labels naturally: row letters first, then the numeric column."""
+    text = ''
+    num = ''
+    for ch in str(seat_number or ''):
+        if ch.isdigit():
+            num += ch
+        else:
+            text += ch
+    return (text.upper(), int(num or 0))
+
+
+class BookingTransaction:
+    """One purchase/transaction in the admin Booking Management.
+
+    A single transaction always renders as ONE row regardless of how many
+    per-seat ``Booking`` rows it produced. The grouping key is the parent
+    ``movies.Reservation`` (which carries the shared, transaction-level
+    ``booking_ref``). ``Booking`` rows without a reservation (legacy
+    walk-ins) are treated as their own single-ticket transaction.
+    """
+
+    def __init__(self, bookings):
+        self.bookings = list(bookings)
+
+    @property
+    def reservation(self):
+        return self.bookings[0].reservation if self.bookings else None
+
+    @property
+    def is_grouped(self):
+        return self.reservation is not None
+
+    @property
+    def id(self):
+        """DB id of the representative booking (kept for link compatibility)."""
+        return self.bookings[0].id if self.bookings else None
+
+    @property
+    def booking_ref(self):
+        reservation = self.reservation
+        if reservation is not None and reservation.booking_ref:
+            return reservation.booking_ref
+        if self.bookings:
+            first = self.bookings[0]
+            return first.booking_ref or str(first.id)
+        return ''
+
+    @property
+    def user(self):
+        return self.bookings[0].user if self.bookings else None
+
+    @property
+    def movie(self):
+        return self.bookings[0].movie if self.bookings else None
+
+    @property
+    def theater(self):
+        return self.bookings[0].theater if self.bookings else None
+
+    @property
+    def seat_numbers(self):
+        seats = []
+        for booking in self.bookings:
+            if booking.seat_id and booking.seat:
+                seats.append(booking.seat.seat_number)
+        return sorted({s for s in seats if s}, key=_natural_seat_key)
+
+    @property
+    def seats_label(self):
+        return ', '.join(self.seat_numbers)
+
+    @property
+    def ticket_count(self):
+        return len(self.bookings)
+
+    @property
+    def total_amount(self):
+        reservation = self.reservation
+        if reservation is not None and reservation.total_amount:
+            return reservation.total_amount
+        return sum((b.total or Decimal('0.00') for b in self.bookings), Decimal('0.00'))
+
+    @property
+    def payment_status(self):
+        reservation = self.reservation
+        if reservation is not None and reservation.payment_status:
+            return reservation.payment_status
+        statuses = {
+            b.payment.status
+            for b in self.bookings
+            if b.payment_id is not None and b.payment is not None
+        }
+        if len(statuses) == 1:
+            return next(iter(statuses))
+        if statuses:
+            return 'partial'
+        return ''
+
+    @property
+    def status(self):
+        statuses = {b.status for b in self.bookings}
+        if statuses == {'cancelled'}:
+            return 'cancelled'
+        if len(statuses) == 1:
+            return next(iter(statuses))
+        return 'partial'
+
+    @property
+    def booked_at(self):
+        times = [b.booked_at for b in self.bookings if b.booked_at]
+        return max(times) if times else None
+
+    def __repr__(self):
+        return '<BookingTransaction {} ({} tickets)>'.format(
+            self.booking_ref, self.ticket_count,
+        )
+
+
+def group_bookings_into_transactions(bookings):
+    """Group ordered per-seat Booking rows by their shared parent Reservation.
+
+    Bookings that share a ``reservation_id`` are merged into a single
+    transaction (one row); bookings without a reservation stay standalone.
+    The relative order of the input is preserved, which lets callers keep
+    their existing sorting while still displaying one row per purchase.
+    """
+    transactions = []
+    by_reservation = {}
+    for booking in bookings:
+        reservation_id = booking.reservation_id
+        if reservation_id and reservation_id in by_reservation:
+            by_reservation[reservation_id].bookings.append(booking)
+            continue
+        tx = BookingTransaction([booking])
+        transactions.append(tx)
+        if reservation_id:
+            by_reservation[reservation_id] = tx
+    return transactions

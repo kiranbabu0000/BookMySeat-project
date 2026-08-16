@@ -347,13 +347,6 @@
           prefill: { name: '{{ user.get_full_name|escapejs|default:user.username }}', email: '{{ user.email|escapejs }}' }
         };
         var rzp = new Razorpay(options);
-        if (window.console && window.console.log) {
-          console.log('[BookMySeat] Razorpay options:', {
-            key: options.key, amount: options.amount, currency: options.currency,
-            order_id: options.order_id, name: options.name, description: options.description,
-            prefill: options.prefill, theme: options.theme, modal: options.modal
-          });
-        }
         modalOpen = true;
         resetDeadline(checkout.hold_seconds);
         rzp.open();

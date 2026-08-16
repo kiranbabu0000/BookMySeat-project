@@ -1,6 +1,10 @@
 from functools import wraps
+from datetime import datetime, timedelta
+
+from django.conf import settings
 from django.shortcuts import redirect
 from django.contrib import messages
+from django.utils import timezone
 from django.contrib.auth.mixins import UserPassesTestMixin
 from .models import AdminProfile, AdminPermission
 
@@ -26,6 +30,20 @@ def _verify_admin_session(request):
         return False
     stored_session_id = request.session.get('admin_session_id')
     if stored_session_id and stored_session_id != request.session.session_key:
+        return False
+    # Enforce the admin session timeout (ADMIN_SESSION_TIMEOUT in settings.py).
+    # The login timestamp is stored ISO-format by admin_login_view; a missing
+    # or unparseable timestamp fails closed so old sessions cannot linger.
+    login_time_raw = request.session.get('admin_login_time')
+    if login_time_raw:
+        try:
+            login_at = datetime.fromisoformat(login_time_raw)
+        except (TypeError, ValueError):
+            return False
+        timeout = getattr(settings, 'ADMIN_SESSION_TIMEOUT', 3600)
+        if timezone.now() - login_at > timedelta(seconds=timeout):
+            return False
+    else:
         return False
     if not request.user.is_active:
         return False

@@ -76,6 +76,8 @@ urlpatterns = [
     path('bookings/reserve/', views.booking_reserve, name='admin_booking_reserve'),
     path('bookings/<int:pk>/modify/', views.booking_modify, name='admin_booking_modify'),
     path('bookings/<int:pk>/resend/', views.booking_resend_confirmation, name='admin_booking_resend'),
+    path('bookings/transactions/<int:pk>/', views.booking_transaction_detail, name='admin_booking_transaction_detail'),
+    path('bookings/transactions/<int:pk>/cancel/', views.booking_transaction_cancel, name='admin_booking_transaction_cancel'),
 
     path('reservations/', views.ReservationListView.as_view(), name='admin_reservation_list'),
 

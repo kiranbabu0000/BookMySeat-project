@@ -60,24 +60,58 @@
   <div class="card-bms-body p-0">
     <div class="table-responsive">
       <table class="table table-bms mb-0">
-        <thead><tr><th>{% if request.GET.sort == 'id' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='id' order='desc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'id' %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">ID</a>{% endif %}</th><th>{% if request.GET.sort == 'user__username' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='user__username' order='desc' %}" class="text-decoration-none text-reset">User <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'user__username' %}<a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User</a>{% endif %}</th><th>{% if request.GET.sort == 'movie__name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='movie__name' order='desc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'movie__name' %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie</a>{% endif %}</th><th>{% if request.GET.sort == 'theater__name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='theater__name' order='desc' %}" class="text-decoration-none text-reset">Theatre <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'theater__name' %}<a href="?{% url_replace sort='theater__name' order='asc' %}" class="text-decoration-none text-reset">Theatre <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='theater__name' order='asc' %}" class="text-decoration-none text-reset">Theatre</a>{% endif %}</th><th>Seat</th><th>{% if request.GET.sort == 'booked_at' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='booked_at' order='desc' %}" class="text-decoration-none text-reset">Date <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'booked_at' %}<a href="?{% url_replace sort='booked_at' order='asc' %}" class="text-decoration-none text-reset">Date <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='booked_at' order='asc' %}" class="text-decoration-none text-reset">Date</a>{% endif %}</th><th>Amount</th><th>Actions</th></tr></thead>
+        <thead><tr>
+          <th>{% if request.GET.sort == 'id' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='id' order='desc' %}" class="text-decoration-none text-reset">Booking ID <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'id' %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">Booking ID <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='id' order='asc' %}" class="text-decoration-none text-reset">Booking ID</a>{% endif %}</th>
+          <th>{% if request.GET.sort == 'user__username' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='user__username' order='desc' %}" class="text-decoration-none text-reset">User <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'user__username' %}<a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='user__username' order='asc' %}" class="text-decoration-none text-reset">User</a>{% endif %}</th>
+          <th>{% if request.GET.sort == 'movie__name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='movie__name' order='desc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'movie__name' %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='movie__name' order='asc' %}" class="text-decoration-none text-reset">Movie</a>{% endif %}</th>
+          <th>{% if request.GET.sort == 'theater__name' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='theater__name' order='desc' %}" class="text-decoration-none text-reset">Show <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'theater__name' %}<a href="?{% url_replace sort='theater__name' order='asc' %}" class="text-decoration-none text-reset">Show <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='theater__name' order='asc' %}" class="text-decoration-none text-reset">Show</a>{% endif %}</th>
+          <th>Seats</th>
+          <th>Tickets</th>
+          <th>Total Amount</th>
+          <th>Payment</th>
+          <th>{% if request.GET.sort == 'booked_at' and request.GET.order == 'asc' %}<a href="?{% url_replace sort='booked_at' order='desc' %}" class="text-decoration-none text-reset">Booking Date <i class="bi bi-sort-up"></i></a>{% elif request.GET.sort == 'booked_at' %}<a href="?{% url_replace sort='booked_at' order='asc' %}" class="text-decoration-none text-reset">Booking Date <i class="bi bi-sort-down"></i></a>{% else %}<a href="?{% url_replace sort='booked_at' order='asc' %}" class="text-decoration-none text-reset">Booking Date</a>{% endif %}</th>
+          <th>Actions</th>
+        </tr></thead>
         <tbody>
           {% for b in bookings %}
           <tr>
-            <td>{{ b.id }}</td>
+            <td><span class="fw-semibold">{{ b.booking_ref }}</span></td>
             <td>{{ b.user.username }}</td>
             <td>{{ b.movie.name|truncatechars:30 }}</td>
-            <td>{{ b.theater.name|truncatechars:25 }}</td>
-            <td>{{ b.seat.seat_number }}</td>
-            <td>{{ b.booked_at|date:"d M Y, g:i A" }}</td>
-            <td><i class="bi bi-currency-rupee"></i>{% if b.payment %}{{ b.payment.amount }}{% else %}—{% endif %}</td>
             <td>
+              <div>{{ b.theater.name|truncatechars:25 }}</div>
+              <div class="small text-muted">{{ b.theater.time|date:"g:i A, d M" }}</div>
+            </td>
+            <td>
+              {% if b.ticket_count > 1 %}
+              <span title="{{ b.seats_label }}">{{ b.seats_label|truncatechars:40 }}</span>
+              {% else %}
+              {{ b.seats_label }}
+              {% endif %}
+            </td>
+            <td><span class="badge-bms-info">{{ b.ticket_count }}</span></td>
+            <td><i class="bi bi-currency-rupee"></i>{{ b.total_amount|floatformat:2 }}</td>
+            <td>
+              {% if b.payment_status == 'completed' %}<span class="badge-bms-success">Paid</span>
+              {% elif b.payment_status == 'refunded' %}<span class="badge-bms-danger">Refunded</span>
+              {% elif b.payment_status == 'pending' %}<span class="badge-bms-info">Pending</span>
+              {% elif b.payment_status == 'failed' %}<span class="badge-bms-danger">Failed</span>
+              {% elif b.payment_status == 'partial' %}<span class="badge-bms-warning">Partial</span>
+              {% else %}<span class="badge-bms-secondary">{{ b.payment_status|default:'—' }}</span>{% endif %}
+            </td>
+            <td>{{ b.booked_at|date:"d M Y, g:i A" }}</td>
+            <td>
+              {% if b.reservation %}
+              <a href="{% url 'admin_booking_transaction_detail' b.reservation.id %}" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
+              <a href="{% url 'admin_booking_transaction_cancel' b.reservation.id %}" class="btn btn-sm btn-outline-danger" title="Cancel" data-confirm="Cancel this entire booking?"><i class="bi bi-x-circle"></i></a>
+              {% else %}
               <a href="{% url 'admin_booking_detail' b.id %}" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
               <a href="{% url 'admin_booking_cancel' b.id %}" class="btn btn-sm btn-outline-danger" title="Cancel" data-confirm="Cancel this booking?"><i class="bi bi-x-circle"></i></a>
+              {% endif %}
             </td>
           </tr>
           {% empty %}
-          <tr><td colspan="8" class="text-center text-muted py-4">No bookings found.</td></tr>
+          <tr><td colspan="10" class="text-center text-muted py-4">No bookings found.</td></tr>
           {% endfor %}
         </tbody>
       </table>

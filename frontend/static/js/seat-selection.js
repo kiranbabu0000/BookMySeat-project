@@ -30,7 +30,6 @@
     mode: 'select',
     /* Most recent selection snapshot so the user can undo a clear / re-pick. */
     undoSelection: null,
-    undoTicketCount: null,
   };
   var timerHandle = null;
   var pollHandle = null;
@@ -87,6 +86,10 @@
   }
 
   document.addEventListener('DOMContentLoaded', init);
+  window.addEventListener('pagehide', function () {
+    stopPolling();
+    stopTimer();
+  });
 
   function init() {
     layout = document.getElementById('seatLayout');
@@ -780,7 +783,6 @@
   function rememberSelectionForUndo() {
     if (state.mode === 'hold') return;
     state.undoSelection = Array.from(state.selected);
-    state.undoTicketCount = state.ticketCount;
     if (els.undoBtn) {
       els.undoBtn.classList.toggle('d-none', state.undoSelection.length === 0);
     }
@@ -788,7 +790,6 @@
 
   function clearUndo() {
     state.undoSelection = null;
-    state.undoTicketCount = null;
     if (els.undoBtn) els.undoBtn.classList.add('d-none');
   }
 

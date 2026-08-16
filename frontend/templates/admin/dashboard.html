@@ -153,17 +153,19 @@
               {% for booking in recent_bookings %}
               <tr>
                 <td>
-                  <a href="{% url 'admin_booking_detail' booking.id %}" class="fw-semibold" style="color: var(--accent-secondary); text-decoration: none;">{{ booking.booking_ref|default:booking.id }}</a>
+                  <a href="{% url 'admin_booking_detail' booking.id %}" class="fw-semibold" style="color: var(--accent-secondary); text-decoration: none;">{{ booking.booking_ref }}</a>
                 </td>
                 <td>{{ booking.user.username }}</td>
                 <td>{{ booking.movie.name|truncatechars:28 }}</td>
                 <td>{{ booking.theater.name|truncatechars:22 }}</td>
-                <td>&#8377;{{ booking.total|floatformat:0 }}</td>
+                <td>&#8377;{{ booking.total_amount|floatformat:0 }} <span class="text-muted small">({{ booking.ticket_count }})</span></td>
                 <td>
                   {% if booking.status == 'confirmed' %}
                   <span class="badge-bms-success">Confirmed</span>
-                  {% else %}
+                  {% elif booking.status == 'cancelled' %}
                   <span class="badge-bms-danger">Cancelled</span>
+                  {% else %}
+                  <span class="badge-bms-warning">{{ booking.status }}</span>
                   {% endif %}
                 </td>
                 <td class="text-muted small">{{ booking.booked_at|date:"d M, g:i A" }}</td>
@@ -374,6 +376,6 @@
 
 {% block extra_js %}
 <script>
-  window.BMS_DASHBOARD_RANGES = {{ chart_ranges|safe }};
+  window.BMS_DASHBOARD_RANGES = JSON.parse('{{ chart_ranges|escapejs }}');
 </script>
 {% endblock %}

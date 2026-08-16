@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import AdminProfile, Genre, Payment, PaymentTransaction, Theatre, Screen, Show
+from .models import AdminProfile, Genre, Payment, PaymentTransaction, Theatre, Screen, Show, Trailer, Notification
 from .services import ensure_movie_schedule, sync_theater_from_show
 from movies.models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, SeatCategory, ShowPrice
 
@@ -684,3 +684,191 @@ class RollingScheduleTests(TestCase):
                 movie=self.movie, date=today, status='active'):
             starts = timezone.make_aware(datetime.combine(today, show.time))
             self.assertGreater(starts, now)
+
+
+class SecurityRegressionTests(TestCase):
+    """Regression tests for the audit fixes (S1, S2, S6)."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass123', is_staff=True)
+        AdminProfile.objects.create(user=self.admin, role='admin', is_active=True)
+
+    def _admin_login(self, client):
+        return client.post('/admin-login/', {
+            'username': 'admin', 'password': 'adminpass123'})
+
+    def test_admin_login_rotates_session_key(self):
+        """S1: successful admin login must cycle the session key."""
+        client = self.client
+        # Establish a pre-authentication session (the fixation vector).
+        client.get('/admin-login/')
+        before = client.session.session_key
+        self.assertTrue(before)
+        response = self._admin_login(client)
+        self.assertEqual(response.status_code, 302)
+        after = client.session.session_key
+        self.assertNotEqual(after, before, 'session key must rotate on login')
+        self.assertEqual(client.session.get('admin_session_id'), after)
+
+    def test_admin_session_expires_after_timeout(self):
+        """S2: a session older than ADMIN_SESSION_TIMEOUT is rejected."""
+        self._admin_login(self.client)
+        session = self.client.session
+        session['admin_login_time'] = str(
+            timezone.now() - timedelta(hours=24))
+        session.save()
+        response = self.client.get('/dashboard/')
+        self.assertRedirects(response, '/admin-login/')
+        self.assertFalse(self.client.session.get('is_admin_authenticated'))
+
+    def test_admin_session_with_missing_login_time_is_rejected(self):
+        """S2: a session without a login timestamp fails closed."""
+        self._admin_login(self.client)
+        session = self.client.session
+        session.pop('admin_login_time', None)
+        session.save()
+        response = self.client.get('/dashboard/')
+        self.assertRedirects(response, '/admin-login/')
+
+    def test_trailer_form_embeds_sanitized_youtube_url(self):
+        """S6: the admin trailer form must not render a raw iframe."""
+        movie = Movie.objects.create(
+            name='Trailer Movie', rating=7.5, status='now_showing')
+        Trailer.objects.create(
+            movie=movie, title='Teaser',
+            url='https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+        self._admin_login(self.client)
+        trailer = Trailer.objects.get(movie=movie)
+        response = self.client.get(
+            reverse('admin_trailer_edit', args=[trailer.pk]))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        self.assertIn('https://www.youtube.com/embed/dQw4w9WgXcQ', html)
+        self.assertNotIn(
+            'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+            '" allowfullscreen', html)
+
+
+class BookingTransactionRepresentationTests(TestCase):
+    """A multi-seat purchase must render as ONE row in the admin portal.
+
+    Per-seat Booking rows share a parent Reservation; the admin list groups
+    them into a single BookingTransaction and the detail view renders the
+    whole purchase (all seats, ticket count, total) on one page.
+    """
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass123', is_staff=True)
+        AdminProfile.objects.create(user=self.admin, role='admin', is_active=True)
+        self.customer = User.objects.create_user(
+            username='buyer', password='buyerpass123')
+        self.movie = Movie.objects.create(
+            name='Multi Seat Movie', rating=8.0, cast='Actor', status='now_showing')
+        self.show = Theater.objects.create(
+            name='PVR', movie=self.movie,
+            time=timezone.now() + timedelta(days=1), status='active', ticket_price=250)
+        self.seats = [
+            Seat.objects.create(theater=self.show, seat_number=f'A{i}', row_idx=0, col_idx=i)
+            for i in range(1, 4)
+        ]
+
+    def _admin_login(self, client):
+        return client.post('/admin-login/', {
+            'username': 'admin', 'password': 'adminpass123'})
+
+    def _make_purchase(self):
+        res = Reservation.objects.create(
+            token='multi-tok-1', user=self.customer, show=self.show,
+            expires_at=timezone.now() + timedelta(minutes=10),
+            booking_ref='BMSMULTI', ticket_count=3,
+            status='booked', payment_status='completed',
+            total_amount=Decimal('750.00'),
+        )
+        for i, seat in enumerate(self.seats, start=1):
+            Booking.objects.create(
+                user=self.customer, seat=seat, movie=self.movie, theater=self.show,
+                status='confirmed', reservation=res,
+                booking_ref=f'BMSMULTI-{i}', total=Decimal('250.00'),
+            )
+        return res
+
+    def test_multi_seat_purchase_is_single_row_in_list(self):
+        self._make_purchase()
+        self._admin_login(self.client)
+        response = self.client.get(reverse('admin_booking_list'))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        self.assertEqual(html.count('BMSMULTI'), 1, 'purchase must appear once, not once per seat')
+        self.assertIn('<span class="badge-bms-info">3</span>', html)
+
+    def test_grouped_booking_detail_renders_transaction(self):
+        res = self._make_purchase()
+        self._admin_login(self.client)
+        first = Booking.objects.filter(reservation=res).first()
+        response = self.client.get(reverse('admin_booking_detail', args=[first.pk]))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        self.assertIn('BMSMULTI', html)
+        for seat in self.seats:
+            self.assertIn(seat.seat_number, html)
+        self.assertIn('750.00', html)
+
+    def test_transaction_detail_renders_all_tickets_and_total(self):
+        res = self._make_purchase()
+        self._admin_login(self.client)
+        response = self.client.get(
+            reverse('admin_booking_transaction_detail', args=[res.pk]))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        self.assertIn('BMSMULTI', html)
+        for seat in self.seats:
+            self.assertIn(seat.seat_number, html)
+        self.assertIn('750.00', html)
+
+
+class NotificationBulkCreateTests(TestCase):
+    """'Send to all' must create exactly one Notification per active user."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='admin', password='adminpass123', is_staff=True)
+        AdminProfile.objects.create(user=self.admin, role='admin', is_active=True)
+        User.objects.create_user(username='u1', password='pass123')
+        User.objects.create_user(username='u2', password='pass123')
+        inactive = User.objects.create_user(username='u3', password='pass123')
+        inactive.is_active = False
+        inactive.save()
+
+    def _admin_login(self, client):
+        return client.post('/admin-login/', {
+            'username': 'admin', 'password': 'adminpass123'})
+
+    def test_send_to_all_creates_one_notification_per_active_user(self):
+        self._admin_login(self.client)
+        response = self.client.post(reverse('admin_notification_add'), {
+            'title': 'Flash Sale', 'message': 'Flat 50% off',
+            'notification_type': 'info', 'link': '',
+            'send_to_all': '1',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            Notification.objects.filter(title='Flash Sale').count(), 3,
+            'one notification for each of the 3 active users (inactive u3 skipped)')
+        for user in User.objects.filter(is_active=True):
+            self.assertTrue(
+                Notification.objects.filter(user=user, title='Flash Sale').exists())
+
+    def test_single_user_notification(self):
+        self._admin_login(self.client)
+        u1 = User.objects.get(username='u1')
+        response = self.client.post(reverse('admin_notification_add'), {
+            'title': 'Private Note', 'message': 'For you',
+            'notification_type': 'info', 'link': '',
+            'user_id': str(u1.id),
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Notification.objects.filter(title='Private Note').count(), 1)
+        self.assertEqual(
+            Notification.objects.get(title='Private Note').user_id, u1.id)
