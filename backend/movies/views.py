@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.template.loader import render_to_string
-from django.db.models import Q, Avg, Count, F
+from django.db.models import Q, Avg, Count
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, transaction
 from django.contrib import messages
@@ -35,6 +35,7 @@ from .notifications import send_booking_confirmation
 from admin_panel.models import Review, ReviewHelpful, Show, PaymentTransaction, AuditLog
 from admin_panel.services import ensure_movie_schedule, SCHEDULE_HORIZON_DAYS
 from .qr import build_qr_payload, ticket_qr_data_uri
+from .ticket_scan import scan_ticket, resolve_ticket_target as _resolve_ticket_target
 import json
 import secrets
 from datetime import date as date_type, timedelta
@@ -670,32 +671,6 @@ def booking_confirmation(request, token):
     })
 
 
-def _resolve_ticket_target(booking_ref):
-    """Resolve a booking reference to its (Reservation, Booking) pair.
-
-    Supports the transaction-level booking_ref (BMS39DBA878) as well as
-    legacy per-seat references (Booking.booking_ref or a numeric Booking id)
-    so existing tickets keep working after the model mapping.
-    """
-    reservation = Reservation.objects.filter(booking_ref=booking_ref).select_related(
-        'user', 'show', 'show__movie'
-    ).prefetch_related('bookings__seat', 'bookings__payment', 'show__movie__languages').first()
-    if reservation:
-        return reservation, None
-    booking = Booking.objects.filter(booking_ref=booking_ref).select_related(
-        'user', 'movie', 'theater', 'seat', 'reservation', 'payment'
-    ).prefetch_related('movie__languages').first()
-    if booking:
-        return None, booking
-    if booking_ref.isdigit():
-        booking = Booking.objects.filter(id=int(booking_ref)).select_related(
-            'user', 'movie', 'theater', 'seat', 'reservation', 'payment'
-        ).prefetch_related('movie__languages').first()
-        if booking:
-            return None, booking
-    return None, None
-
-
 def _ticket_context(request, booking_ref, reservation, booking):
     """Build the shared context used by the redesigned ticket page."""
     if reservation is not None:
@@ -838,75 +813,15 @@ def verify_ticket_qr(request):
 
     The QR is one-time usable: the first successful scan marks the ticket as
     scanned and later scans are reported as ``already_scanned`` so the venue
-    can deny re-entry.
+    can deny re-entry. Delegates to the shared ``ticket_scan`` core which also
+    records the scan-history audit trail.
     """
-    from .qr import verify_qr_payload
     raw = (request.body or b'').decode('utf-8', 'ignore')
-    payload = None
     try:
         payload = json.loads(raw)
     except Exception:
         payload = None
-    if not verify_qr_payload(payload):
-        return JsonResponse({'valid': False, 'reason': 'invalid_signature'}, status=400)
-    booking_ref = str(payload.get('booking_id') or '')
-
-    reservation = Reservation.objects.filter(booking_ref=booking_ref, status='booked').first()
-    if reservation:
-        return _claim_qr_scan(reservation, payload)
-
-    booking = Booking.objects.filter(booking_ref=booking_ref, status='confirmed').first()
-    if booking:
-        return _claim_qr_scan(booking, payload)
-
-    return JsonResponse({'valid': False, 'reason': 'not_found'})
-
-
-def _claim_qr_scan(target, payload):
-    """Atomically mark a ticket as scanned and return the gate response.
-
-    The first caller that sees ``scanned_at`` unset wins the scan (guarded by
-    an update filter), so simultaneous scans cannot double-claim a ticket.
-    """
-    now = timezone.now()
-    if target.scanned_at:
-        return JsonResponse({
-            'valid': False,
-            'used': True,
-            'reason': 'already_scanned',
-            'scanned_at': target.scanned_at.isoformat(),
-            'scan_count': target.scan_count,
-            'booking_ref': target.booking_ref,
-            'movie': payload.get('movie'),
-            'theatre': payload.get('theatre'),
-            'seats': payload.get('seats'),
-        })
-    claimed = type(target).objects.filter(
-        pk=target.pk, scanned_at__isnull=True
-    ).update(scanned_at=now, scan_count=F('scan_count') + 1)
-    if claimed == 0:
-        target.refresh_from_db(fields=['scanned_at', 'scan_count'])
-        return JsonResponse({
-            'valid': False,
-            'used': True,
-            'reason': 'already_scanned',
-            'scanned_at': target.scanned_at.isoformat() if target.scanned_at else None,
-            'scan_count': target.scan_count,
-            'booking_ref': target.booking_ref,
-            'movie': payload.get('movie'),
-            'theatre': payload.get('theatre'),
-            'seats': payload.get('seats'),
-        })
-    return JsonResponse({
-        'valid': True,
-        'scanned': True,
-        'booking_ref': target.booking_ref,
-        'movie': payload.get('movie'),
-        'theatre': payload.get('theatre'),
-        'seats': payload.get('seats'),
-        'scanned_at': now.isoformat(),
-        'scan_count': target.scan_count + 1,
-    })
+    return scan_ticket(payload)
 
 
 @login_required(login_url='/login/')

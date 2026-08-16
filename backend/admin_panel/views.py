@@ -15,6 +15,7 @@ from django.utils.decorators import method_decorator
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View, TemplateView, DetailView
 from django.urls import reverse_lazy, reverse
 from django.http import JsonResponse, HttpResponseRedirect
+from django.views.decorators.http import require_POST
 import json
 from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
@@ -24,8 +25,9 @@ import sys
 import django
 import secrets
 import logging
-from movies.models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, SeatCategory, ShowPrice
+from movies.models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, SeatCategory, ShowPrice, TicketScan
 from movies.services import ReservationError, create_walkin_bookings, pricing_for_seats
+from movies.ticket_scan import scan_ticket
 
 logger = logging.getLogger('admin_panel')
 from .models import Genre, Language, CastMember, Theatre, Screen, Show, Trailer, MovieImage, AdminProfile, AdminPermission, AuditLog, Coupon, Notification, Review, Payment, PaymentTransaction, GSTSlab, PricingConfig
@@ -2886,7 +2888,7 @@ def staff_delete(request, pk):
 @permission_required('staff', 'can_edit')
 def staff_permissions(request, pk):
     profile = get_object_or_404(AdminProfile, id=pk)
-    modules = ['Movie', 'Theatre', 'Screen', 'Show', 'Booking', 'Payment', 'User', 'Staff', 'Coupon', 'Notification', 'Review', 'Genre', 'Language', 'Cast', 'Settings', 'Analytics']
+    modules = ['Movie', 'Theatre', 'Screen', 'Show', 'Booking', 'Payment', 'User', 'Staff', 'Coupon', 'Notification', 'Review', 'Genre', 'Language', 'Cast', 'Settings', 'Analytics', 'Ticket']
 
     if request.method == 'POST':
         actor_profile = AdminProfile.objects.filter(user=request.user).first()
@@ -3234,6 +3236,91 @@ def review_delete(request, pk):
     return redirect('admin_review_list')
 
 
+
+
+@permission_required('ticket', 'can_view')
+def ticket_scanner(request):
+    """Admin camera/QR scanner page (mobile-first, admin session only)."""
+    return render(request, 'admin/tickets/scanner.html')
+
+
+@permission_required('ticket', 'can_view')
+@require_POST
+def ticket_scan_api(request):
+    """Admin-only scan endpoint.
+
+    Accepts the same HMAC-signed QR payload as the public gate API but is
+    locked to the admin session and records the scanning staff member in the
+    scan-history audit trail.
+    """
+    raw = (request.body or b'').decode('utf-8', 'ignore')
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        payload = None
+    return scan_ticket(
+        payload,
+        scanned_by=request.user,
+        ip_address=request.META.get('REMOTE_ADDR'),
+    )
+
+
+@method_decorator(permission_required('ticket', 'can_view'), name='dispatch')
+class TicketScanHistoryView(AdminSessionMixin, ListView):
+    model = TicketScan
+    template_name = 'admin/tickets/scan_history.html'
+    context_object_name = 'scans'
+    ordering = ['-scanned_at']
+
+    def get_paginate_by(self, queryset):
+        per_page = self.request.GET.get('per_page', '20')
+        try:
+            return int(per_page) if int(per_page) in [10, 20, 50, 100] else 20
+        except (ValueError, TypeError):
+            return 20
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['staff_users'] = User.objects.filter(is_staff=True).order_by('username')
+        context['result_choices'] = TicketScan.RESULT_CHOICES
+        return context
+
+    def get_queryset(self):
+        qs = TicketScan.objects.select_related('scanned_by').all()
+        search = self.request.GET.get('search')
+        result = self.request.GET.get('result')
+        staff = self.request.GET.get('staff')
+        date_from = self.request.GET.get('date_from')
+        date_to = self.request.GET.get('date_to')
+        if search:
+            qs = qs.filter(
+                Q(booking_ref__icontains=search) |
+                Q(movie__icontains=search) |
+                Q(scanned_by__username__icontains=search)
+            )
+        if result:
+            qs = qs.filter(result=result)
+        if staff:
+            qs = qs.filter(scanned_by_id=staff)
+        try:
+            if date_from:
+                qs = qs.filter(scanned_at__date__gte=date_from)
+            if date_to:
+                qs = qs.filter(scanned_at__date__lte=date_to)
+        except (ValueError, TypeError):
+            pass
+        sort = self.request.GET.get('sort', 'scanned_at')
+        order = self.request.GET.get('order', 'desc')
+        valid_sort = ['id', 'booking_ref', 'result', 'scanned_by__username', 'scanned_at']
+        if sort.lstrip('-') in valid_sort:
+            if order == 'desc' and not sort.startswith('-'):
+                sort = f'-{sort}'
+            elif order == 'asc' and sort.startswith('-'):
+                sort = sort[1:]
+            qs = qs.order_by(sort)
+        else:
+            qs = qs.order_by('-scanned_at')
+        return qs
 
 
 class AuditLogListView(AdminSessionMixin, ListView):

@@ -98,6 +98,23 @@
       </div>
     </div>
 
+    <div class="sidebar-group" data-group="ticketing">
+      <button type="button" class="sidebar-group__header" data-sidebar-group-toggle aria-expanded="true">
+        <span class="sidebar-group__label">Ticketing</span>
+        <i class="bi bi-chevron-down sidebar-group__chevron"></i>
+      </button>
+      <div class="sidebar-group__links">
+        <div class="sidebar-group__links-inner">
+          <a href="{% url 'admin_ticket_scanner' %}" class="sidebar-link {% if 'scanner' in request.resolver_match.url_name %}active{% endif %}">
+            <i class="bi bi-qr-code-scan"></i><span>QR Scanner</span>
+          </a>
+          <a href="{% url 'admin_ticket_scan_history' %}" class="sidebar-link {% if 'scan' in request.resolver_match.url_name %}active{% endif %}">
+            <i class="bi bi-journal-check"></i><span>Scan History</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
     <div class="sidebar-group" data-group="customers">
       <button type="button" class="sidebar-group__header" data-sidebar-group-toggle aria-expanded="true">
         <span class="sidebar-group__label">Customers</span>

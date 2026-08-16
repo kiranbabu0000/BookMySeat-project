@@ -79,6 +79,10 @@ urlpatterns = [
     path('bookings/transactions/<int:pk>/', views.booking_transaction_detail, name='admin_booking_transaction_detail'),
     path('bookings/transactions/<int:pk>/cancel/', views.booking_transaction_cancel, name='admin_booking_transaction_cancel'),
 
+    path('scanner/', views.ticket_scanner, name='admin_ticket_scanner'),
+    path('scanner/scan/', views.ticket_scan_api, name='admin_ticket_scan_api'),
+    path('scans/', views.TicketScanHistoryView.as_view(), name='admin_ticket_scan_history'),
+
     path('reservations/', views.ReservationListView.as_view(), name='admin_reservation_list'),
 
     path('payments/', views.PaymentTransactionListView.as_view(), name='admin_payment_list'),

@@ -1,0 +1,127 @@
+{% extends 'admin/base_admin.html' %}
+{% load static %}
+{% block title %}Ticket Scanner{% endblock %}
+{% block page_title %}Ticket Scanner{% endblock %}
+{% block extra_css %}
+<style>
+  .scanner-viewport {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1rem;
+    background: #000;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    max-height: 440px;
+  }
+  .scanner-viewport video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .scanner-frame {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 72%;
+    height: 55%;
+    border: 3px solid rgba(255, 255, 255, 0.85);
+    border-radius: 0.75rem;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+    transition: border-color 0.2s ease;
+  }
+  .scanner-viewport.is-scanning .scanner-frame { border-color: #22c55e; }
+  .scanner-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    color: #9ca3af;
+    text-align: center;
+    padding: 1rem;
+  }
+  .scanner-placeholder i { font-size: 3rem; }
+  .scan-badge { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.03em; }
+  .scan-result-icon { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; }
+  .scan-detail-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 0.9rem; }
+  .scan-detail-grid dt { color: var(--text-muted); font-size: 0.82rem; margin: 0; }
+  .scan-detail-grid dd { margin: 0; font-size: 0.92rem; font-weight: 500; word-break: break-word; }
+  .scanner-fallback textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; }
+</style>
+{% endblock %}
+{% block content %}
+<input type="hidden" id="ticketScanUrl" value="{% url 'admin_ticket_scan_api' %}">
+{% csrf_token %}
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card-bms">
+      <div class="card-bms-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <h5 class="mb-0"><i class="bi bi-qr-code-scan me-2"></i>Camera Scanner</h5>
+        <div class="d-flex gap-2">
+          <button type="button" id="startCamera" class="btn btn-sm btn-bms-primary">
+            <i class="bi bi-camera-video-fill me-1"></i>Start Camera
+          </button>
+          <button type="button" id="stopCamera" class="btn btn-sm btn-outline-secondary d-none">
+            <i class="bi bi-stop-fill me-1"></i>Stop
+          </button>
+        </div>
+      </div>
+      <div class="card-bms-body">
+        <div class="scanner-viewport" id="scannerViewport">
+          <video id="scannerVideo" autoplay playsinline muted></video>
+          <div class="scanner-frame" id="scannerFrame" aria-hidden="true"></div>
+          <div class="scanner-placeholder" id="scannerPlaceholder">
+            <i class="bi bi-qr-code-scan"></i>
+            <span>Start the camera and point it at a ticket QR code.</span>
+          </div>
+        </div>
+        <div class="alert alert-info small mt-3 mb-0" id="scannerStatus">
+          <i class="bi bi-info-circle me-1"></i>Camera is off. Press <strong>Start Camera</strong> to begin scanning.
+        </div>
+        <p class="small text-muted mb-0 mt-3">
+          The QR is verified server-side (HMAC-signed). A ticket can only be admitted once &mdash; repeat scans are rejected.
+          <a href="{% url 'admin_ticket_scan_history' %}">View scan history</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card-bms d-none" id="scanResultPanel">
+      <div class="card-bms-header">
+        <h6 class="mb-0"><i class="bi bi-clipboard2-check me-2"></i>Last Scan</h6>
+      </div>
+      <div class="card-bms-body" id="scanResultBody"></div>
+    </div>
+
+    <div class="card-bms scanner-fallback">
+      <div class="card-bms-header">
+        <h6 class="mb-0"><i class="bi bi-keyboard me-2"></i>Manual Entry</h6>
+      </div>
+      <div class="card-bms-body">
+        <label class="small text-muted">Paste QR payload (JSON)</label>
+        <textarea id="manualPayload" class="form-control form-control-sm mb-2" rows="4" placeholder='{"booking_id":"BMS123...","movie":"...","theatre":"...","seats":["A1"],"sig":"..."}'></textarea>
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="button" id="manualValidate" class="btn btn-sm btn-bms-primary">
+            <i class="bi bi-check2-circle me-1"></i>Validate Ticket
+          </button>
+          <label class="btn btn-sm btn-outline-secondary mb-0">
+            <i class="bi bi-image me-1"></i>Scan Image
+            <input type="file" id="imageInput" accept="image/*" class="d-none">
+          </label>
+        </div>
+        <p class="small text-muted mt-2 mb-0">Tip: scan the QR from a screenshot/photo if the camera is unavailable.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="{% static 'admin/js/scanner.js' %}?v=202613"></script>
+{% endblock %}

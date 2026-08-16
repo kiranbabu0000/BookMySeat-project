@@ -266,6 +266,43 @@ class TicketDownload(models.Model):
         return f'{self.user.username} downloaded {self.booking_ref}'
 
 
+class TicketScan(models.Model):
+    """Venue gate-scan audit trail for ticket QR validation.
+
+    One row per scan attempt (admitted, already used, invalid, unpaid or
+    cancelled/refunded) so admins can review exactly who scanned which ticket,
+    when, and what the outcome was.
+    """
+    RESULT_CHOICES = [
+        ('admitted', 'Admitted'),
+        ('already_scanned', 'Already Scanned'),
+        ('invalid', 'Invalid QR'),
+        ('not_found', 'Not Found'),
+        ('unpaid', 'Unpaid'),
+        ('cancelled', 'Cancelled / Refunded'),
+    ]
+
+    booking_ref = models.CharField(max_length=20, db_index=True)
+    movie = models.CharField(max_length=255, blank=True, default='')
+    theatre = models.CharField(max_length=255, blank=True, default='')
+    show_time = models.DateTimeField(null=True, blank=True, help_text="Scheduled show time for the scanned ticket")
+    seats = models.CharField(max_length=500, blank=True, default='', help_text="Comma-separated seat numbers on the ticket")
+    result = models.CharField(max_length=20, choices=RESULT_CHOICES, default='admitted', db_index=True)
+    scanned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='ticket_scans', help_text="Admin/staff user who operated the scanner")
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+    scanned_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-scanned_at']
+        indexes = [
+            models.Index(fields=['booking_ref', 'scanned_at']),
+            models.Index(fields=['result', 'scanned_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.booking_ref} - {self.result}'
+
+
 class EmailOutbox(models.Model):
     """Database-backed asynchronous email queue (transactional outbox pattern).
 
