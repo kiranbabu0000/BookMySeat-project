@@ -25,6 +25,7 @@ from .models import (
     ShowPrice,
     Theater,
 )
+from .showtime import assert_show_bookable
 
 logger = logging.getLogger(__name__)
 
@@ -474,8 +475,7 @@ def create_reservation(user, show_id, seat_ids, ticket_count=None):
             show = Theater.objects.select_for_update().get(pk=show_id)
         except Theater.DoesNotExist:
             raise ReservationError('Show not found.') from None
-        if show.time <= now:
-            raise ReservationError('This show has already started and cannot be booked.')
+        assert_show_bookable(show, now)
         _expire_stale_reservations(show, now)
 
         existing = Reservation.objects.filter(
@@ -546,8 +546,7 @@ def modify_reservation(user, token, add_seat_ids, remove_seat_ids, ticket_count=
     with transaction.atomic():
         reservation = _get_owned_active_reservation(user, token, now)
         show = reservation.show
-        if show.time <= now:
-            raise ReservationError('This show has already started and cannot be booked.')
+        assert_show_bookable(show, now)
         _expire_stale_reservations(show, now)
         reservation.refresh_from_db()
         if reservation.status != 'active' or reservation.expires_at <= now:
@@ -627,8 +626,7 @@ def confirm_booking(user, token, transaction_id=None, payment_method='upi', coup
     with transaction.atomic():
         reservation = _get_owned_active_reservation(user, token, now)
         show = reservation.show
-        if show.time <= now:
-            raise ReservationError('This show has already started and cannot be booked.')
+        assert_show_bookable(show, now)
         _expire_stale_reservations(show, now)
         reservation.refresh_from_db()
         if reservation.status != 'active' or reservation.expires_at <= now:
@@ -795,10 +793,7 @@ def create_walkin_bookings(user, movie, show, seat_count, payment_method='manual
         show = Theater.objects.select_for_update().get(pk=show.pk)
         if show.movie_id != movie.id:
             raise ReservationError('The selected show is not screening this movie.')
-        if show.time <= now:
-            raise ReservationError(
-                'Cannot reserve seats for a show that has already started.'
-            )
+        assert_show_bookable(show, now)
         _expire_stale_reservations(show, now)
         held = ReservedSeat.objects.filter(
             reservation__show=show,

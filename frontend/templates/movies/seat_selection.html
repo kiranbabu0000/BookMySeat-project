@@ -18,6 +18,37 @@
       </ol>
     </nav>
 
+    <!-- Late-entry / showtime status warning (driven server-side) -->
+    <div id="showtimeWarning" class="alert alert-bms showtime-warning d-none mb-4" role="alert"
+         data-late-entry="{{ show_status.label|default:'UPCOMING' }}"
+         data-status="{{ show_status.status|default:'upcoming' }}"
+         data-started-minutes="{{ show_status.started_minutes_ago|default:0 }}"
+         data-deadline="{{ show_status.deadline_local|date:'c' }}">
+      <div class="d-flex align-items-start gap-3 flex-wrap">
+        <div class="showtime-warning__icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+        <div class="flex-grow-1 min-w-0">
+          <strong class="showtime-warning__title" id="showtimeWarningTitle">
+            {% if show_status.status == 'late_entry' %}
+            This show has already started
+            {% else %}
+            Showtime status
+            {% endif %}
+          </strong>
+          <p class="showtime-warning__text mb-0" id="showtimeWarningText">
+            {% if show_status.status == 'late_entry' %}
+            This show started {{ show_status.started_minutes_ago }} minute{{ show_status.started_minutes_ago|pluralize }} ago.
+            You can still book during the late-entry window, but you may miss the beginning.
+            {% else %}
+            This show is currently open for booking.
+            {% endif %}
+          </p>
+        </div>
+        <button type="button" class="btn btn-bms-warning btn-sm showtime-warning__ack" id="showtimeWarningAck">
+          <i class="bi bi-check-lg me-1"></i>I understand, continue
+        </button>
+      </div>
+    </div>
+
     <!-- Header info card -->
     <div class="card mb-4 border-0 shadow-sm booking-header" style="background: var(--bg-card); border-radius: var(--radius-xl); border: 1px solid var(--border-color) !important;">
       <div class="booking-header__main">

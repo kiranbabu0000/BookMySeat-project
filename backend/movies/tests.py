@@ -404,11 +404,21 @@ class ReservationServiceTests(TestCase):
         self.assertEqual(reservation.coupon_code, 'ONCE')
         self.assertGreater(reservation.discount_amount, 0)
 
-    def test_cannot_book_after_show_started(self):
+    def test_book_allowed_inside_late_entry_window(self):
         show = Theater.objects.create(
             name='Late Show',
             movie=self.movie,
             time=timezone.now() - timedelta(minutes=5),
+        )
+        seat = Seat.objects.create(theater=show, seat_number='A1')
+        reservation = create_reservation(self.user, show.id, [seat.id])
+        self.assertEqual(reservation.status, 'active')
+
+    def test_cannot_book_after_late_entry_window(self):
+        show = Theater.objects.create(
+            name='Expired Show',
+            movie=self.movie,
+            time=timezone.now() - timedelta(minutes=45),
         )
         seat = Seat.objects.create(theater=show, seat_number='A1')
         with self.assertRaises(ReservationError):

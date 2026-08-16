@@ -36,6 +36,12 @@ from admin_panel.models import Review, ReviewHelpful, Show, PaymentTransaction, 
 from admin_panel.services import ensure_movie_schedule, SCHEDULE_HORIZON_DAYS
 from .qr import build_qr_payload, ticket_qr_data_uri
 from .ticket_scan import scan_ticket, resolve_ticket_target as _resolve_ticket_target
+from .showtime import (
+    day_range_utc,
+    show_bookable,
+    show_status_info,
+    to_local,
+)
 import json
 import secrets
 from datetime import date as date_type, timedelta
@@ -232,6 +238,7 @@ def _attach_occupancy(theaters, now=None):
         t.occupancy_pct = pct
         t.availability_level = 'high' if pct >= 90 else ('medium' if pct >= 70 else 'low')
         t.availability_label = 'Almost full' if pct >= 90 else ('Filling fast' if pct >= 70 else '')
+        t.show_status = show_status_info(t, now)
     return theaters
 
 
@@ -241,13 +248,13 @@ def theater_list(request, movie_id):
         from django.http import Http404
         raise Http404("Movie not available")
 
-    today = timezone.now().date()
+    today = timezone.localdate()
     show_dates = [today + timedelta(days=i) for i in range(SCHEDULE_HORIZON_DAYS)]
     # Lazily roll the schedule forward so the rolling date tabs always have
     # shows: if the last tab has no theaters yet, re-apply the movie's daily
     # slate to the freshly appearing days. Skipped under the test runner.
     if not getattr(settings, 'TESTING', False) and not Theater.objects.filter(
-        movie=movie, status='active', time__date=show_dates[-1]
+        movie=movie, status='active', time__range=day_range_utc(show_dates[-1])
     ).exists():
         ensure_movie_schedule(movie, SCHEDULE_HORIZON_DAYS)
     selected_date = today
@@ -262,17 +269,18 @@ def theater_list(request, movie_id):
 
     theaters = (
         Theater.objects.filter(
-            movie=movie, status='active', time__date=selected_date
+            movie=movie, status='active', time__range=day_range_utc(selected_date)
         )
         .select_related('admin_show__theatre')
     )
     city = (request.GET.get('city') or request.COOKIES.get('bms_city') or '').strip()
     if city:
         theaters = theaters.filter(admin_show__theatre__city__iexact=city)
-    if selected_date == today:
-        theaters = theaters.exclude(time__lt=timezone.now())
     theaters = theaters.order_by('name', 'screen_name', 'time')
     theaters = _attach_occupancy(theaters)
+    if selected_date == today:
+        # Keep late-entry shows visible (with a warning) but never EXPIRED ones.
+        theaters = [t for t in theaters if show_bookable(t)]
 
     date_tabs = [
         {
@@ -361,8 +369,12 @@ def book_seats(request, theater_id):
         Theater.objects.select_related('movie', 'admin_show__theatre'),
         id=theater_id, status='active',
     )
-    if show.time <= timezone.now():
-        messages.error(request, 'This show has already started and can no longer be booked.')
+    if not show_bookable(show):
+        messages.error(
+            request,
+            'This show is no longer available for booking — its late-entry '
+            'window has closed.',
+        )
         return redirect('theater_list', movie_id=show.movie_id)
     from .services import MAX_TICKET_COUNT
 
@@ -412,11 +424,13 @@ def book_seats(request, theater_id):
         'layout': layout,
         'max_tickets': MAX_TICKET_COUNT,
         'ticket_count': ticket_count or 1,
+        'show_status': show_status_info(show),
         'show_data': {
             'id': show.id,
             'name': show.name,
             'movie': show.movie.name,
-            'time': show.time.strftime('%I:%M %p, %A, %b %d'),
+            'time': to_local(show.time).strftime('%I:%M %p, %A, %b %d'),
+            'status': show_status_info(show),
             'ticket_price': str(show.ticket_price),
             'prices': {str(item['id']): str(item['price']) for item in seat_data},
             'tiers': tier_prices,
@@ -436,8 +450,11 @@ def book_seats(request, theater_id):
 def seat_status(request, theater_id):
     show = get_object_or_404(Theater, id=theater_id, status='active')
     expire_stale_for_show(show)
+    status_info = show_status_info(show)
     revision = Theater.objects.get(pk=show.pk).seat_revision
-    etag = f'"rev-{revision}"'
+    # Include the live showtime status so a status change (upcoming -> late
+    # entry -> expired) busts the ETag cache even when no seat changed.
+    etag = f'"rev-{revision}-st-{status_info["status"]}-{status_info["deadline"].timestamp()}"'
     if request.META.get('HTTP_IF_NONE_MATCH') == etag:
         return HttpResponseNotModified()
     states = seat_states_for_show(show)
@@ -453,6 +470,7 @@ def seat_status(request, theater_id):
         'revision': revision,
         'seats': {str(k): v for k, v in states.items()},
         'prices': prices,
+        'show_status': status_info,
     }
     if reservation and reservation.expires_at > timezone.now():
         payload['reservation'] = _reservation_payload(reservation)
@@ -529,14 +547,19 @@ def payment_page(request, token):
     if reservation.status != 'active' or reservation.expires_at <= timezone.now():
         messages.error(request, 'Your reservation has expired. Please select your seats again.')
         return redirect('book_seats', theater_id=reservation.show_id)
-    if reservation.show.time <= timezone.now():
-        messages.error(request, 'This show has already started and cannot be booked.')
+    if not show_bookable(reservation.show):
+        messages.error(
+            request,
+            'This show is no longer available for booking — its late-entry '
+            'window has closed.',
+        )
         return redirect('book_seats', theater_id=reservation.show_id)
     pricing = reservation_pricing(reservation)
     return render(request, 'movies/payment.html', {
         'reservation': reservation,
         'seats': reservation.reserved_seats.select_related('seat'),
         'pricing': pricing,
+        'show_status': show_status_info(reservation.show),
         'transaction_id': 'TXN-{}{}'.format(
             reservation.token[:10].upper(), secrets.token_hex(4).upper()
         ),

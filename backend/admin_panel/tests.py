@@ -534,8 +534,10 @@ class ShowTheaterSyncTests(TestCase):
         self.assertEqual(theater.ticket_price, Decimal('250.00'))
         self.assertEqual(theater.status, 'active')
         self.assertEqual(theater.screen_name, 'Screen 1')
-        self.assertEqual(theater.time.date(), self.show_date)
-        self.assertEqual(theater.time.time().strftime('%H:%M'), self.show_time)
+        self.assertEqual(timezone.localtime(theater.time).date(), self.show_date)
+        self.assertEqual(
+            timezone.localtime(theater.time).time().strftime('%H:%M'), self.show_time
+        )
         self.assertGreater(theater.seats.count(), 0)
 
         public = self.client.get(
@@ -557,8 +559,10 @@ class ShowTheaterSyncTests(TestCase):
             date=new_date.isoformat(), time='18:45', ticket_price='300.00'))
         show.refresh_from_db()
         theater = show.theater
-        self.assertEqual(theater.time.date(), new_date)
-        self.assertEqual(theater.time.time().strftime('%H:%M'), '18:45')
+        self.assertEqual(timezone.localtime(theater.time).date(), new_date)
+        self.assertEqual(
+            timezone.localtime(theater.time).time().strftime('%H:%M'), '18:45'
+        )
         self.assertEqual(theater.ticket_price, Decimal('300.00'))
 
     def test_toggle_status_syncs_linked_theater_and_hides_from_public(self):

@@ -27,6 +27,7 @@ import secrets
 import logging
 from movies.models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, SeatCategory, ShowPrice, TicketScan
 from movies.services import ReservationError, create_walkin_bookings, pricing_for_seats
+from movies.showtime import show_status_info
 from movies.ticket_scan import scan_ticket
 
 logger = logging.getLogger('admin_panel')
@@ -1595,6 +1596,9 @@ class ShowListView(AdminSessionMixin, ListView):
         context = super().get_context_data(**kwargs)
         context['movies'] = Movie.objects.all()
         context['theatre_names'] = Theater.objects.values_list('name', flat=True).distinct().order_by('name')
+        shows = context.get('page_obj') or context.get(self.context_object_name) or []
+        for s in shows:
+            s.status_info = show_status_info(s)
         return context
 
 

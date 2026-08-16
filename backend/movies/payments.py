@@ -25,6 +25,7 @@ from . import gateway
 from .models import Reservation
 from .notifications import send_booking_confirmation, send_payment_failed_email
 from .services import ReservationError, confirm_booking, reservation_pricing
+from .showtime import assert_show_bookable
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +56,7 @@ def _owned_active_reservation(user, token, for_update=False):
         raise ReservationError(
             'Your reservation has expired. Please select your seats again.'
         )
-    if reservation.show.time <= timezone.now():
-        raise ReservationError(
-            'This show has already started and cannot be booked.'
-        )
+    assert_show_bookable(reservation.show)
     return reservation, False
 
 
@@ -112,8 +110,7 @@ def start_checkout(user, token, coupon_code=''):
             raise ReservationError(
                 'Your reservation has expired. Please select your seats again.'
             )
-        if reservation.show.time <= timezone.now():
-            raise ReservationError('This show has already started and cannot be booked.')
+        assert_show_bookable(reservation.show)
 
         existing = PaymentTransaction.objects.filter(
             reservation=reservation, status='created'

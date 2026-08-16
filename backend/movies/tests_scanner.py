@@ -293,6 +293,76 @@ class TicketScanApiTests(TestCase):
             ).count(), 1
         )
 
+    def test_admitted_response_includes_customer_and_screen(self):
+        self.user.first_name = 'Alice'
+        self.user.last_name = 'Wonder'
+        self.user.save()
+        self.show.screen_name = 'Screen 2'
+        self.show.save(update_fields=['screen_name'])
+        reservation = _confirmed_reservation(self.user, self.show, self.seats[:1])
+        body = self._scan_api(_payload_for(reservation)).json()
+        self.assertTrue(body['valid'])
+        self.assertTrue(body['scanned'])
+        self.assertEqual(body['customer'], 'Alice Wonder')
+        self.assertEqual(body['screen'], 'Screen 2')
+
+    def test_customer_falls_back_to_username(self):
+        reservation = _confirmed_reservation(self.user, self.show, self.seats[:1])
+        body = self._scan_api(_payload_for(reservation)).json()
+        self.assertTrue(body['valid'])
+        self.assertEqual(body['customer'], 'alice')
+        self.assertEqual(body['screen'], 'Main')
+
+    def test_already_scanned_response_includes_original_scan_and_customer(self):
+        reservation = _confirmed_reservation(self.user, self.show, self.seats[:1])
+        payload = _payload_for(reservation)
+        first = self._scan_api(payload).json()
+        self.assertTrue(first['scanned'])
+
+        second = self._scan_api(payload).json()
+        self.assertTrue(second['used'])
+        self.assertEqual(second['reason'], 'already_scanned')
+        self.assertIsNotNone(second['scanned_at'])
+        self.assertEqual(second['scan_count'], 1)
+        self.assertEqual(second['customer'], 'alice')
+        self.assertEqual(second['screen'], 'Main')
+
+    def test_invalid_qr_does_not_mutate_booking(self):
+        reservation = _confirmed_reservation(self.user, self.show, self.seats[:1])
+        tampered = dict(_payload_for(reservation))
+        tampered['booking_id'] = 'BMS-TAMPERED'
+        response = self._scan_api(tampered)
+        self.assertEqual(response.status_code, 400)
+        body = response.json()
+        self.assertFalse(body['valid'])
+        self.assertEqual(body['reason'], 'invalid_signature')
+
+        reservation.refresh_from_db()
+        self.assertIsNone(reservation.scanned_at)
+        self.assertEqual(reservation.scan_count, 0)
+        self.assertEqual(
+            TicketScan.objects.filter(
+                booking_ref=reservation.booking_ref, result='admitted'
+            ).count(), 0
+        )
+
+    def test_legacy_booking_admitted_includes_customer_and_screen(self):
+        Booking.objects.create(
+            user=self.user,
+            seat=self.seats[1],
+            movie=self.movie,
+            theater=self.show,
+            status='confirmed',
+            booking_ref='BMSLEGACY01',
+            total=Decimal('250.00'),
+        )
+        payload = build_qr_payload('BMSLEGACY01', self.movie.name, self.show.name, ['A2'])
+        body = self._scan_api(payload).json()
+        self.assertTrue(body['valid'])
+        self.assertTrue(body['scanned'])
+        self.assertEqual(body['customer'], 'alice')
+        self.assertEqual(body['screen'], 'Main')
+
 
 @DEMO_RAZORPAY
 class ScannerConcurrencyTests(TransactionTestCase):

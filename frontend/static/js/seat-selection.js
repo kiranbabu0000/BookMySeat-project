@@ -35,6 +35,8 @@
   var pollHandle = null;
   var lastEtag = null;
   var busy = false;
+  var acknowledgedLateEntry = false;
+  var showExpired = false;
 
   /* Ticket-count bottom sheet */
   var sheetSelection = 1;
@@ -143,6 +145,10 @@
     els.undoBtn = document.getElementById('undoClearBtn');
     els.bestBtn = document.getElementById('bestSeatsBtn');
     els.mobileBestBtn = document.getElementById('mobileBestBtn');
+    els.showtimeWarning = document.getElementById('showtimeWarning');
+    els.showtimeWarningAck = document.getElementById('showtimeWarningAck');
+    els.showtimeWarningTitle = document.getElementById('showtimeWarningTitle');
+    els.showtimeWarningText = document.getElementById('showtimeWarningText');
 
     show = parseJson(document.getElementById('showData').textContent, {});
     if (!show.ticket_price) show.ticket_price = '250';
@@ -238,6 +244,14 @@
 
     if (state.mode === 'hold') startTimer();
     startPolling();
+    applyShowStatus(show.status || null);
+
+    if (els.showtimeWarningAck) {
+      els.showtimeWarningAck.addEventListener('click', function () {
+        acknowledgedLateEntry = true;
+        if (els.showtimeWarning) els.showtimeWarning.classList.add('d-none');
+      });
+    }
   }
 
   function collectSeatEls() {
@@ -1063,6 +1077,69 @@
     poll();
   }
 
+  /* ---------- showtime status (late-entry / expired) ---------- */
+
+  function applyShowStatus(status) {
+    if (!els.showtimeWarning || !status) return;
+
+    var wasExpired = showExpired;
+    showExpired = status.status === 'expired';
+
+    if (showExpired) {
+      els.showtimeWarning.classList.remove('d-none');
+      els.showtimeWarning.classList.add('showtime-warning--expired');
+      if (els.showtimeWarningTitle) els.showtimeWarningTitle.textContent = 'This show is no longer bookable';
+      if (els.showtimeWarningText) {
+        els.showtimeWarningText.textContent =
+          'The late-entry window for this show has closed, so new bookings and ' +
+          'payments are no longer accepted. Please choose another showtime.';
+      }
+      blockShowtime();
+      if (!wasExpired) {
+        flashMessage('This show is no longer bookable — its late-entry window has closed.', 'danger');
+      }
+      return;
+    }
+
+    els.showtimeWarning.classList.remove('showtime-warning--expired');
+
+    if (status.status === 'late_entry') {
+      var mins = Number(status.started_minutes_ago) || 1;
+      if (els.showtimeWarningTitle) els.showtimeWarningTitle.textContent = 'This show has already started';
+      if (els.showtimeWarningText) {
+        els.showtimeWarningText.textContent =
+          'This show started ' + mins + ' minute' + (mins === 1 ? '' : 's') + ' ago. ' +
+          'You can still book during the late-entry window, but you may miss the beginning.';
+      }
+      if (!acknowledgedLateEntry) {
+        els.showtimeWarning.classList.remove('d-none');
+      }
+    } else {
+      els.showtimeWarning.classList.add('d-none');
+    }
+  }
+
+  function blockShowtime() {
+    if (els.continueBtn) els.continueBtn.disabled = true;
+    if (els.mobilePrimary) els.mobilePrimary.disabled = true;
+    if (els.proceedPayBtn) {
+      els.proceedPayBtn.setAttribute('aria-disabled', 'true');
+      els.proceedPayBtn.classList.add('disabled');
+      els.proceedPayBtn.removeAttribute('href');
+    }
+    stopTimer();
+    if (state.reservation) {
+      var url = layout.dataset.releaseUrlTemplate.replace('TOKEN', state.reservation.token);
+      fetch(url, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+        body: '{}',
+      }).catch(function () {});
+    }
+    state.reservation = null;
+    exitHoldMode();
+  }
+
   function poll() {
     fetch(layout.dataset.statusUrl, {
       headers: { 'If-None-Match': lastEtag || '' },
@@ -1074,6 +1151,7 @@
       return resp.json();
     }).then(function (data) {
       if (!data) return;
+      applyShowStatus(data.show_status);
       applySeatStates(data.seats);
       if (data.reservation) {
         if (!state.reservation || state.reservation.token !== data.reservation.token) {

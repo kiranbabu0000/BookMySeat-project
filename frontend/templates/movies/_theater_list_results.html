@@ -54,12 +54,17 @@
       <div class="showtime-grid">
         {% for theater in screen.list %}
         {% with part=theater.time|showtime_part %}
-        <a href="{% url 'book_seats' theater.id %}" class="showtime-btn showtime-btn--{{ part }}"
+        <a href="{% url 'book_seats' theater.id %}" class="showtime-btn showtime-btn--{{ part }}{% if theater.show_status.status == 'late_entry' %} showtime-btn--late{% endif %}"
            data-book-url="{% url 'book_seats' theater.id %}"{% if theater.availability_label %} data-fill="{{ theater.availability_level }}"{% endif %}>
           <span class="showtime-btn__time"><i class="showtime-btn__dot showtime-btn__dot--{{ part }}"></i>{{ theater.time|date:"g:i A" }}</span>
           <small>{{ theater.time|date:"D, M d" }}</small>
           {% if theater.availability_label %}
           <small class="showtime-btn__fill showtime-btn__fill--{{ theater.availability_level }}">{{ theater.availability_label }}</small>
+          {% endif %}
+          {% if theater.show_status.status == 'late_entry' %}
+          <small class="showtime-btn__late" title="This show has already started. You can still book during the late-entry window, but you may miss the beginning.">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>Started {{ theater.show_status.started_minutes_ago }} min ago · Late entry
+          </small>
           {% endif %}
           <span class="showtime-btn__price">₹{{ theater.ticket_price }}</span>
         </a>
@@ -80,7 +85,8 @@
     </span>
     &nbsp;·&nbsp;
     <i class="bi bi-info-circle me-1"></i>
-    <span class="text-warning">●</span> Non-cancellable tickets · Best view seats are highlighted in the seat map
+    <span class="text-warning">●</span> Non-cancellable tickets · Best view seats are highlighted in the seat map ·
+    <span class="text-warning"><i class="bi bi-exclamation-triangle-fill"></i> Late entry</span> shows may have started — book at your discretion
   </p>
 {% else %}
 <div class="empty-state">

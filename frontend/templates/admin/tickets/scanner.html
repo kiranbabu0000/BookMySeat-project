@@ -4,16 +4,19 @@
 {% block page_title %}Ticket Scanner{% endblock %}
 {% block extra_css %}
 <style>
-  .scanner-viewport {
+  .scanner-stage {
     position: relative;
     overflow: hidden;
-    border-radius: 1rem;
+    border-radius: var(--radius-lg);
     background: #000;
     width: 100%;
     aspect-ratio: 4 / 3;
     max-height: 440px;
+    isolation: isolate;
   }
-  .scanner-viewport video {
+  .scanner-stage video {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -24,18 +27,81 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 72%;
-    height: 55%;
-    border: 3px solid rgba(255, 255, 255, 0.85);
-    border-radius: 0.75rem;
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+    width: min(74%, 320px);
+    height: 54%;
+    min-height: 140px;
     pointer-events: none;
-    transition: border-color 0.2s ease;
+    z-index: 2;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+    border-radius: 0.5rem;
+    transition: box-shadow 0.2s ease;
   }
-  .scanner-viewport.is-scanning .scanner-frame { border-color: #22c55e; }
+  .scanner-corner {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border: 0 solid #fff;
+    filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.8));
+  }
+  .scanner-corner.tl { top: 0; left: 0; border-top-width: 4px; border-left-width: 4px; border-top-left-radius: 10px; }
+  .scanner-corner.tr { top: 0; right: 0; border-top-width: 4px; border-right-width: 4px; border-top-right-radius: 10px; }
+  .scanner-corner.bl { bottom: 0; left: 0; border-bottom-width: 4px; border-left-width: 4px; border-bottom-left-radius: 10px; }
+  .scanner-corner.br { bottom: 0; right: 0; border-bottom-width: 4px; border-right-width: 4px; border-bottom-right-radius: 10px; }
+  .scanner-line {
+    position: absolute;
+    left: 6%;
+    right: 6%;
+    top: 6%;
+    height: 3px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, #22c55e, transparent);
+    box-shadow: 0 0 14px 2px rgba(34, 197, 94, 0.75);
+    opacity: 0;
+  }
+  .scanner-stage.is-scanning .scanner-line { animation: scannerSweep 1.9s ease-in-out infinite; }
+  @keyframes scannerSweep {
+    0%   { top: 6%; opacity: 0; }
+    12%  { opacity: 1; }
+    50%  { top: 90%; opacity: 1; }
+    88%  { opacity: 1; }
+    100% { top: 90%; opacity: 0; }
+  }
+  .scanner-stage.has-success .scanner-line,
+  .scanner-stage.has-used .scanner-line,
+  .scanner-stage.has-invalid .scanner-line { animation: none; opacity: 0; }
+  .scanner-head {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
+    padding: 0.65rem 1rem 0.9rem;
+    text-align: center;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.6), transparent);
+    color: #fff;
+    pointer-events: none;
+  }
+  .scanner-heading { font-weight: 800; letter-spacing: 0.14em; font-size: 1rem; }
+  .scanner-hint { font-size: 0.72rem; color: rgba(255, 255, 255, 0.85); margin-top: 0.15rem; }
+  .scanner-hint-pill {
+    position: absolute;
+    bottom: 0.7rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.3rem 0.85rem;
+    border-radius: var(--radius-pill);
+    white-space: nowrap;
+    pointer-events: none;
+  }
   .scanner-placeholder {
     position: absolute;
     inset: 0;
+    z-index: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -46,12 +112,70 @@
     padding: 1rem;
   }
   .scanner-placeholder i { font-size: 3rem; }
-  .scan-badge { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.03em; }
+  .scanner-state {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    text-align: center;
+    padding: 1rem;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+  }
+  .scanner-stage.has-result .scanner-state { display: flex; }
+  .scanner-state-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.1rem;
+    margin-bottom: 0.15rem;
+  }
+  .scanner-state-title { font-size: 1.2rem; font-weight: 800; letter-spacing: 0.1em; }
+  .scanner-state-msg { font-size: 0.85rem; opacity: 0.9; max-width: 34ch; }
+  .scanner-stage.has-success .scanner-state-icon { background: var(--accent-success); }
+  .scanner-stage.has-used .scanner-state-icon { background: var(--accent-gold); }
+  .scanner-stage.has-invalid .scanner-state-icon,
+  .scanner-stage.has-error .scanner-state-icon { background: var(--accent-primary); }
+
+  .camera-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: border-color var(--transition-fast);
+  }
+  .camera-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex: none; }
+  .camera-chip.is-active .camera-chip-dot { background: var(--accent-success); animation: chipPulse 1.6s infinite; }
+  .camera-chip.is-warn .camera-chip-dot { background: var(--accent-gold); }
+  .camera-chip.is-error .camera-chip-dot { background: var(--accent-primary); }
+  @keyframes chipPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+    70%  { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+  }
+
   .scan-result-icon { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; }
-  .scan-detail-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 0.9rem; }
-  .scan-detail-grid dt { color: var(--text-muted); font-size: 0.82rem; margin: 0; }
+  .scan-detail-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.45rem 0.9rem; }
+  .scan-detail-grid dt { color: var(--text-muted); font-size: 0.8rem; margin: 0; padding-top: 0.05rem; }
   .scan-detail-grid dd { margin: 0; font-size: 0.92rem; font-weight: 500; word-break: break-word; }
   .scanner-fallback textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; }
+  @media (max-width: 991.98px) {
+    .scanner-stage { max-height: 380px; }
+  }
 </style>
 {% endblock %}
 {% block content %}
@@ -61,10 +185,19 @@
   <div class="col-lg-7">
     <div class="card-bms">
       <div class="card-bms-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-        <h5 class="mb-0"><i class="bi bi-qr-code-scan me-2"></i>Camera Scanner</h5>
-        <div class="d-flex gap-2">
+        <div class="d-flex align-items-center gap-2">
+          <h5 class="mb-0"><i class="bi bi-qr-code-scan me-2"></i>Camera Scanner</h5>
+          <span class="camera-chip" id="cameraChip" aria-live="polite">
+            <span class="camera-chip-dot"></span>
+            <span id="cameraChipText">Camera off</span>
+          </span>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
           <button type="button" id="startCamera" class="btn btn-sm btn-bms-primary">
             <i class="bi bi-camera-video-fill me-1"></i>Start Camera
+          </button>
+          <button type="button" id="switchCamera" class="btn btn-sm btn-outline-secondary d-none" title="Switch between front and rear camera">
+            <i class="bi bi-camera-reverse me-1"></i>Switch
           </button>
           <button type="button" id="stopCamera" class="btn btn-sm btn-outline-secondary d-none">
             <i class="bi bi-stop-fill me-1"></i>Stop
@@ -72,16 +205,37 @@
         </div>
       </div>
       <div class="card-bms-body">
-        <div class="scanner-viewport" id="scannerViewport">
+        <div class="scanner-stage" id="scannerStage">
           <video id="scannerVideo" autoplay playsinline muted></video>
-          <div class="scanner-frame" id="scannerFrame" aria-hidden="true"></div>
+          <div class="scanner-head" aria-hidden="true">
+            <div class="scanner-heading">SCAN QR CODE</div>
+            <div class="scanner-hint">Align the QR code inside the frame</div>
+          </div>
+          <div class="scanner-frame" id="scannerFrame" aria-hidden="true">
+            <span class="scanner-corner tl"></span>
+            <span class="scanner-corner tr"></span>
+            <span class="scanner-corner bl"></span>
+            <span class="scanner-corner br"></span>
+            <span class="scanner-line"></span>
+          </div>
+          <div class="scanner-hint-pill" id="scannerHintPill" aria-hidden="true">Hold steady for fast scanning</div>
+          <div class="scanner-state" id="scannerState" role="status" aria-live="assertive">
+            <div class="scanner-state-icon" id="scannerStateIcon"><i class="bi bi-check-lg"></i></div>
+            <div class="scanner-state-title" id="scannerStateTitle"></div>
+            <div class="scanner-state-msg" id="scannerStateMsg"></div>
+          </div>
           <div class="scanner-placeholder" id="scannerPlaceholder">
             <i class="bi bi-qr-code-scan"></i>
-            <span>Start the camera and point it at a ticket QR code.</span>
+            <span>Camera is off. Press <strong>Start Camera</strong> to begin scanning.</span>
           </div>
         </div>
         <div class="alert alert-info small mt-3 mb-0" id="scannerStatus">
           <i class="bi bi-info-circle me-1"></i>Camera is off. Press <strong>Start Camera</strong> to begin scanning.
+        </div>
+        <div class="d-none mt-3" id="scannerActions">
+          <button type="button" class="btn btn-lg btn-bms-primary w-100" id="scanNextBtn">
+            <i class="bi bi-camera-reverse me-2"></i>SCAN NEXT TICKET
+          </button>
         </div>
         <p class="small text-muted mb-0 mt-3">
           The QR is verified server-side (HMAC-signed). A ticket can only be admitted once &mdash; repeat scans are rejected.
@@ -94,7 +248,7 @@
   <div class="col-lg-5">
     <div class="card-bms d-none" id="scanResultPanel">
       <div class="card-bms-header">
-        <h6 class="mb-0"><i class="bi bi-clipboard2-check me-2"></i>Last Scan</h6>
+        <h6 class="mb-0"><i class="bi bi-clipboard2-check me-2"></i>Last Scan Details</h6>
       </div>
       <div class="card-bms-body" id="scanResultBody"></div>
     </div>
@@ -123,5 +277,5 @@
 {% endblock %}
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<script src="{% static 'admin/js/scanner.js' %}?v=202613"></script>
+<script src="{% static 'admin/js/scanner.js' %}?v=202614"></script>
 {% endblock %}

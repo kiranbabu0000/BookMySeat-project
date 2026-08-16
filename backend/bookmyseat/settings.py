@@ -311,11 +311,26 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 
 USE_TZ = True
+
+# ---------------------------------------------------------------------------
+# Showtime validation & late-entry window
+# ---------------------------------------------------------------------------
+# The theatre runs on Indian Standard Time; showtime status (upcoming /
+# late-entry / expired) is always computed against this zone. Time display on
+# the public site and in the admin panel is localised to it as well.
+SHOWTIME_TIME_ZONE = os.environ.get('SHOWTIME_TIME_ZONE', TIME_ZONE)
+
+# How many minutes after the scheduled start a show remains bookable with an
+# explicit late-entry warning. After the window (or the movie's end time, if
+# earlier) a show is EXPIRED and no longer bookable at all.
+LATE_ENTRY_WINDOW_MINUTES = int(
+    os.environ.get('LATE_ENTRY_WINDOW_MINUTES', '30')
+)
 
 
 # Static files (CSS, JavaScript, Images)

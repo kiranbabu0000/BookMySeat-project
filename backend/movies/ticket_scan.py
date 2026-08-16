@@ -85,6 +85,23 @@ def _context_names(payload, target=None):
     )
 
 
+def _customer_label(target):
+    """Customer name for display (full name, falling back to username)."""
+    user = getattr(target, 'user', None)
+    if user is None:
+        return ''
+    return user.get_full_name() or user.username
+
+
+def _screen_label(target):
+    """Screen label for the scanned ticket (defaults to 'Main')."""
+    if target is None:
+        return ''
+    if isinstance(target, Reservation):
+        return target.show.screen_name or 'Main'
+    return getattr(target.theater, 'screen_name', None) or 'Main'
+
+
 def record_scan(payload, result, scanned_by=None, ip_address=None, target=None):
     """Persist one scan-attempt audit row (best-effort, never blocks the scan)."""
     if not isinstance(payload, dict):
@@ -150,6 +167,8 @@ def _claim_scan(target, payload, scanned_by, ip_address):
             'scanned_at': target.scanned_at.isoformat(),
             'scan_count': target.scan_count,
             'booking_ref': target.booking_ref,
+            'customer': _customer_label(target),
+            'screen': _screen_label(target),
             'movie': payload.get('movie'),
             'theatre': payload.get('theatre'),
             'show_time': show_time.isoformat() if show_time else None,
@@ -169,6 +188,8 @@ def _claim_scan(target, payload, scanned_by, ip_address):
             'scanned_at': target.scanned_at.isoformat() if target.scanned_at else None,
             'scan_count': target.scan_count,
             'booking_ref': target.booking_ref,
+            'customer': _customer_label(target),
+            'screen': _screen_label(target),
             'movie': payload.get('movie'),
             'theatre': payload.get('theatre'),
             'show_time': show_time.isoformat() if show_time else None,
@@ -180,6 +201,8 @@ def _claim_scan(target, payload, scanned_by, ip_address):
         'scanned': True,
         'message': 'Entry allowed.',
         'booking_ref': target.booking_ref,
+        'customer': _customer_label(target),
+        'screen': _screen_label(target),
         'movie': payload.get('movie'),
         'theatre': payload.get('theatre'),
         'show_time': show_time.isoformat() if show_time else None,

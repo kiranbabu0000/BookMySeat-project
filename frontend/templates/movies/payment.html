@@ -30,6 +30,21 @@
 
           <hr style="border-color: var(--border-color);">
 
+          {% if show_status.status == 'late_entry' %}
+          <div class="alert alert-bms showtime-warning mb-4" role="alert">
+            <div class="d-flex align-items-start gap-3 flex-wrap">
+              <div class="showtime-warning__icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+              <div class="flex-grow-1 min-w-0">
+                <strong class="showtime-warning__title">This show has already started</strong>
+                <p class="showtime-warning__text mb-0">
+                  This show started {{ show_status.started_minutes_ago }} minute{{ show_status.started_minutes_ago|pluralize }} ago.
+                  You are booking during the late-entry window and may miss the beginning.
+                </p>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
           <div class="d-flex justify-content-between py-2">
             <span class="text-muted">Reservation</span>
             <span class="text-muted small">#{{ reservation.token|slice:":12" }}</span>

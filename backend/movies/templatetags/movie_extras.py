@@ -1,6 +1,7 @@
 import re
 from django import template
 from django.template.defaultfilters import stringfilter
+from django.utils import timezone
 
 register = template.Library()
 
@@ -39,10 +40,16 @@ def split_items(value, sep=','):
 
 @register.filter
 def showtime_part(value):
-    """Return the time-of-day bucket (morning/afternoon/evening/night) for a datetime."""
+    """Return the time-of-day bucket (morning/afternoon/evening/night) for a datetime.
+
+    The bucket is derived from the theatre timezone (Asia/Kolkata) so the dot
+    colour matches the locally displayed showtime, not the stored UTC value.
+    """
     if not value:
         return 'night'
     try:
+        if timezone.is_aware(value):
+            value = timezone.localtime(value)
         hour = value.hour
     except AttributeError:
         return 'night'
