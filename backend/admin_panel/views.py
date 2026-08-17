@@ -2188,7 +2188,9 @@ def booking_transaction_cancel(request, pk):
             booking__in=bookings, status='completed'
         ).update(status='refunded')
         Seat.objects.filter(pk__in=[b.seat_id for b in bookings]).update(is_booked=False)
-        Booking.objects.filter(pk__in=[b.pk for b in bookings]).update(status='cancelled')
+        Booking.objects.filter(pk__in=[b.pk for b in bookings]).update(
+            status='cancelled', cancelled_at=timezone.now()
+        )
         reservation.status = 'cancelled'
         reservation.payment_status = 'refunded'
         reservation.save(update_fields=['status', 'payment_status', 'updated_at'])
@@ -2241,7 +2243,8 @@ def booking_cancel(request, pk):
         Seat.objects.filter(pk=booking.seat_id).update(is_booked=False)
         booking.theater.bump_seat_revision()
         booking.status = 'cancelled'
-        booking.save(update_fields=['status'])
+        booking.cancelled_at = timezone.now()
+        booking.save(update_fields=['status', 'cancelled_at'])
     AuditLog.objects.create(
         user=request.user,
         action='Booking Cancelled',

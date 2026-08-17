@@ -25,6 +25,8 @@
         {% endif %}
         {% if movie.status == 'coming_soon' %}
         <span class="movie-card__status movie-card__status--soon"><i class="bi bi-clock-history" aria-hidden="true"></i>Coming Soon</span>
+        {% elif movie.status == 'now_showing' %}
+        <span class="movie-card__status movie-card__status--live"><i class="bi bi-play-circle-fill" aria-hidden="true"></i>Now Showing</span>
         {% elif movie.rating >= 8 %}
         <span class="movie-card__status movie-card__status--top"><i class="bi bi-stars" aria-hidden="true"></i>Top Rated</span>
         {% endif %}

@@ -59,7 +59,7 @@
           <span class="showtime-btn__time"><i class="showtime-btn__dot showtime-btn__dot--{{ part }}"></i>{{ theater.time|date:"g:i A" }}</span>
           <small>{{ theater.time|date:"D, M d" }}</small>
           {% if theater.availability_label %}
-          <small class="showtime-btn__fill showtime-btn__fill--{{ theater.availability_level }}">{{ theater.availability_label }}</small>
+          <small class="showtime-btn__fill showtime-btn__fill--{{ theater.availability_level }}"{% if theater.availability_level == 'high' %} title="Only {{ theater.available_count }} seats remain — book quickly!"{% endif %}>{{ theater.availability_label }}</small>
           {% endif %}
           {% if theater.show_status.status == 'late_entry' %}
           <small class="showtime-btn__late" title="This show has already started. You can still book during the late-entry window, but you may miss the beginning.">

@@ -182,6 +182,13 @@ SESSION_COOKIE_NAME = 'bms_sessionid'
 if not DEBUG and os.environ.get('DJANGO_TRUST_PROXY', 'True') == 'True':
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
+# Security headers for production.
+if not DEBUG:
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
 # Cache. Uses Redis (via REDIS_URL) when available so rate limiting, OTP and
 # analytics payload caching stay consistent across workers; otherwise falls
 # back to a per-process LocMem cache for local development.

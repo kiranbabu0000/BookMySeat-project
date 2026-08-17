@@ -234,10 +234,17 @@ def _attach_occupancy(theaters, now=None):
     for t in theaters:
         total = totals.get(t.id) or 0
         used = (booked.get(t.id) or 0) + (held.get(t.id) or 0)
+        available = max(0, total - used)
         pct = round(used * 100.0 / total, 1) if total else 0
         t.occupancy_pct = pct
+        t.available_count = available
         t.availability_level = 'high' if pct >= 90 else ('medium' if pct >= 70 else 'low')
-        t.availability_label = 'Almost full' if pct >= 90 else ('Filling fast' if pct >= 70 else '')
+        if pct >= 90:
+            t.availability_label = 'Almost full'
+        elif pct >= 70:
+            t.availability_label = f'{available} seats left'
+        else:
+            t.availability_label = ''
         t.show_status = show_status_info(t, now)
     return theaters
 
@@ -839,6 +846,14 @@ def verify_ticket_qr(request):
     can deny re-entry. Delegates to the shared ``ticket_scan`` core which also
     records the scan-history audit trail.
     """
+    from bookmyseat.ratelimit import scan_is_locked, scan_rate_limit
+    if scan_is_locked(request):
+        return JsonResponse(
+            {'valid': False, 'reason': 'rate_limited',
+             'message': 'Too many requests. Please try again later.'},
+            status=429,
+        )
+    scan_rate_limit(request)
     raw = (request.body or b'').decode('utf-8', 'ignore')
     try:
         payload = json.loads(raw)

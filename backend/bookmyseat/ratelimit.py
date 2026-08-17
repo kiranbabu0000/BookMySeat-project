@@ -57,3 +57,33 @@ def login_succeeded(scope, request, username):
         return
     for key in _keys(scope, ip, username):
         cache.delete(key)
+
+
+# ---------------------------------------------------------------------------
+# Generic per-IP rate limiter (used for public endpoints like QR verify).
+# ---------------------------------------------------------------------------
+SCAN_MAX = 30
+SCAN_WINDOW = 60
+SCAN_LOCKOUT = 300
+SCAN_LOCKOUT_KEY = 'bms_rl_scan_locked'
+
+
+def scan_is_locked(request):
+    ip = _ip(request)
+    if not ip:
+        return False
+    return cache.get('bms_rl_scan_{}'.format(ip)) == SCAN_LOCKOUT_KEY
+
+
+def scan_rate_limit(request):
+    """Record one request. Returns True if the IP is now locked out."""
+    ip = _ip(request)
+    if not ip:
+        return False
+    key = 'bms_rl_scan_{}'.format(ip)
+    attempts = cache.get(key, 0) + 1
+    if attempts >= SCAN_MAX:
+        cache.set(key, SCAN_LOCKOUT_KEY, SCAN_LOCKOUT)
+        return True
+    cache.set(key, attempts, SCAN_WINDOW)
+    return False

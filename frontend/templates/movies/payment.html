@@ -148,6 +148,7 @@
     var couponCodeInput = document.getElementById('couponCodeInput');
     var demoCheckout = {{ demo_checkout|yesno:"true,false" }};
     var modalOpen = false;
+    var checkingOut = false;
     var startUrl = '{{ start_payment_url|escapejs }}';
     var verifyUrl = '{{ verify_payment_url|escapejs }}';
     var failedUrl = '{{ failed_payment_url|escapejs }}';
@@ -276,7 +277,10 @@
 
     function enableCheckout() {
       payBtn.disabled = false;
-      payBtn.innerHTML = '<i class="bi bi-lock-fill me-1"></i> Pay <span id="payBtnAmt">' + fmt(currentTotal) + '</span> Securely';
+      var amtEl = document.getElementById('payBtnAmt');
+      if (amtEl) amtEl.textContent = fmt(currentTotal);
+      else payBtn.innerHTML = '<i class="bi bi-lock-fill me-1"></i> Pay <span id="payBtnAmt">' + fmt(currentTotal) + '</span> Securely';
+      checkingOut = false;
     }
 
     function handleFailure(data) {
@@ -320,6 +324,8 @@
     }
 
     function startCheckout() {
+      if (checkingOut) return;
+      checkingOut = true;
       lockCheckout();
       postJson(startUrl, { coupon_code: couponCodeInput.value || '' }).then(function (data) {
         if (!data.ok) { handleFailure(data); return; }

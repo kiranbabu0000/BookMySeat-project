@@ -654,7 +654,7 @@ class RollingScheduleTests(TestCase):
         self.screen = Screen.objects.create(
             theatre=self.theatre, name='Screen 1', capacity=40, size='small')
         past = timezone.localdate() - timedelta(days=2)
-        for slot in (time(10, 30), time(18, 30)):
+        for slot in (time(23, 0), time(23, 30)):
             show = Show.objects.create(
                 movie=self.movie, theatre=self.theatre, screen=self.screen,
                 date=past, time=slot, ticket_price=Decimal('200.00'),

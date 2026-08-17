@@ -153,6 +153,7 @@ class Booking(models.Model):
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text="Snapshotted amount charged for this seat")
     scanned_at = models.DateTimeField(null=True, blank=True, help_text="When the ticket QR was first scanned at the venue")
     scan_count = models.PositiveIntegerField(default=0, help_text="Number of times this ticket QR has been scanned")
+    cancelled_at = models.DateTimeField(null=True, blank=True, help_text="When the booking was cancelled")
 
     class Meta:
         ordering = ['-booked_at', '-id']
