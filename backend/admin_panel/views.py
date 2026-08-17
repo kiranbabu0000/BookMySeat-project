@@ -27,7 +27,7 @@ import secrets
 import logging
 from movies.models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, SeatCategory, ShowPrice, TicketScan
 from movies.services import ReservationError, create_walkin_bookings, pricing_for_seats
-from movies.showtime import show_status_info
+from movies.showtime import show_status_info, showtime_zone
 from movies.ticket_scan import scan_ticket
 
 logger = logging.getLogger('admin_panel')
@@ -148,7 +148,7 @@ def _dashboard_occupancy(day):
 def _dashboard_series(days):
     """Daily revenue (completed payments) and booking counts, oldest first."""
     start_date = timezone.now().date() - timedelta(days=days - 1)
-    start = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+    start = timezone.make_aware(datetime.combine(start_date, datetime.min.time()), showtime_zone())
     rev_map = {
         row['day']: row['total']
         for row in (
@@ -183,7 +183,7 @@ def _dashboard_monthly(months=12):
     for k in range(months - 1, -1, -1):
         offset = today.month - k
         starts.append(date(today.year + (offset - 1) // 12, (offset - 1) % 12 + 1, 1))
-    start = timezone.make_aware(datetime.combine(starts[0], datetime.min.time()))
+    start = timezone.make_aware(datetime.combine(starts[0], datetime.min.time()), showtime_zone())
     rev_map = {
         row['month'].date(): row['total']
         for row in (

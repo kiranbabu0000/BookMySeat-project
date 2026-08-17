@@ -1,16 +1,18 @@
 from io import BytesIO
 import threading
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models import Sum
+from django.db import OperationalError
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import datetime, time, timedelta
 
-from admin_panel.models import Notification, Review, ReviewHelpful
+from admin_panel.models import Notification, Review, ReviewHelpful, Show as AdminShow, Theatre, Screen
 
 from .models import Movie, Theater, Seat, SeatCategory, ShowPrice, Reservation, ReservedSeat, Booking, Wishlist, EmailOutbox
 from .testutils import DEMO_RAZORPAY
@@ -1139,10 +1141,24 @@ class TheaterListDateTests(TestCase):
     """Multi-day show booking: theater_list date tabs and filters."""
 
     def setUp(self):
+        # Freeze time to noon so the test is deterministic at any wall-clock.
+        # Without this, timezone.now() + timedelta(minutes=30) crosses midnight
+        # IST when run after ~23:00 IST, pushing "upcoming" shows into the next
+        # day and breaking the today-tab assertions.
+        real_today = timezone.localdate()
+        self._frozen_now = timezone.make_aware(
+            datetime.combine(real_today, time(12, 0)),
+            timezone.get_current_timezone(),
+        )
+        self._patcher = patch(
+            'django.utils.timezone.now', return_value=self._frozen_now,
+        )
+        self._patcher.start()
+
         self.movie = Movie.objects.create(
             name='Date Test Movie', rating=7.0, cast='Cast', status='now_showing'
         )
-        self.today = timezone.now().date()
+        self.today = timezone.localdate()
         self.tomorrow = self.today + timedelta(days=1)
         self.day3 = self.today + timedelta(days=3)
         # Today: one upcoming, one already-started show.
@@ -1151,6 +1167,9 @@ class TheaterListDateTests(TestCase):
         # Tomorrow and +3 days: fixed slots.
         self.gamma = self._mk('Gamma Hall', self._dt(self.tomorrow, 10, 30))
         self.delta = self._mk('Delta Hall', self._dt(self.day3, 18, 30))
+
+    def tearDown(self):
+        self._patcher.stop()
 
     def _dt(self, day, hour, minute):
         return timezone.make_aware(datetime.combine(day, time(hour, minute)))
@@ -1232,3 +1251,174 @@ class TheaterListDateTests(TestCase):
         self.client.force_login(user)
         response = self.client.get(reverse('book_seats', args=[self.ava.id]))
         self.assertEqual(response.status_code, 200)
+
+
+class TheaterListRegressionTests(TestCase):
+    """Regression tests for the theater_list HTTP 500 fix.
+
+    Verifies that:
+    - ensure_movie_schedule DB errors are logged, not swallowed
+    - show_status_info errors are logged with context
+    - show_end_time handles missing duration gracefully
+    - orphan Theaters (no linked AdminShow) render without error
+    - movies with no shows render the empty state
+    """
+
+    def setUp(self):
+        self.movie = Movie.objects.create(
+            name='Regression Movie', rating=8.0, cast='Cast',
+            status='now_showing', duration=120,
+        )
+        self.today = timezone.localdate()
+        self.tomorrow = self.today + timedelta(days=1)
+
+    def _future_dt(self, day, hour, minute):
+        return timezone.make_aware(datetime.combine(day, time(hour, minute)))
+
+    # ── ensure_movie_schedule DB error ──────────────────────────────────
+
+    @patch('movies.views.ensure_movie_schedule', side_effect=OperationalError('connection lost'))
+    @patch('movies.views.settings')
+    def test_schedule_db_error_returns_empty_state(self, mock_settings, mock_sched):
+        """When ensure_movie_schedule fails with a DB error, the page must
+        still render (no 500) and the error must be logged."""
+        mock_settings.TESTING = False
+        mock_settings.SCHEDULE_HORIZON_DAYS = 4
+        url = reverse('theater_list', args=[self.movie.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        mock_sched.assert_called_once()
+
+    @patch('movies.views.ensure_movie_schedule', side_effect=OperationalError('boom'))
+    @patch('movies.views.settings')
+    def test_schedule_db_error_with_no_theaters_shows_empty(self, mock_settings, mock_sched):
+        """DB error + no existing theaters => shows empty state, no 500."""
+        mock_settings.TESTING = False
+        mock_settings.SCHEDULE_HORIZON_DAYS = 4
+        url = reverse('theater_list', args=[self.movie.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No shows on')
+
+    # ── show_status_info edge cases ──────────────────────────────────────
+
+    def test_theater_without_admin_show_renders_without_error(self):
+        """An orphan Theater with no linked AdminShow should still render."""
+        t = Theater.objects.create(
+            name='Orphan Hall', movie=self.movie,
+            time=self._future_dt(self.tomorrow, 11, 0), screen_name='S1',
+            ticket_price=Decimal('200.00'),
+        )
+        url = reverse('theater_list', args=[self.movie.id])
+        response = self.client.get(url, {'date': self.tomorrow.isoformat()})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Orphan Hall')
+
+    def test_theater_with_null_movie_on_show_renders(self):
+        """A Theater linked to an AdminShow with null movie field still renders."""
+        theatre = Theatre.objects.create(name='Test Theatre')
+        screen = Screen.objects.create(
+            theatre=theatre, name='Main', size='small',
+        )
+        today = timezone.localdate()
+        future = today + timedelta(days=2)
+        admin_show = AdminShow.objects.create(
+            movie=self.movie, theatre=theatre, screen=screen,
+            date=future, time=time(12, 0), ticket_price=Decimal('200'),
+            status='active',
+        )
+        t = Theater.objects.create(
+            name='Linked Hall', movie=self.movie,
+            time=self._future_dt(future, 12, 0), screen_name='Main',
+            ticket_price=Decimal('200.00'),
+        )
+        admin_show.theater = t
+        admin_show.save(update_fields=['theater'])
+        url = reverse('theater_list', args=[self.movie.id])
+        response = self.client.get(url, {'date': future.isoformat()})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Linked Hall')
+
+    # ── show_end_time ────────────────────────────────────────────────────
+
+    def test_show_end_time_returns_none_for_null_duration(self):
+        from .showtime import show_end_time
+        movie_no_dur = Movie.objects.create(
+            name='No Dur', rating=5.0, cast='X', status='now_showing',
+        )
+        t = Theater.objects.create(
+            name='H', movie=movie_no_dur,
+            time=self._future_dt(self.today, 18, 0), screen_name='S1',
+            ticket_price=Decimal('100'),
+        )
+        self.assertIsNone(show_end_time(t))
+
+    def test_show_end_time_with_valid_duration(self):
+        from .showtime import show_end_time
+        t = Theater.objects.create(
+            name='H2', movie=self.movie,
+            time=self._future_dt(self.today, 18, 0), screen_name='S1',
+            ticket_price=Decimal('100'),
+        )
+        result = show_end_time(t)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.hour, 20)
+        self.assertEqual(result.minute, 0)
+
+    # ── movie with no shows / no theaters ────────────────────────────────
+
+    def test_movie_with_no_theaters_renders_empty_state(self):
+        url = reverse('theater_list', args=[self.movie.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No shows on')
+
+    def test_movie_with_expired_only_shows_today_empty(self):
+        """Theaters whose shows are in the past do not appear today."""
+        Theater.objects.create(
+            name='Old Hall', movie=self.movie,
+            time=timezone.now() - timedelta(hours=3), screen_name='S1',
+            ticket_price=Decimal('200.00'),
+        )
+        url = reverse('theater_list', args=[self.movie.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Old Hall')
+
+    # ── multiple theaters same movie ─────────────────────────────────────
+
+    def test_multiple_theaters_same_day_all_appear(self):
+        for i in range(5):
+            Theater.objects.create(
+                name=f'Hall {i}', movie=self.movie,
+                time=self._future_dt(self.tomorrow, 10 + i, 0), screen_name=f'S{i}',
+                ticket_price=Decimal('200'),
+            )
+        url = reverse('theater_list', args=[self.movie.id])
+        response = self.client.get(url, {'date': self.tomorrow.isoformat()})
+        self.assertEqual(response.status_code, 200)
+        for i in range(5):
+            self.assertContains(response, f'Hall {i}')
+
+    # ── _show_datetime uses explicit timezone ────────────────────────────
+
+    def test_show_datetime_uses_explicit_timezone(self):
+        from admin_panel.services import _show_datetime
+        from movies.showtime import showtime_zone
+        s = Theater.objects.create(
+            name='TZ Hall', movie=self.movie,
+            time=self._future_dt(self.today, 9, 30), screen_name='S1',
+            ticket_price=Decimal('200'),
+        )
+        admin_show = AdminShow(
+            movie=self.movie, theatre=Theatre.objects.create(name='TZ Theatre'),
+            screen=Screen.objects.create(
+                theatre=Theatre.objects.get(name='TZ Theatre'), name='Main',
+                size='small',
+            ),
+            date=self.today, time=time(9, 30),
+            ticket_price=Decimal('200'), status='active',
+        )
+        dt = _show_datetime(admin_show)
+        self.assertTrue(dt.tzinfo is not None)
+        self.assertEqual(dt.tzinfo, showtime_zone())

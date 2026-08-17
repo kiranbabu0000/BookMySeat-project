@@ -9,6 +9,10 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from math import ceil
 
+from django.db.models import Q
+
+from movies.showtime import showtime_zone
+
 from django.utils import timezone
 
 from movies.models import Booking, Movie, Seat, SeatCategory, ShowPrice, Theater
@@ -93,7 +97,7 @@ def create_seats_for_theater(theater, capacity, layout_spec=None):
 
 
 def _show_datetime(show):
-    return timezone.make_aware(datetime.combine(show.date, show.time))
+    return timezone.make_aware(datetime.combine(show.date, show.time), showtime_zone())
 
 
 def sync_theater_from_show(show):
@@ -191,7 +195,7 @@ def ensure_movie_schedule(movie, horizon=SCHEDULE_HORIZON_DAYS):
         )
         for theatre_id, screen_id, show_time, ticket_price in template:
             if day == today:
-                start = timezone.make_aware(datetime.combine(day, show_time))
+                start = timezone.make_aware(datetime.combine(day, show_time), showtime_zone())
                 if start <= timezone.now():
                     continue
             if (theatre_id, screen_id, show_time) in existing:

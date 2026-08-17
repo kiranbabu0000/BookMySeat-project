@@ -1,5 +1,6 @@
 from datetime import timedelta, datetime, time
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.contrib.auth.models import User
@@ -646,6 +647,18 @@ class RollingScheduleTests(TestCase):
     today..today+3 booking window never runs out of shows."""
 
     def setUp(self):
+        # Freeze time to noon so 23:00/23:30 template shows are always in the
+        # future for today, making ensure_movie_schedule create them.
+        real_today = timezone.localdate()
+        self._frozen_now = timezone.make_aware(
+            datetime.combine(real_today, time(12, 0)),
+            timezone.get_current_timezone(),
+        )
+        self._patcher = patch(
+            'django.utils.timezone.now', return_value=self._frozen_now,
+        )
+        self._patcher.start()
+
         self.movie = Movie.objects.create(
             name='Rolling Movie', rating=7.0, cast='Cast',
             status='now_showing')
@@ -660,6 +673,9 @@ class RollingScheduleTests(TestCase):
                 date=past, time=slot, ticket_price=Decimal('200.00'),
                 status='active')
             sync_theater_from_show(show)
+
+    def tearDown(self):
+        self._patcher.stop()
 
     def test_rolls_schedule_forward_with_bookable_theaters(self):
         created = ensure_movie_schedule(self.movie, horizon=4)

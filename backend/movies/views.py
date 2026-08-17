@@ -1,8 +1,10 @@
+import logging
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.template.loader import render_to_string
 from django.db.models import Q, Avg, Count
 from django.contrib.auth.decorators import login_required
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.contrib import messages
 from django.utils import timezone
 from django.core.paginator import Paginator
@@ -245,7 +247,20 @@ def _attach_occupancy(theaters, now=None):
             t.availability_label = f'{available} seats left'
         else:
             t.availability_label = ''
-        t.show_status = show_status_info(t, now)
+        try:
+            t.show_status = show_status_info(t, now)
+        except (AttributeError, TypeError, ValueError) as exc:
+            logging.getLogger('movies.views').warning(
+                'show_status_info error for theater %s: %s',
+                t.id, exc,
+            )
+            t.show_status = {
+                'status': 'upcoming', 'label': 'UPCOMING', 'level': 'success',
+                'bookable': True, 'started_minutes_ago': 0, 'deadline': None,
+                'deadline_local': None, 'end_time_local': None,
+                'start_time_local': to_local(t.time),
+                'late_entry_window': 30, 'message': '',
+            }
     return theaters
 
 
@@ -263,7 +278,13 @@ def theater_list(request, movie_id):
     if not getattr(settings, 'TESTING', False) and not Theater.objects.filter(
         movie=movie, status='active', time__range=day_range_utc(show_dates[-1])
     ).exists():
-        ensure_movie_schedule(movie, SCHEDULE_HORIZON_DAYS)
+        try:
+            ensure_movie_schedule(movie, SCHEDULE_HORIZON_DAYS)
+        except DatabaseError as exc:
+            logging.getLogger('movies.views').warning(
+                'ensure_movie_schedule DB error for movie %s: %s',
+                movie_id, exc, exc_info=True,
+            )
     selected_date = today
     raw_date = request.GET.get('date')
     if raw_date:
@@ -278,7 +299,7 @@ def theater_list(request, movie_id):
         Theater.objects.filter(
             movie=movie, status='active', time__range=day_range_utc(selected_date)
         )
-        .select_related('admin_show__theatre')
+        .select_related('admin_show__theatre', 'movie')
     )
     city = (request.GET.get('city') or request.COOKIES.get('bms_city') or '').strip()
     if city:
