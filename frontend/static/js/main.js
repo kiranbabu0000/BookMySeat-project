@@ -5,6 +5,7 @@
   'use strict';
 
   document.addEventListener('DOMContentLoaded', function () {
+    initCinematicIntro();
     initNavbarScroll();
     initPasswordToggles();
     initFormLoading();
@@ -52,6 +53,146 @@
     timer = setTimeout(dismiss, duration);
   }
   window.bmsToast = bmsToast;
+
+  /* ============================================================
+     Cinematic Intro — Premium opening animation
+     Plays once per browser session on first visit.
+     ============================================================ */
+  function initCinematicIntro() {
+    var INTRO_KEY = 'bms-intro-seen';
+    var overlay = document.getElementById('bmsIntroOverlay');
+    var logo = document.getElementById('bmsIntroLogo');
+
+    // Guard: skip if intro already seen, elements missing, or reduced motion
+    if (!overlay || !logo) return;
+    try { if (sessionStorage.getItem(INTRO_KEY)) { overlay.remove(); return; } } catch (e) {}
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      overlay.remove();
+      return;
+    }
+
+    // Immediately hide page elements behind the overlay
+    document.body.classList.add('bms-intro-active');
+
+    // Max failsafe — force-dismiss after 4 seconds no matter what
+    var failsafe = setTimeout(function () { dismissIntro(); }, 4000);
+
+    // Collect page elements that will be revealed
+    var revealEls = [
+      document.querySelector('.navbar-bms'),
+      document.querySelector('main'),
+      document.querySelector('.footer-bms'),
+      document.querySelector('.bottom-nav')
+    ].filter(Boolean);
+
+    // Wait for next frame so overlay is painted, then start sequence
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        startSequence();
+      });
+    });
+
+    function startSequence() {
+      // Phase 1: Activate overlay (dark cinema background fades in)
+      overlay.classList.add('is-active');
+
+      // Phase 2: Logo reveal + light sweep (after 0.3s)
+      setTimeout(function () {
+        var sweep = overlay.querySelector('.bms-intro-sweep');
+        if (sweep) sweep.classList.add('is-sweeping');
+      }, 300);
+
+      // Phase 3: Hold logo briefly, then animate to navbar (at ~1.2s)
+      setTimeout(function () {
+        animateToNavbar();
+      }, 1200);
+    }
+
+    function animateToNavbar() {
+      // Find the real navbar brand element
+      var navbarBrand = document.querySelector('.navbar-bms .navbar-brand');
+      if (!navbarBrand) { dismissIntro(); return; }
+
+      // Get the target position from the actual navbar brand
+      var target = navbarBrand.getBoundingClientRect();
+
+      // Get current intro logo position
+      var source = logo.getBoundingClientRect();
+
+      // Calculate FLIP delta — move the intro logo to overlap the navbar brand
+      var deltaX = target.left - source.left;
+      var deltaY = target.top - source.top;
+
+      // Scale to match the navbar brand's overall size
+      var scaleX = target.width / source.width;
+      var scaleY = target.height / source.height;
+      var finalScale = Math.min(scaleX, scaleY);
+
+      // Add animating class for smooth CSS transition
+      logo.classList.add('is-animating');
+
+      // Apply FLIP transform on the next frame
+      requestAnimationFrame(function () {
+        logo.style.transform = 'translate(' + deltaX + 'px, ' + deltaY + 'px) scale(' + finalScale + ')';
+        logo.style.opacity = '0.4';
+      });
+
+      // Phase 4: Fade overlay and reveal page (starts during movement)
+      setTimeout(function () {
+        // Fade the overlay background
+        overlay.classList.add('is-fading');
+
+        // Remove the CSS hiding class first
+        document.body.classList.remove('bms-intro-active');
+
+        // Set elements to hidden state via inline styles (matching pre-remove state)
+        revealEls.forEach(function (el) {
+          el.style.opacity = '0';
+          el.style.pointerEvents = 'none';
+        });
+
+        // Transition elements to visible on the next frame
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            revealEls.forEach(function (el, i) {
+              // Stagger: navbar first, then content, then footer
+              var delay = i === 0 ? '0s' : (i === 1 ? '0.12s' : '0.2s');
+              el.style.transition = 'opacity 0.55s ease ' + delay;
+              el.style.opacity = '1';
+              el.style.pointerEvents = '';
+            });
+          });
+        });
+      }, 650);
+
+      // Phase 5: Clean up overlay and inline styles
+      setTimeout(function () {
+        dismissIntro();
+      }, 1250);
+    }
+
+    function dismissIntro() {
+      clearTimeout(failsafe);
+      if (!overlay || overlay.dataset.dismissed) return;
+      overlay.dataset.dismissed = '1';
+
+      // Ensure body class is removed
+      document.body.classList.remove('bms-intro-active');
+
+      // Clean up all inline styles from revealed elements
+      revealEls.forEach(function (el) {
+        el.style.opacity = '';
+        el.style.pointerEvents = '';
+        el.style.transition = '';
+      });
+
+      // Mark intro as seen in this session
+      try { sessionStorage.setItem(INTRO_KEY, '1'); } catch (e) {}
+
+      // Remove overlay from DOM
+      overlay.remove();
+    }
+  }
 
   function initWishlistButtons() {
     document.querySelectorAll('form[data-wishlist-form]').forEach(function (form) {

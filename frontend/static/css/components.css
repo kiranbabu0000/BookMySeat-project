@@ -3948,3 +3948,195 @@ body:has(.bottom-nav) {
 @media (min-width: 992px) {
   body:has(.bottom-nav) { padding-bottom: 0; }
 }
+
+/* ============================================================
+   CINEMATIC INTRO — Premium opening animation
+   ============================================================ */
+
+/* Hide page elements while intro plays */
+body.bms-intro-active .navbar-bms,
+body.bms-intro-active .offcanvas,
+body.bms-intro-active main,
+body.bms-intro-active .footer-bms,
+body.bms-intro-active .bottom-nav {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Full-screen dark overlay */
+.bms-intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.5s ease;
+}
+.bms-intro-overlay.is-active {
+  opacity: 1;
+  visibility: visible;
+}
+.bms-intro-overlay.is-fading {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+/* Subtle radial glow behind the logo */
+.bms-intro-glow {
+  position: absolute;
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(220, 38, 38, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+.bms-intro-overlay.is-active .bms-intro-glow {
+  opacity: 1;
+}
+
+/* Cinematic logo container */
+.bms-intro-logo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  opacity: 0;
+  transform: scale(0.88);
+  z-index: 2;
+}
+.bms-intro-overlay.is-active .bms-intro-logo {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.55s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Intro logo image */
+.bms-intro-logo-img {
+  height: 72px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+/* Intro logo text */
+.bms-intro-logo-text {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+.bms-intro-logo-text .brand-book,
+.bms-intro-logo-text .brand-seat {
+  color: #f2f5fa;
+}
+.bms-intro-logo-text .brand-my {
+  color: #e50914;
+}
+
+/* Tagline beneath logo */
+.bms-intro-tagline {
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(242, 245, 250, 0.4);
+  margin-top: 0.75rem;
+  opacity: 0;
+  transform: translateY(6px);
+  z-index: 2;
+}
+.bms-intro-overlay.is-active .bms-intro-tagline {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.5s ease 0.3s, transform 0.5s ease 0.3s;
+}
+
+/* Cinematic light sweep across logo */
+.bms-intro-sweep {
+  position: absolute;
+  inset: -30% -50%;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.06) 44%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.06) 56%,
+    transparent 62%
+  );
+  transform: translateX(-120%);
+  pointer-events: none;
+  z-index: 3;
+}
+.bms-intro-sweep.is-sweeping {
+  animation: bmsIntroSweep 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes bmsIntroSweep {
+  to { transform: translateX(120%); }
+}
+
+/* Moving logo (FLIP target state) */
+.bms-intro-logo.is-animating {
+  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hide tagline during movement */
+.bms-intro-logo.is-animating ~ .bms-intro-tagline {
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+/* Film grain — ultra-subtle texture overlay */
+.bms-intro-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.025;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+
+/* Reduced motion — skip all intro animations */
+@media (prefers-reduced-motion: reduce) {
+  body.bms-intro-active .navbar-bms,
+  body.bms-intro-active .offcanvas,
+  body.bms-intro-active main,
+  body.bms-intro-active .footer-bms,
+  body.bms-intro-active .bottom-nav {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .bms-intro-overlay {
+    display: none !important;
+  }
+}
+
+/* Responsive adjustments for intro */
+@media (max-width: 575.98px) {
+  .bms-intro-logo-img {
+    height: 52px;
+  }
+  .bms-intro-logo-text {
+    font-size: 1.5rem;
+  }
+  .bms-intro-tagline {
+    font-size: 0.6rem;
+  }
+}
+@media (max-width: 374.98px) {
+  .bms-intro-logo-img {
+    height: 44px;
+  }
+  .bms-intro-logo-text {
+    font-size: 1.25rem;
+  }
+}
