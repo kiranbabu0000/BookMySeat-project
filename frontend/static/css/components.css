@@ -3950,7 +3950,8 @@ body:has(.bottom-nav) {
 }
 
 /* ============================================================
-   CINEMATIC INTRO — Premium opening animation
+   CINEMATIC INTRO — Premium brand opening animation
+   Total duration: ~3.4 seconds across 6 phases
    ============================================================ */
 
 /* Hide page elements while intro plays */
@@ -3963,149 +3964,198 @@ body.bms-intro-active .bottom-nav {
   pointer-events: none;
 }
 
-/* Full-screen dark overlay */
+/* ---- OVERLAY ---- */
 .bms-intro-overlay {
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: #000;
+  background: #050508;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.5s ease;
 }
 .bms-intro-overlay.is-active {
   opacity: 1;
   visibility: visible;
+  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .bms-intro-overlay.is-fading {
   opacity: 0;
-  transition: opacity 0.5s ease;
+  transition: opacity 1.0s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Subtle radial glow behind the logo */
-.bms-intro-glow {
+/* ---- VIGNETTE ---- */
+.bms-intro-vignette {
   position: absolute;
-  width: 400px;
-  height: 400px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(220, 38, 38, 0.08) 0%, transparent 70%);
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.55) 100%);
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.8s ease;
+  transition: opacity 1s ease 0.2s;
+}
+.bms-intro-overlay.is-active .bms-intro-vignette {
+  opacity: 1;
+}
+
+/* ---- FILM GRAIN ---- */
+.bms-intro-grain {
+  position: absolute;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  opacity: 0.03;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+  animation: bmsGrainDrift 8s linear infinite;
+}
+@keyframes bmsGrainDrift {
+  0%   { transform: translate(0, 0); }
+  100% { transform: translate(20px, 20px); }
+}
+
+/* ---- AMBIENT GLOW ---- */
+.bms-intro-glow {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(220, 38, 38, 0.07) 0%,
+    rgba(220, 38, 38, 0.03) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 1.2s ease, transform 1.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .bms-intro-overlay.is-active .bms-intro-glow {
   opacity: 1;
+  transform: scale(1);
 }
 
-/* Cinematic logo container */
-.bms-intro-logo {
+/* ---- LOGO + BRAND LOCKUP (center composition) ---- */
+.bms-intro-lockup {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
-  opacity: 0;
-  transform: scale(0.88);
   z-index: 2;
-}
-.bms-intro-overlay.is-active .bms-intro-logo {
-  opacity: 1;
-  transform: scale(1);
-  transition: opacity 0.55s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  gap: 0;
 }
 
-/* Intro logo image */
+/* Logo image — Phase 2 reveal */
 .bms-intro-logo-img {
-  height: 72px;
+  height: 80px;
   width: auto;
   object-fit: contain;
   display: block;
+  opacity: 0;
+  transform: scale(0.8);
+  filter: brightness(0.6);
+  transition: opacity 0.7s ease, transform 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+              filter 0.9s ease;
+}
+.bms-intro-overlay.is-active .bms-intro-logo-img {
+  opacity: 1;
+  transform: scale(1);
+  filter: brightness(1);
+  transition-delay: 0.45s;
 }
 
-/* Intro logo text */
-.bms-intro-logo-text {
+/* Brand text — Phase 3 reveal (staggered after logo) */
+.bms-intro-brand {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 2rem;
+  font-size: 2.25rem;
   line-height: 1;
   white-space: nowrap;
+  letter-spacing: -0.01em;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: 1.2s;
 }
-.bms-intro-logo-text .brand-book,
-.bms-intro-logo-text .brand-seat {
+.bms-intro-overlay.is-active .bms-intro-brand {
+  opacity: 1;
+  transform: translateY(0);
+}
+.bms-intro-brand .brand-book,
+.bms-intro-brand .brand-seat {
   color: #f2f5fa;
 }
-.bms-intro-logo-text .brand-my {
+.bms-intro-brand .brand-my {
   color: #e50914;
 }
 
-/* Tagline beneath logo */
+/* Tagline — Phase 3b reveal */
 .bms-intro-tagline {
   font-family: var(--font-sans);
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 600;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: rgba(242, 245, 250, 0.4);
-  margin-top: 0.75rem;
+  color: rgba(242, 245, 250, 0.35);
+  margin-top: 0.6rem;
+  z-index: 2;
   opacity: 0;
   transform: translateY(6px);
-  z-index: 2;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  transition-delay: 1.6s;
 }
 .bms-intro-overlay.is-active .bms-intro-tagline {
   opacity: 1;
   transform: translateY(0);
-  transition: opacity 0.5s ease 0.3s, transform 0.5s ease 0.3s;
 }
 
-/* Cinematic light sweep across logo */
+/* ---- LIGHT SWEEP ---- */
 .bms-intro-sweep {
   position: absolute;
-  inset: -30% -50%;
+  inset: -40% -60%;
   background: linear-gradient(
     105deg,
-    transparent 38%,
-    rgba(255, 255, 255, 0.06) 44%,
-    rgba(255, 255, 255, 0.12) 50%,
-    rgba(255, 255, 255, 0.06) 56%,
-    transparent 62%
+    transparent 35%,
+    rgba(255, 255, 255, 0.04) 42%,
+    rgba(255, 255, 255, 0.10) 50%,
+    rgba(255, 255, 255, 0.04) 58%,
+    transparent 65%
   );
-  transform: translateX(-120%);
+  transform: translateX(-130%);
   pointer-events: none;
   z-index: 3;
 }
 .bms-intro-sweep.is-sweeping {
-  animation: bmsIntroSweep 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: bmsIntroSweep 1.2s cubic-bezier(0.4, 0, 0.15, 1) forwards;
 }
 @keyframes bmsIntroSweep {
-  to { transform: translateX(120%); }
+  to { transform: translateX(130%); }
 }
 
-/* Moving logo (FLIP target state) */
-.bms-intro-logo.is-animating {
-  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+/* ---- MOVING LOCKUP (FLIP to navbar) ---- */
+.bms-intro-lockup.is-animating {
+  transition: transform 0.9s cubic-bezier(0.33, 1, 0.68, 1),
+              opacity 0.9s cubic-bezier(0.4, 0, 1, 1);
 }
 
-/* Hide tagline during movement */
-.bms-intro-logo.is-animating ~ .bms-intro-tagline {
+/* Hide brand + tagline once lockup starts moving (gentle dissolve) */
+.bms-intro-lockup.is-animating .bms-intro-brand {
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transform: translateY(4px);
+  transition: opacity 0.5s ease, transform 0.45s ease;
+  transition-delay: 0s;
+}
+.bms-intro-lockup.is-animating ~ .bms-intro-tagline {
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.45s ease, transform 0.4s ease;
+  transition-delay: 0s;
 }
 
-/* Film grain — ultra-subtle texture overlay */
-.bms-intro-grain {
-  position: absolute;
-  inset: 0;
-  opacity: 0.025;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
-  background-size: 200px 200px;
-}
-
-/* Reduced motion — skip all intro animations */
+/* ---- REDUCED MOTIVITY ---- */
 @media (prefers-reduced-motion: reduce) {
   body.bms-intro-active .navbar-bms,
   body.bms-intro-active .offcanvas,
@@ -4120,23 +4170,23 @@ body.bms-intro-active .bottom-nav {
   }
 }
 
-/* Responsive adjustments for intro */
+/* ---- RESPONSIVE ---- */
 @media (max-width: 575.98px) {
   .bms-intro-logo-img {
-    height: 52px;
+    height: 56px;
   }
-  .bms-intro-logo-text {
-    font-size: 1.5rem;
+  .bms-intro-brand {
+    font-size: 1.65rem;
   }
   .bms-intro-tagline {
-    font-size: 0.6rem;
+    font-size: 0.55rem;
   }
 }
 @media (max-width: 374.98px) {
   .bms-intro-logo-img {
     height: 44px;
   }
-  .bms-intro-logo-text {
-    font-size: 1.25rem;
+  .bms-intro-brand {
+    font-size: 1.35rem;
   }
 }

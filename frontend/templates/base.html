@@ -31,15 +31,16 @@
   <!-- Cinematic intro overlay -->
   <div class="bms-intro-overlay" id="bmsIntroOverlay" aria-hidden="true">
     <div class="bms-intro-grain"></div>
+    <div class="bms-intro-vignette"></div>
     <div class="bms-intro-glow"></div>
-    <div class="bms-intro-logo" id="bmsIntroLogo">
-      <img src="{% static 'img/logo.png' %}" alt="" class="bms-intro-logo-img" width="72" height="72">
-      <span class="bms-intro-logo-text">
+    <div class="bms-intro-lockup" id="bmsIntroLockup">
+      <img src="{% static 'img/logo.png' %}" alt="" class="bms-intro-logo-img" width="80" height="80">
+      <div class="bms-intro-brand" id="bmsIntroBrand">
         <span class="brand-book">Book</span><span class="brand-my">My</span><span class="brand-seat">Seat</span>
-      </span>
+      </div>
       <div class="bms-intro-sweep"></div>
     </div>
-    <p class="bms-intro-tagline">Your Show . Your Seat</p>
+    <p class="bms-intro-tagline" id="bmsIntroTagline">Your Show . Your Seat</p>
   </div>
 
   {% include 'partials/_navbar.html' %}

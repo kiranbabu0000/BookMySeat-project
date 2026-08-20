@@ -55,29 +55,38 @@
   window.bmsToast = bmsToast;
 
   /* ============================================================
-     Cinematic Intro — Premium opening animation
-     Plays once per browser session on first visit.
+     Cinematic Intro — Premium brand opening animation
+     Event-driven: brand reveal completion triggers FLIP immediately.
+     Total duration: ~2.5 seconds. No artificial pauses.
+     Uses sessionStorage so it plays once per new session only
+     (not on refresh or internal navigation).
      ============================================================ */
   function initCinematicIntro() {
     var INTRO_KEY = 'bms-intro-seen';
-    var overlay = document.getElementById('bmsIntroOverlay');
-    var logo = document.getElementById('bmsIntroLogo');
+    var overlay  = document.getElementById('bmsIntroOverlay');
+    var lockup   = document.getElementById('bmsIntroLockup');
+    var brand    = document.getElementById('bmsIntroBrand');
+    var tagline  = document.getElementById('bmsIntroTagline');
 
-    // Guard: skip if intro already seen, elements missing, or reduced motion
-    if (!overlay || !logo) return;
-    try { if (sessionStorage.getItem(INTRO_KEY)) { overlay.remove(); return; } } catch (e) {}
+    // Guard: skip if any element missing
+    if (!overlay || !lockup) { removeIntroEl(); return; }
+
+    // Skip if already seen in this session (covers refresh + internal nav)
+    try { if (sessionStorage.getItem(INTRO_KEY)) { removeIntroEl(); return; } } catch (e) {}
+
+    // Skip if reduced motion preferred — show a brief simple fade instead
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      overlay.remove();
+      showReducedMotionIntro();
       return;
     }
 
-    // Immediately hide page elements behind the overlay
+    // Hide page elements behind the overlay
     document.body.classList.add('bms-intro-active');
 
-    // Max failsafe — force-dismiss after 4 seconds no matter what
-    var failsafe = setTimeout(function () { dismissIntro(); }, 4000);
+    // Failsafe — force-dismiss after 5 seconds no matter what
+    var failsafe = setTimeout(function () { dismissIntro(); }, 5000);
 
-    // Collect page elements that will be revealed
+    // Collect page elements that will be revealed during Phase 5
     var revealEls = [
       document.querySelector('.navbar-bms'),
       document.querySelector('main'),
@@ -85,27 +94,59 @@
       document.querySelector('.bottom-nav')
     ].filter(Boolean);
 
-    // Wait for next frame so overlay is painted, then start sequence
+    // Start the sequence after a frame so overlay is painted
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
-        startSequence();
+        runSequence();
       });
     });
 
-    function startSequence() {
-      // Phase 1: Activate overlay (dark cinema background fades in)
+    /* ----------------------------------------------------------
+       PHASE TIMELINE (event-driven, ~2.5s total):
+       0.00s — Overlay fades in (dark cinematic background)
+       0.45s — Logo image reveals (fade + scale + brightness)
+       0.80s — Light sweep crosses logo
+       1.20s — Brand text fades in below logo
+       1.60s — Tagline fades in
+       ~1.8s — Brand text reveal completes → IMMEDIATELY trigger FLIP
+       1.8–2.5s — Logo moves to navbar + overlay fades + page reveals
+       ~2.5s — Cleanup, overlay removed
+       ---------------------------------------------------------- */
+    function runSequence() {
+      // Phase 1: Dark overlay appears (0ms)
       overlay.classList.add('is-active');
 
-      // Phase 2: Logo reveal + light sweep (after 0.3s)
+      // Phase 2: Light sweep across logo (0.80s)
       setTimeout(function () {
         var sweep = overlay.querySelector('.bms-intro-sweep');
         if (sweep) sweep.classList.add('is-sweeping');
-      }, 300);
+      }, 800);
 
-      // Phase 3: Hold logo briefly, then animate to navbar (at ~1.2s)
-      setTimeout(function () {
+      // Phase 5: When brand text reveal completes, immediately begin FLIP
+      // Brand CSS: transition-delay 1.2s + duration 0.6s → finishes ~1.8s
+      // Primary: transitionend event (event-driven, instant trigger)
+      // Fallback: setTimeout at 2000ms if transitionend doesn't fire
+      // (known browser edge case where transitionend can be swallowed)
+      var brandRevealed = false;
+
+      function startFlip() {
+        if (brandRevealed) return;
+        brandRevealed = true;
+        clearTimeout(brandFallback);
+        brand.removeEventListener('transitionend', onBrandTransition);
         animateToNavbar();
-      }, 1200);
+      }
+
+      function onBrandTransition(e) {
+        if (e.propertyName === 'opacity' || e.propertyName === 'transform') {
+          startFlip();
+        }
+      }
+
+      brand.addEventListener('transitionend', onBrandTransition);
+
+      // Safety net: CSS brand transition = 1.2s delay + 0.6s duration = 1.8s
+      var brandFallback = setTimeout(startFlip, 2000);
     }
 
     function animateToNavbar() {
@@ -113,62 +154,58 @@
       var navbarBrand = document.querySelector('.navbar-bms .navbar-brand');
       if (!navbarBrand) { dismissIntro(); return; }
 
-      // Get the target position from the actual navbar brand
+      // Get target position (real navbar brand)
       var target = navbarBrand.getBoundingClientRect();
 
-      // Get current intro logo position
-      var source = logo.getBoundingClientRect();
+      // Get current lockup position (center of screen)
+      var source = lockup.getBoundingClientRect();
 
-      // Calculate FLIP delta — move the intro logo to overlap the navbar brand
+      // Calculate FLIP delta
       var deltaX = target.left - source.left;
       var deltaY = target.top - source.top;
 
-      // Scale to match the navbar brand's overall size
-      var scaleX = target.width / source.width;
-      var scaleY = target.height / source.height;
-      var finalScale = Math.min(scaleX, scaleY);
+      // Scale: match the navbar brand image height
+      var navbarImg = navbarBrand.querySelector('.brand-logo');
+      var targetImgH = navbarImg ? navbarImg.offsetHeight : 44;
+      var sourceImgH = source.height;
+      var finalScale = targetImgH / sourceImgH;
 
-      // Add animating class for smooth CSS transition
-      logo.classList.add('is-animating');
+      // Add animating class for CSS transition
+      lockup.classList.add('is-animating');
 
-      // Apply FLIP transform on the next frame
+      // Apply FLIP transform on next frame — fade lockup fully to 0 for clean handoff
       requestAnimationFrame(function () {
-        logo.style.transform = 'translate(' + deltaX + 'px, ' + deltaY + 'px) scale(' + finalScale + ')';
-        logo.style.opacity = '0.4';
+        lockup.style.transform = 'translate(' + deltaX + 'px, ' + deltaY + 'px) scale(' + finalScale + ')';
+        lockup.style.opacity = '0';
       });
 
-      // Phase 4: Fade overlay and reveal page (starts during movement)
-      setTimeout(function () {
-        // Fade the overlay background
-        overlay.classList.add('is-fading');
+      // Simultaneously: fade overlay + reveal page while logo is in transit
+      overlay.classList.add('is-fading');
+      document.body.classList.remove('bms-intro-active');
 
-        // Remove the CSS hiding class first
-        document.body.classList.remove('bms-intro-active');
+      revealEls.forEach(function (el) {
+        el.style.opacity = '0';
+        el.style.pointerEvents = 'none';
+      });
 
-        // Set elements to hidden state via inline styles (matching pre-remove state)
-        revealEls.forEach(function (el) {
-          el.style.opacity = '0';
-          el.style.pointerEvents = 'none';
-        });
-
-        // Transition elements to visible on the next frame
+      requestAnimationFrame(function () {
         requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            revealEls.forEach(function (el, i) {
-              // Stagger: navbar first, then content, then footer
-              var delay = i === 0 ? '0s' : (i === 1 ? '0.12s' : '0.2s');
-              el.style.transition = 'opacity 0.55s ease ' + delay;
-              el.style.opacity = '1';
-              el.style.pointerEvents = '';
-            });
+          revealEls.forEach(function (el, i) {
+            var delay = i === 0 ? '0s' : (i === 1 ? '0.15s' : '0.3s');
+            el.style.transition = 'opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1) ' + delay;
+            el.style.opacity = '1';
+            el.style.pointerEvents = '';
           });
         });
-      }, 650);
+      });
 
-      // Phase 5: Clean up overlay and inline styles
-      setTimeout(function () {
-        dismissIntro();
-      }, 1250);
+      // Cleanup when FLIP animation finishes (event-driven)
+      lockup.addEventListener('transitionend', function onFlipDone(e) {
+        if (e.propertyName !== 'transform') return;
+        lockup.removeEventListener('transitionend', onFlipDone);
+        // Small delay to let overlay finish fading, then clean up
+        setTimeout(dismissIntro, 100);
+      });
     }
 
     function dismissIntro() {
@@ -186,11 +223,36 @@
         el.style.transition = '';
       });
 
-      // Mark intro as seen in this session
+      // Mark intro as seen for this session
       try { sessionStorage.setItem(INTRO_KEY, '1'); } catch (e) {}
 
       // Remove overlay from DOM
       overlay.remove();
+    }
+
+    function showReducedMotionIntro() {
+      // For users who prefer reduced motion: brief 0.6s fade-in/out
+      document.body.classList.add('bms-intro-active');
+      overlay.classList.add('is-active');
+
+      var reducedFailsafe = setTimeout(function () {
+        overlay.remove();
+        document.body.classList.remove('bms-intro-active');
+        try { sessionStorage.setItem(INTRO_KEY, '1'); } catch (e) {}
+      }, 1200);
+
+      setTimeout(function () {
+        clearTimeout(reducedFailsafe);
+        overlay.classList.add('is-fading');
+        document.body.classList.remove('bms-intro-active');
+        try { sessionStorage.setItem(INTRO_KEY, '1'); } catch (e) {}
+        setTimeout(function () { overlay.remove(); }, 700);
+      }, 600);
+    }
+
+    function removeIntroEl() {
+      var el = document.getElementById('bmsIntroOverlay');
+      if (el) el.remove();
     }
   }
 
