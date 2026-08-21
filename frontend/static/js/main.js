@@ -72,6 +72,7 @@
 
     try {
       if (sessionStorage.getItem(INTRO_KEY)) {
+        console.log('[BMS Intro] Skipped — already seen this session');
         removeIntroEl();
         triggerMicroSweep();
         return;
@@ -79,6 +80,7 @@
     } catch (e) {}
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      console.log('[BMS Intro] Skipped — prefers-reduced-motion');
       showReducedMotionIntro();
       return;
     }
@@ -114,11 +116,13 @@
        ---------------------------------------------------------- */
     function runSequence() {
       overlay.classList.add('is-active');
+      console.log('[BMS Intro] is-active added — sequence running');
 
       var sweep = overlay.querySelector('.bms-intro-sweep');
 
       /* CLAP — arm snaps shut + flash + shake + audio + dust burst */
       setTimeout(function () {
+        console.log('[BMS Intro] CLAP at ' + Date.now());
         if (clapEl) clapEl.classList.add('is-clapping');
         if (flashEl) flashEl.classList.add('is-flashing');
         overlay.classList.add('is-shaking');
