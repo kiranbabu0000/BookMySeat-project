@@ -55,46 +55,40 @@
   window.bmsToast = bmsToast;
 
   /* ============================================================
-     Cinematic Intro — Premium brand opening animation
-     Event-driven: brand reveal completion triggers FLIP immediately.
-     Total duration: ~2.5 seconds. No artificial pauses.
-     Uses sessionStorage so it plays once per new session only
-     (not on refresh or internal navigation).
+     Cinematic Intro — "LIGHTS. CAMERA. BOOKMYSEAT."
+     Clapperboard entrance → realistic clap → logo reveal → FLIP.
+     Two spotlights, dust burst, sequential tagline. ~3.8 s.
      ============================================================ */
   function initCinematicIntro() {
     var INTRO_KEY = 'bms-intro-seen';
     var overlay  = document.getElementById('bmsIntroOverlay');
     var lockup   = document.getElementById('bmsIntroLockup');
     var brand    = document.getElementById('bmsIntroBrand');
-    var tagline  = document.getElementById('bmsIntroTagline');
+    var dustBox  = document.getElementById('bmsIntroDust');
+    var clapEl   = document.getElementById('bmsIntroClap');
+    var flashEl  = document.getElementById('bmsIntroFlash');
 
-    // Guard: skip if any element missing
     if (!overlay || !lockup) { removeIntroEl(); return; }
 
-    // Skip if already seen in this session (covers refresh + internal nav)
-    try { if (sessionStorage.getItem(INTRO_KEY)) { removeIntroEl(); return; } } catch (e) {}
+    try {
+      if (sessionStorage.getItem(INTRO_KEY)) {
+        removeIntroEl();
+        triggerMicroSweep();
+        return;
+      }
+    } catch (e) {}
 
-    // Skip if reduced motion preferred — show a brief simple fade instead
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       showReducedMotionIntro();
       return;
     }
 
-    // Hide page elements behind the overlay
     document.body.classList.add('bms-intro-active');
-
-    // Failsafe — force-dismiss after 5 seconds no matter what
     var failsafe = setTimeout(function () { dismissIntro(); }, 5000);
+    var audioCtx = null;
 
-    // Collect page elements that will be revealed during Phase 5
-    var revealEls = [
-      document.querySelector('.navbar-bms'),
-      document.querySelector('main'),
-      document.querySelector('.footer-bms'),
-      document.querySelector('.bottom-nav')
-    ].filter(Boolean);
+    createDust(dustBox);
 
-    // Start the sequence after a frame so overlay is painted
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
         runSequence();
@@ -102,109 +96,185 @@
     });
 
     /* ----------------------------------------------------------
-       PHASE TIMELINE (event-driven, ~2.5s total):
-       0.00s — Overlay fades in (dark cinematic background)
-       0.45s — Logo image reveals (fade + scale + brightness)
-       0.80s — Light sweep crosses logo
-       1.20s — Brand text fades in below logo
-       1.60s — Tagline fades in
-       ~1.8s — Brand text reveal completes → IMMEDIATELY trigger FLIP
-       1.8–2.5s — Logo moves to navbar + overlay fades + page reveals
-       ~2.5s — Cleanup, overlay removed
+       CINEMATIC TIMELINE (~3.8 s total):
+
+       0.00s — Overlay fades in
+       0.20s — Letterbox bars expand from edges
+       0.50s — Spotlights gradually activate
+       0.50s — Clapperboard enters (3D perspective + scale)
+       0.60s — Arm starts opening (hinged rotation)
+       1.00s — Arm fully open (board visible with open arm)
+       1.30s — CLAP! Arm snaps shut + flash + shake + audio + dust burst
+       1.40s — Clapperboard fades out (downward + blur)
+       1.70s — Logo reveal (light streak + brightness)
+       2.10s — Brand name appears (tracking cinch)
+       2.30s — Tagline lines stagger in (YOUR SHOW → YOUR SEAT → YOUR EXPERIENCE)
+       3.00s — FLIP lockup to navbar (0.9s transition)
+       3.90s — Cleanup
        ---------------------------------------------------------- */
     function runSequence() {
-      // Phase 1: Dark overlay appears (0ms)
       overlay.classList.add('is-active');
 
-      // Phase 2: Light sweep across logo (0.80s)
+      var sweep = overlay.querySelector('.bms-intro-sweep');
+
+      /* CLAP — arm snaps shut + flash + shake + audio + dust burst */
       setTimeout(function () {
-        var sweep = overlay.querySelector('.bms-intro-sweep');
+        if (clapEl) clapEl.classList.add('is-clapping');
+        if (flashEl) flashEl.classList.add('is-flashing');
+        overlay.classList.add('is-shaking');
+        playClapSound();
+        createDustBurst(overlay);
+      }, 1300);
+
+      /* Board fades out (downward + blur) — delayed so clap is visible */
+      setTimeout(function () {
+        if (clapEl) clapEl.classList.add('is-done');
+      }, 1800);
+
+      /* Logo + brand reveal (CSS delay handles sequential tagline) */
+      setTimeout(function () {
+        overlay.classList.add('is-revealing');
+      }, 2100);
+
+      /* Cinematic sweep */
+      setTimeout(function () {
         if (sweep) sweep.classList.add('is-sweeping');
-      }, 800);
+      }, 2800);
 
-      // Phase 5: When brand text reveal completes, immediately begin FLIP
-      // Brand CSS: transition-delay 1.2s + duration 0.6s → finishes ~1.8s
-      // Primary: transitionend event (event-driven, instant trigger)
-      // Fallback: setTimeout at 2000ms if transitionend doesn't fire
-      // (known browser edge case where transitionend can be swallowed)
-      var brandRevealed = false;
-
-      function startFlip() {
-        if (brandRevealed) return;
-        brandRevealed = true;
-        clearTimeout(brandFallback);
-        brand.removeEventListener('transitionend', onBrandTransition);
+      /* FLIP to navbar */
+      setTimeout(function () {
         animateToNavbar();
-      }
+      }, 3200);
+    }
 
-      function onBrandTransition(e) {
-        if (e.propertyName === 'opacity' || e.propertyName === 'transform') {
-          startFlip();
+    /* ----------------------------------------------------------
+       playClapSound — Web Audio synthesis of a realistic clap.
+       Two layers: high-freq noise crack + low resonant thump.
+       ---------------------------------------------------------- */
+    function playClapSound() {
+      try {
+        if (!audioCtx) {
+          var AC = window.AudioContext || window.webkitAudioContext;
+          if (AC) audioCtx = new AC();
         }
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        var now = audioCtx.currentTime;
+
+        /* High-frequency crack (noise burst through bandpass) */
+        var bufLen = audioCtx.sampleRate * 0.06;
+        var buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+        var data = buf.getChannelData(0);
+        for (var i = 0; i < bufLen; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        var noise = audioCtx.createBufferSource();
+        noise.buffer = buf;
+
+        var bandpass = audioCtx.createBiquadFilter();
+        bandpass.type = 'bandpass';
+        bandpass.frequency.value = 2200;
+        bandpass.Q.value = 1.2;
+
+        var noiseGain = audioCtx.createGain();
+        noiseGain.gain.setValueAtTime(0.35, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+        noise.connect(bandpass);
+        bandpass.connect(noiseGain);
+        noiseGain.connect(audioCtx.destination);
+        noise.start(now);
+        noise.stop(now + 0.06);
+
+        /* Low resonant thump (body of the clap) */
+        var osc = audioCtx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(250, now);
+        osc.frequency.exponentialRampToValueAtTime(80, now + 0.07);
+
+        var oscGain = audioCtx.createGain();
+        oscGain.gain.setValueAtTime(0.22, now);
+        oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+        osc.connect(oscGain);
+        oscGain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.08);
+      } catch (e) {}
+    }
+
+    function createDust(container) {
+      if (!container) return;
+      var COUNT = 14;
+      for (var i = 0; i < COUNT; i++) {
+        var dot = document.createElement('div');
+        dot.className = 'bms-intro-dust-particle';
+        var sz = 1 + Math.random() * 2;
+        dot.style.width  = sz + 'px';
+        dot.style.height = sz + 'px';
+        dot.style.left   = (25 + Math.random() * 50) + '%';
+        dot.style.top    = (15 + Math.random() * 70) + '%';
+        dot.style.setProperty('--dust-dx', (Math.random() * 20 - 10) + 'px');
+        dot.style.setProperty('--dust-dy', (-30 - Math.random() * 50) + 'px');
+        dot.style.setProperty('--dust-op', (0.1 + Math.random() * 0.2).toFixed(2));
+        dot.style.animationDuration = (5 + Math.random() * 7) + 's';
+        dot.style.animationDelay    = (-Math.random() * 8) + 's';
+        container.appendChild(dot);
       }
+    }
 
-      brand.addEventListener('transitionend', onBrandTransition);
-
-      // Safety net: CSS brand transition = 1.2s delay + 0.6s duration = 1.8s
-      var brandFallback = setTimeout(startFlip, 2000);
+    /* createDustBurst — burst of small particles radiating from centre on clap */
+    function createDustBurst(container) {
+      if (!container) return;
+      var burst = document.createElement('div');
+      burst.className = 'bms-intro-dust-burst';
+      var PARTICLE_COUNT = 8;
+      for (var i = 0; i < PARTICLE_COUNT; i++) {
+        var p = document.createElement('div');
+        p.className = 'bms-dust-burst-particle';
+        var angle = (i / PARTICLE_COUNT) * 360 + (Math.random() * 30 - 15);
+        var dist  = 30 + Math.random() * 50;
+        var rad   = angle * Math.PI / 180;
+        var dx    = Math.cos(rad) * dist;
+        var dy    = Math.sin(rad) * dist;
+        var size  = 1.5 + Math.random() * 2.5;
+        p.style.width  = size + 'px';
+        p.style.height = size + 'px';
+        p.style.setProperty('--burst-dx', dx.toFixed(1) + 'px');
+        p.style.setProperty('--burst-dy', dy.toFixed(1) + 'px');
+        p.style.setProperty('--burst-dur', (0.35 + Math.random() * 0.3).toFixed(2) + 's');
+        burst.appendChild(p);
+      }
+      container.appendChild(burst);
+      setTimeout(function () { burst.remove(); }, 900);
     }
 
     function animateToNavbar() {
-      // Find the real navbar brand element
       var navbarBrand = document.querySelector('.navbar-bms .navbar-brand');
       if (!navbarBrand) { dismissIntro(); return; }
-
-      // Get target position (real navbar brand)
       var target = navbarBrand.getBoundingClientRect();
-
-      // Get current lockup position (center of screen)
       var source = lockup.getBoundingClientRect();
-
-      // Calculate FLIP delta
       var deltaX = target.left - source.left;
-      var deltaY = target.top - source.top;
-
-      // Scale: match the navbar brand image height
-      var navbarImg = navbarBrand.querySelector('.brand-logo');
-      var targetImgH = navbarImg ? navbarImg.offsetHeight : 44;
-      var sourceImgH = source.height;
-      var finalScale = targetImgH / sourceImgH;
-
-      // Add animating class for CSS transition
+      var deltaY = target.top  - source.top;
+      var navbarImg   = navbarBrand.querySelector('.brand-logo');
+      var targetImgH  = navbarImg ? navbarImg.offsetHeight : 44;
+      var sourceImgH  = source.height;
+      var finalScale  = targetImgH / sourceImgH;
+      overlay.classList.add('is-exiting');
+      lockup.style.willChange = 'transform, opacity';
       lockup.classList.add('is-animating');
-
-      // Apply FLIP transform on next frame — fade lockup fully to 0 for clean handoff
       requestAnimationFrame(function () {
         lockup.style.transform = 'translate(' + deltaX + 'px, ' + deltaY + 'px) scale(' + finalScale + ')';
-        lockup.style.opacity = '0';
+        lockup.style.opacity   = '0';
       });
-
-      // Simultaneously: fade overlay + reveal page while logo is in transit
       overlay.classList.add('is-fading');
       document.body.classList.remove('bms-intro-active');
-
-      revealEls.forEach(function (el) {
-        el.style.opacity = '0';
-        el.style.pointerEvents = 'none';
-      });
-
-      requestAnimationFrame(function () {
-        requestAnimationFrame(function () {
-          revealEls.forEach(function (el, i) {
-            var delay = i === 0 ? '0s' : (i === 1 ? '0.15s' : '0.3s');
-            el.style.transition = 'opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1) ' + delay;
-            el.style.opacity = '1';
-            el.style.pointerEvents = '';
-          });
-        });
-      });
-
-      // Cleanup when FLIP animation finishes (event-driven)
+      document.body.classList.add('bms-intro-revealing');
       lockup.addEventListener('transitionend', function onFlipDone(e) {
         if (e.propertyName !== 'transform') return;
         lockup.removeEventListener('transitionend', onFlipDone);
-        // Small delay to let overlay finish fading, then clean up
-        setTimeout(dismissIntro, 100);
+        setTimeout(dismissIntro, 60);
       });
     }
 
@@ -212,42 +282,35 @@
       clearTimeout(failsafe);
       if (!overlay || overlay.dataset.dismissed) return;
       overlay.dataset.dismissed = '1';
-
-      // Ensure body class is removed
       document.body.classList.remove('bms-intro-active');
-
-      // Clean up all inline styles from revealed elements
-      revealEls.forEach(function (el) {
-        el.style.opacity = '';
-        el.style.pointerEvents = '';
-        el.style.transition = '';
-      });
-
-      // Mark intro as seen for this session
+      document.body.classList.remove('bms-intro-revealing');
+      lockup.style.willChange = '';
       try { sessionStorage.setItem(INTRO_KEY, '1'); } catch (e) {}
-
-      // Remove overlay from DOM
       overlay.remove();
     }
 
     function showReducedMotionIntro() {
-      // For users who prefer reduced motion: brief 0.6s fade-in/out
       document.body.classList.add('bms-intro-active');
       overlay.classList.add('is-active');
-
-      var reducedFailsafe = setTimeout(function () {
+      var rf = setTimeout(function () {
         overlay.remove();
         document.body.classList.remove('bms-intro-active');
         try { sessionStorage.setItem(INTRO_KEY, '1'); } catch (e) {}
-      }, 1200);
-
+      }, 1400);
       setTimeout(function () {
-        clearTimeout(reducedFailsafe);
+        clearTimeout(rf);
         overlay.classList.add('is-fading');
         document.body.classList.remove('bms-intro-active');
         try { sessionStorage.setItem(INTRO_KEY, '1'); } catch (e) {}
         setTimeout(function () { overlay.remove(); }, 700);
-      }, 600);
+      }, 700);
+    }
+
+    function triggerMicroSweep() {
+      var nb = document.querySelector('.navbar-bms .navbar-brand');
+      if (!nb) return;
+      nb.classList.add('bms-intro-micro-sweep');
+      setTimeout(function () { nb.classList.remove('bms-intro-micro-sweep'); }, 1500);
     }
 
     function removeIntroEl() {

@@ -3950,11 +3950,12 @@ body:has(.bottom-nav) {
 }
 
 /* ============================================================
-   CINEMATIC INTRO — Premium brand opening animation
-   Total duration: ~3.4 seconds across 6 phases
+   CINEMATIC INTRO — "LIGHTS. CAMERA. BOOKMYSEAT."
+   Clapperboard entrance → realistic clap → logo reveal → FLIP
+   Two spotlights, dust burst, sequential tagline, ~3.8 s
    ============================================================ */
 
-/* Hide page elements while intro plays */
+/* ---- HIDE PAGE while intro plays ---- */
 body.bms-intro-active .navbar-bms,
 body.bms-intro-active .offcanvas,
 body.bms-intro-active main,
@@ -3964,7 +3965,7 @@ body.bms-intro-active .bottom-nav {
   pointer-events: none;
 }
 
-/* ---- OVERLAY ---- */
+/* ---- OVERLAY (base) ---- */
 .bms-intro-overlay {
   position: fixed;
   inset: 0;
@@ -3976,28 +3977,71 @@ body.bms-intro-active .bottom-nav {
   flex-direction: column;
   opacity: 0;
   visibility: hidden;
+  overflow: hidden;
 }
 .bms-intro-overlay.is-active {
   opacity: 1;
   visibility: visible;
-  transition: opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .bms-intro-overlay.is-fading {
   opacity: 0;
-  transition: opacity 1.0s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---- LETTERBOX BARS (cinematic framing, expand from edges) ---- */
+.bms-intro-letterbox {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8vh;
+  min-height: 28px;
+  background: #000;
+  z-index: 8;
+  transform: scaleY(0);
+  transition: transform 0.5s cubic-bezier(0.33, 1, 0.68, 1);
+}
+.bms-intro-letterbox--top {
+  top: 0;
+  transform-origin: top;
+}
+.bms-intro-letterbox--bottom {
+  bottom: 0;
+  transform-origin: bottom;
+}
+.bms-intro-overlay.is-active .bms-intro-letterbox--top,
+.bms-intro-overlay.is-active .bms-intro-letterbox--bottom {
+  transform: scaleY(1);
+  transition-delay: 0.20s;
+}
+.bms-intro-overlay.is-exiting .bms-intro-letterbox--top {
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.05s;
+}
+.bms-intro-overlay.is-exiting .bms-intro-letterbox--bottom {
+  transform: scaleY(0);
+  transform-origin: bottom;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.05s;
 }
 
 /* ---- VIGNETTE ---- */
 .bms-intro-vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.55) 100%);
+  background: radial-gradient(ellipse at center,
+    transparent 25%,
+    rgba(0, 0, 0, 0.45) 65%,
+    rgba(0, 0, 0, 0.75) 100%
+  );
   pointer-events: none;
   opacity: 0;
-  transition: opacity 1s ease 0.2s;
+  z-index: 1;
+  transition: opacity 1.0s ease;
 }
 .bms-intro-overlay.is-active .bms-intro-vignette {
   opacity: 1;
+  transition-delay: 0.3s;
 }
 
 /* ---- FILM GRAIN ---- */
@@ -4006,110 +4050,542 @@ body.bms-intro-active .bottom-nav {
   inset: -50%;
   width: 200%;
   height: 200%;
-  opacity: 0.03;
+  opacity: 0;
   pointer-events: none;
+  z-index: 2;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
   background-size: 256px 256px;
   animation: bmsGrainDrift 8s linear infinite;
+  transition: opacity 1.0s ease;
+}
+.bms-intro-overlay.is-active .bms-intro-grain {
+  opacity: 0.04;
+  transition-delay: 0.6s;
 }
 @keyframes bmsGrainDrift {
   0%   { transform: translate(0, 0); }
   100% { transform: translate(20px, 20px); }
 }
 
-/* ---- AMBIENT GLOW ---- */
-.bms-intro-glow {
+/* ---- SCANLINES (subtle CRT / film texture) ---- */
+.bms-intro-scanlines {
   position: absolute;
-  width: 500px;
-  height: 500px;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    rgba(0, 0, 0, 0.018) 3px,
+    rgba(0, 0, 0, 0.018) 4px
+  );
+  transition: opacity 1.0s ease;
+}
+.bms-intro-overlay.is-active .bms-intro-scanlines {
+  opacity: 1;
+  transition-delay: 0.7s;
+}
+
+/* ---- PROJECTOR BEAM (conic light cone from top) ---- */
+.bms-intro-beam {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  background: conic-gradient(
+    from -10deg at 50% -5%,
+    transparent 0deg,
+    rgba(255, 250, 235, 0.008) 5deg,
+    rgba(255, 250, 235, 0.022) 10deg,
+    rgba(255, 250, 235, 0.008) 15deg,
+    transparent 20deg
+  );
+  transition: opacity 1.2s ease;
+}
+.bms-intro-overlay.is-active .bms-intro-beam {
+  opacity: 1;
+  transition-delay: 0.35s;
+}
+
+/* ---- BEAM GLOW (where light hits the screen centre) ---- */
+.bms-intro-beam-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, 80vw);
+  height: min(420px, 80vw);
   border-radius: 50%;
   background: radial-gradient(circle,
-    rgba(220, 38, 38, 0.07) 0%,
-    rgba(220, 38, 38, 0.03) 40%,
+    rgba(255, 248, 230, 0.04) 0%,
+    rgba(255, 248, 230, 0.018) 35%,
+    transparent 65%
+  );
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+}
+.bms-intro-overlay.is-active .bms-intro-beam-glow {
+  opacity: 1;
+  transition-delay: 0.45s;
+}
+.bms-intro-overlay.is-revealing .bms-intro-beam-glow {
+  transform: translate(-50%, -50%) scale(1.3);
+  transition: transform 0.6s ease;
+  transition-delay: 0s;
+}
+
+/* ---- DUST PARTICLES ---- */
+.bms-intro-dust {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+  overflow: hidden;
+  transition: opacity 0.8s ease;
+}
+.bms-intro-overlay.is-active .bms-intro-dust {
+  opacity: 1;
+  transition-delay: 0.7s;
+}
+.bms-intro-dust-particle {
+  position: absolute;
+  background: rgba(255, 250, 240, 0.5);
+  border-radius: 50%;
+  will-change: transform;
+  animation: bmsDustFloat linear infinite;
+}
+
+/* ---- DUST BURST (impact particles on clap) ---- */
+.bms-intro-dust-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+.bms-dust-burst-particle {
+  position: absolute;
+  background: rgba(255, 250, 240, 0.6);
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  will-change: transform, opacity;
+  animation: bmsDustBurst var(--burst-dur, 0.6s) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes bmsDustBurst {
+  0% {
+    transform: translate(-50%, -50%) translate(0, 0) scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--burst-dx, 30px), var(--burst-dy, -30px)) scale(0.2);
+    opacity: 0;
+  }
+}
+@keyframes bmsDustFloat {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  8% {
+    opacity: var(--dust-op, 0.18);
+  }
+  50% {
+    transform: translate(var(--dust-dx, 10px), var(--dust-dy, -45px));
+  }
+  92% {
+    opacity: var(--dust-op, 0.18);
+  }
+  100% {
+    transform: translate(calc(var(--dust-dx, 10px) * -0.5), calc(var(--dust-dy, -45px) * 2));
+    opacity: 0;
+  }
+}
+
+/* ---- CINEMATIC SPOTLIGHTS (volumetric beam from top corners) ---- */
+.bms-intro-spotlight {
+  position: absolute;
+  top: -30%;
+  width: 55vw;
+  height: 130vh;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity;
+}
+.bms-intro-spotlight--left {
+  left: -10%;
+  background: conic-gradient(
+    from 130deg at 30% 20%,
+    transparent 0deg,
+    transparent 12deg,
+    rgba(255, 250, 235, 0.25) 24deg,
+    rgba(255, 250, 235, 0.55) 30deg,
+    rgba(255, 250, 235, 0.7) 33deg,
+    rgba(255, 250, 235, 0.55) 36deg,
+    rgba(255, 250, 235, 0.25) 42deg,
+    transparent 54deg,
+    transparent 360deg
+  );
+}
+.bms-intro-spotlight--right {
+  right: -10%;
+  background: conic-gradient(
+    from 230deg at 70% 20%,
+    transparent 0deg,
+    transparent 12deg,
+    rgba(255, 250, 235, 0.25) 24deg,
+    rgba(255, 250, 235, 0.55) 30deg,
+    rgba(255, 250, 235, 0.7) 33deg,
+    rgba(255, 250, 235, 0.55) 36deg,
+    rgba(255, 250, 235, 0.25) 42deg,
+    transparent 54deg,
+    transparent 360deg
+  );
+}
+/* Fade spotlights in with is-active (delay 0.5s — builds as board appears) */
+.bms-intro-overlay.is-active .bms-intro-spotlight {
+  opacity: 1;
+  transition-delay: 0.5s;
+}
+/* Spotlights dim once logo/brand reveal */
+.bms-intro-overlay.is-revealing .bms-intro-spotlight {
+  opacity: 0.2;
+  transition: opacity 1.2s ease;
+}
+/* Spotlight glow — subtle warm pool where beams converge on the board */
+.bms-intro-spotlight-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(360px, 70vw);
+  height: min(260px, 50vw);
+  border-radius: 50%;
+  background: radial-gradient(ellipse,
+    rgba(255, 250, 235, 0.2) 0%,
+    rgba(255, 250, 235, 0.08) 40%,
     transparent 70%
   );
   pointer-events: none;
+  z-index: 3;
   opacity: 0;
-  transform: scale(0.7);
-  transition: opacity 1.2s ease, transform 1.4s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 1.6s ease;
 }
-.bms-intro-overlay.is-active .bms-intro-glow {
+.bms-intro-overlay.is-active .bms-intro-spotlight-glow {
   opacity: 1;
-  transform: scale(1);
+  transition-delay: 0.5s;
+}
+.bms-intro-overlay.is-revealing .bms-intro-spotlight-glow {
+  opacity: 0.2;
+  transition: opacity 1.2s ease;
 }
 
-/* ---- LOGO + BRAND LOCKUP (center composition) ---- */
+/* ---- CLAPPERBOARD (cinematic production slate) ---- */
+.bms-intro-clap {
+  position: relative;
+  z-index: 5;
+  max-width: 280px;
+  width: 85%;
+  background: #1a1a1a;
+  border: 2px solid #333;
+  border-radius: 5px;
+  overflow: hidden;
+  opacity: 0;
+  transform: scale(0.85) translateY(30px) perspective(600px) rotateX(8deg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6),
+              0 0 60px rgba(220, 38, 38, 0.08),
+              0 20px 50px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.bms-intro-overlay.is-active .bms-intro-clap {
+  opacity: 1;
+  transform: scale(1) translateY(0) perspective(600px) rotateX(0deg);
+  transition-delay: 0.50s;
+}
+.bms-intro-clap.is-done {
+  opacity: 0;
+  transform: scale(0.92) translateY(15px);
+  filter: blur(3px);
+  transition: opacity 0.5s ease, transform 0.5s ease, filter 0.5s ease;
+}
+
+/* Clapper arm (hinged top section) */
+.bms-intro-clap-top {
+  height: 48px;
+  display: flex;
+  overflow: hidden;
+  border-bottom: 3px solid #333;
+  transform-origin: left center;
+  transform: rotateZ(0deg);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+}
+.bms-intro-overlay.is-active .bms-intro-clap-top {
+  transform: rotateZ(-100deg);
+  transition-delay: 0.30s;
+}
+.bms-intro-clap.is-clapping .bms-intro-clap-top {
+  transform: rotateZ(0deg);
+  transition: transform 0.08s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: 0s;
+}
+/* Motion blur smear — brief streak during clap */
+.bms-intro-clap.is-clapping .bms-intro-clap-top::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  animation: bmsClapBlur 0.12s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes bmsClapBlur {
+  0%   { opacity: 1; transform: scaleY(2.5) translateY(-3px); filter: blur(3px); }
+  100% { opacity: 0; transform: scaleY(1) translateY(0);      filter: blur(0); }
+}
+
+/* Board recoil — subtle upward bounce on impact */
+@keyframes bmsBoardRecoil {
+  0%   { transform: scale(1) translateY(0); }
+  18%  { transform: scale(1.008) translateY(-3px); }
+  40%  { transform: scale(0.997) translateY(0.5px); }
+  65%  { transform: scale(1.002) translateY(-0.5px); }
+  100% { transform: scale(1) translateY(0); }
+}
+.bms-intro-clap.is-clapping {
+  animation: bmsBoardRecoil 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
+}
+
+/* Hinge detail */
+.bms-intro-clap-top::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  background: #444;
+  border-radius: 50%;
+  z-index: 2;
+}
+
+/* Diagonal stripes on arm */
+.bms-intro-clap-stripe { flex: 1; }
+.bms-intro-clap-stripe:nth-child(odd) { background: #e8e8e8; }
+.bms-intro-clap-stripe:nth-child(even) { background: #1a1a1a; }
+
+/* Clapperboard body */
+.bms-intro-clap-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: linear-gradient(180deg, #1e1e1e 0%, #1a1a1a 40%, #161616 100%);
+}
+.bms-intro-clap-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 5px;
+}
+.bms-intro-clap-row:last-child { border-bottom: none; }
+.bms-intro-clap-row--status { margin-top: 2px; }
+.bms-intro-clap-label {
+  font-family: var(--font-sans);
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+}
+.bms-intro-clap-value {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.04em;
+}
+.bms-intro-clap-value--title {
+  font-size: 1.05rem;
+  color: #fff;
+  font-weight: 800;
+}
+.bms-intro-clap-value--ready {
+  color: #22c55e;
+  animation: bmsReadyBlink 1.2s ease infinite;
+}
+@keyframes bmsReadyBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ---- CLAP FLASH (cinematic light pulse, not pure white) ---- */
+.bms-intro-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center,
+    rgba(255, 250, 235, 0.95) 0%,
+    rgba(255, 245, 220, 0.7) 25%,
+    rgba(255, 240, 210, 0.35) 50%,
+    rgba(255, 235, 200, 0.08) 75%,
+    transparent 100%
+  );
+  opacity: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+.bms-intro-flash.is-flashing {
+  animation: bmsClapFlash 0.45s ease-out;
+}
+@keyframes bmsClapFlash {
+  0%   { opacity: 0.9; }
+  15%  { opacity: 0.7; }
+  100% { opacity: 0; }
+}
+
+/* ---- CLAP SHAKE (subtle screen impact) ---- */
+@keyframes bmsClapShake {
+  0%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-2px, 1px); }
+  30% { transform: translate(2px, -1px); }
+  45% { transform: translate(-1.5px, 0.5px); }
+  60% { transform: translate(1px, -0.5px); }
+  75% { transform: translate(-0.5px, 0.5px); }
+}
+.bms-intro-overlay.is-shaking {
+  animation: bmsClapShake 0.35s ease;
+}
+
+/* ---- LOGO + BRAND LOCKUP ---- */
 .bms-intro-lockup {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  z-index: 2;
+  z-index: 5;
   gap: 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.bms-intro-overlay.is-revealing .bms-intro-lockup {
+  opacity: 1;
 }
 
-/* Logo image — Phase 2 reveal */
+/* Logo image — projected-through-light reveal + light streak */
 .bms-intro-logo-img {
   height: 80px;
   width: auto;
   object-fit: contain;
   display: block;
   opacity: 0;
-  transform: scale(0.8);
-  filter: brightness(0.6);
-  transition: opacity 0.7s ease, transform 0.8s cubic-bezier(0.22, 1, 0.36, 1),
-              filter 0.9s ease;
+  transform: scale(0.7);
+  filter: brightness(2.5) contrast(1.1) saturate(0.7);
+  position: relative;
+  transition: opacity 0.8s ease,
+              transform 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+              filter 1.0s ease;
 }
-.bms-intro-overlay.is-active .bms-intro-logo-img {
+.bms-intro-overlay.is-revealing .bms-intro-logo-img {
   opacity: 1;
   transform: scale(1);
-  filter: brightness(1);
-  transition-delay: 0.45s;
+  filter: brightness(1) contrast(1) saturate(1);
+}
+/* Light streak — bright bar sweeps across the logo after reveal */
+.bms-intro-logo-img::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(255, 255, 255, 0.6) 48%,
+    rgba(255, 255, 255, 0.85) 50%,
+    rgba(255, 255, 255, 0.6) 52%,
+    transparent 65%,
+    transparent 100%
+  );
+  transform: translateX(-150%);
+  opacity: 0;
+  pointer-events: none;
+}
+.bms-intro-overlay.is-revealing .bms-intro-logo-img::after {
+  animation: bmsLogoStreak 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards;
+}
+@keyframes bmsLogoStreak {
+  0%   { transform: translateX(-150%); opacity: 1; }
+  60%  { opacity: 1; }
+  100% { transform: translateX(150%); opacity: 0; }
 }
 
-/* Brand text — Phase 3 reveal (staggered after logo) */
+/* Brand text — cinematic reveal with tracking cinch */
 .bms-intro-brand {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 2.25rem;
   line-height: 1;
   white-space: nowrap;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.3em;
   opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-  transition-delay: 1.2s;
+  transform: translateY(8px);
+  transition: opacity 0.6s ease,
+              letter-spacing 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.bms-intro-overlay.is-active .bms-intro-brand {
+.bms-intro-overlay.is-revealing .bms-intro-brand {
   opacity: 1;
+  letter-spacing: 0.02em;
   transform: translateY(0);
+  transition-delay: 0.15s;
 }
 .bms-intro-brand .brand-book,
-.bms-intro-brand .brand-seat {
-  color: #f2f5fa;
-}
-.bms-intro-brand .brand-my {
-  color: #e50914;
-}
+.bms-intro-brand .brand-seat { color: #f2f5fa; }
+.bms-intro-brand .brand-my { color: #e50914; }
 
-/* Tagline — Phase 3b reveal */
+/* Tagline — sequential reveal, each phrase fades in independently */
 .bms-intro-tagline {
-  font-family: var(--font-sans);
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: rgba(242, 245, 250, 0.35);
-  margin-top: 0.6rem;
-  z-index: 2;
-  opacity: 0;
-  transform: translateY(6px);
-  transition: opacity 0.5s ease, transform 0.5s ease;
-  transition-delay: 1.6s;
+  position: relative;
+  z-index: 5;
+  margin-top: 0.75rem;
+  text-align: center;
 }
-.bms-intro-overlay.is-active .bms-intro-tagline {
+.bms-intro-tagline-line {
+  font-family: var(--font-sans);
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(242, 245, 250, 0.45);
+  opacity: 0;
+  transform: translateY(5px);
+  transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.bms-intro-overlay.is-revealing .bms-intro-tagline-line--1 {
   opacity: 1;
   transform: translateY(0);
+  transition-delay: 0.4s;
+}
+.bms-intro-overlay.is-revealing .bms-intro-tagline-line--2 {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.7s;
+}
+.bms-intro-overlay.is-revealing .bms-intro-tagline-line--3 {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 1.0s;
 }
 
 /* ---- LIGHT SWEEP ---- */
@@ -4119,43 +4595,99 @@ body.bms-intro-active .bottom-nav {
   background: linear-gradient(
     105deg,
     transparent 35%,
-    rgba(255, 255, 255, 0.04) 42%,
-    rgba(255, 255, 255, 0.10) 50%,
-    rgba(255, 255, 255, 0.04) 58%,
+    rgba(255, 255, 255, 0.03) 42%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.03) 58%,
     transparent 65%
   );
   transform: translateX(-130%);
   pointer-events: none;
-  z-index: 3;
+  z-index: 6;
 }
 .bms-intro-sweep.is-sweeping {
-  animation: bmsIntroSweep 1.2s cubic-bezier(0.4, 0, 0.15, 1) forwards;
+  animation: bmsIntroSweep 1.0s cubic-bezier(0.4, 0, 0.15, 1) forwards;
 }
 @keyframes bmsIntroSweep {
   to { transform: translateX(130%); }
 }
 
-/* ---- MOVING LOCKUP (FLIP to navbar) ---- */
+/* ---- FLIP TO NAVBAR (lockup in transit) ---- */
 .bms-intro-lockup.is-animating {
+  will-change: transform, opacity;
   transition: transform 0.9s cubic-bezier(0.33, 1, 0.68, 1),
               opacity 0.9s cubic-bezier(0.4, 0, 1, 1);
 }
 
-/* Hide brand + tagline once lockup starts moving (gentle dissolve) */
+/* Dissolve brand + tagline once lockup starts moving (no letter-spacing — layout-safe) */
 .bms-intro-lockup.is-animating .bms-intro-brand {
   opacity: 0;
   transform: translateY(4px);
-  transition: opacity 0.5s ease, transform 0.45s ease;
+  transition: opacity 0.35s ease, transform 0.3s ease;
   transition-delay: 0s;
 }
-.bms-intro-lockup.is-animating ~ .bms-intro-tagline {
+.bms-intro-lockup.is-animating ~ .bms-intro-tagline .bms-intro-tagline-line {
   opacity: 0;
   transform: translateY(4px);
-  transition: opacity 0.45s ease, transform 0.4s ease;
+  transition: opacity 0.3s ease, transform 0.25s ease;
   transition-delay: 0s;
 }
 
-/* ---- REDUCED MOTIVITY ---- */
+/* ---- EXIT STATE (atmosphere layers fade) ---- */
+.bms-intro-overlay.is-exiting .bms-intro-vignette,
+.bms-intro-overlay.is-exiting .bms-intro-grain,
+.bms-intro-overlay.is-exiting .bms-intro-scanlines,
+.bms-intro-overlay.is-exiting .bms-intro-beam,
+.bms-intro-overlay.is-exiting .bms-intro-beam-glow,
+.bms-intro-overlay.is-exiting .bms-intro-spotlight,
+.bms-intro-overlay.is-exiting .bms-intro-spotlight-glow {
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+.bms-intro-overlay.is-exiting .bms-intro-dust {
+  opacity: 0;
+  animation: none;
+  transition: opacity 0.4s ease;
+}
+
+/* ---- PAGE REVEAL (CSS-driven, no inline styles) ---- */
+body.bms-intro-revealing .navbar-bms,
+body.bms-intro-revealing main,
+body.bms-intro-revealing .footer-bms,
+body.bms-intro-revealing .bottom-nav {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+body.bms-intro-revealing .navbar-bms { transition-delay: 0s; }
+body.bms-intro-revealing main        { transition-delay: 0.12s; }
+body.bms-intro-revealing .footer-bms { transition-delay: 0.22s; }
+body.bms-intro-revealing .bottom-nav { transition-delay: 0.22s; }
+
+/* ---- MICRO-SWEEP (subsequent-load navbar brand flash) ---- */
+.bms-intro-micro-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.bms-intro-micro-sweep::after {
+  content: '';
+  position: absolute;
+  inset: -40% -60%;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.15) 50%,
+    transparent 65%
+  );
+  transform: translateX(-130%);
+  pointer-events: none;
+  animation: bmsMicroSweep 0.8s cubic-bezier(0.4, 0, 0.15, 1) forwards;
+  animation-delay: 0.3s;
+}
+@keyframes bmsMicroSweep {
+  to { transform: translateX(130%); }
+}
+
+/* ---- REDUCED MOTION ---- */
 @media (prefers-reduced-motion: reduce) {
   body.bms-intro-active .navbar-bms,
   body.bms-intro-active .offcanvas,
@@ -4172,21 +4704,30 @@ body.bms-intro-active .bottom-nav {
 
 /* ---- RESPONSIVE ---- */
 @media (max-width: 575.98px) {
-  .bms-intro-logo-img {
-    height: 56px;
-  }
+  .bms-intro-logo-img { height: 56px; }
   .bms-intro-brand {
     font-size: 1.65rem;
+    letter-spacing: 0.2em;
   }
-  .bms-intro-tagline {
-    font-size: 0.55rem;
-  }
+  .bms-intro-tagline-line { font-size: 0.5rem; }
+  .bms-intro-letterbox { height: 6vh; min-height: 20px; }
+  .bms-intro-clap { max-width: 220px; }
+  .bms-intro-clap-top { height: 38px; }
+  .bms-intro-clap-body { padding: 10px 12px; gap: 5px; }
+  .bms-intro-clap-label { font-size: 0.5rem; }
+  .bms-intro-clap-value { font-size: 0.75rem; }
+  .bms-intro-clap-value--title { font-size: 0.9rem; }
 }
 @media (max-width: 374.98px) {
-  .bms-intro-logo-img {
-    height: 44px;
-  }
+  .bms-intro-logo-img { height: 44px; }
   .bms-intro-brand {
     font-size: 1.35rem;
+    letter-spacing: 0.15em;
   }
+  .bms-intro-clap { max-width: 180px; }
+  .bms-intro-clap-top { height: 32px; }
+  .bms-intro-clap-body { padding: 8px 10px; gap: 4px; }
+  .bms-intro-clap-label { font-size: 0.45rem; }
+  .bms-intro-clap-value { font-size: 0.65rem; }
+  .bms-intro-clap-value--title { font-size: 0.8rem; }
 }

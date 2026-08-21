@@ -28,11 +28,50 @@
 <body>
   <a href="#main-content" class="skip-link">Skip to main content</a>
 
-  <!-- Cinematic intro overlay -->
+  <!-- Cinematic intro overlay — "LIGHTS. CAMERA. BOOKMYSEAT." with clapperboard -->
   <div class="bms-intro-overlay" id="bmsIntroOverlay" aria-hidden="true">
-    <div class="bms-intro-grain"></div>
     <div class="bms-intro-vignette"></div>
-    <div class="bms-intro-glow"></div>
+    <div class="bms-intro-grain"></div>
+    <div class="bms-intro-scanlines"></div>
+    <div class="bms-intro-beam"></div>
+    <div class="bms-intro-beam-glow"></div>
+    <div class="bms-intro-spotlight bms-intro-spotlight--left"></div>
+    <div class="bms-intro-spotlight bms-intro-spotlight--right"></div>
+    <div class="bms-intro-spotlight-glow"></div>
+    <div class="bms-intro-dust" id="bmsIntroDust"></div>
+    <div class="bms-intro-letterbox bms-intro-letterbox--top"></div>
+    <div class="bms-intro-letterbox bms-intro-letterbox--bottom"></div>
+
+    <div class="bms-intro-clap" id="bmsIntroClap">
+      <div class="bms-intro-clap-top" id="bmsIntroClapTop">
+        <div class="bms-intro-clap-stripe"></div>
+        <div class="bms-intro-clap-stripe"></div>
+        <div class="bms-intro-clap-stripe"></div>
+        <div class="bms-intro-clap-stripe"></div>
+        <div class="bms-intro-clap-stripe"></div>
+      </div>
+      <div class="bms-intro-clap-body">
+        <div class="bms-intro-clap-row">
+          <span class="bms-intro-clap-label">PRODUCTION</span>
+          <span class="bms-intro-clap-value bms-intro-clap-value--title">BOOKMYSEAT</span>
+        </div>
+        <div class="bms-intro-clap-row">
+          <span class="bms-intro-clap-label">SCENE</span>
+          <span class="bms-intro-clap-value">MOVIE BOOKING</span>
+        </div>
+        <div class="bms-intro-clap-row">
+          <span class="bms-intro-clap-label">TAKE</span>
+          <span class="bms-intro-clap-value">01</span>
+        </div>
+        <div class="bms-intro-clap-row bms-intro-clap-row--status">
+          <span class="bms-intro-clap-label">STATUS</span>
+          <span class="bms-intro-clap-value bms-intro-clap-value--ready">READY</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="bms-intro-flash" id="bmsIntroFlash"></div>
+
     <div class="bms-intro-lockup" id="bmsIntroLockup">
       <img src="{% static 'img/logo.png' %}" alt="" class="bms-intro-logo-img" width="80" height="80">
       <div class="bms-intro-brand" id="bmsIntroBrand">
@@ -40,7 +79,11 @@
       </div>
       <div class="bms-intro-sweep"></div>
     </div>
-    <p class="bms-intro-tagline" id="bmsIntroTagline">Your Show . Your Seat</p>
+    <div class="bms-intro-tagline" id="bmsIntroTagline">
+      <div class="bms-intro-tagline-line bms-intro-tagline-line--1">YOUR SHOW</div>
+      <div class="bms-intro-tagline-line bms-intro-tagline-line--2">YOUR SEAT</div>
+      <div class="bms-intro-tagline-line bms-intro-tagline-line--3">YOUR EXPERIENCE</div>
+    </div>
   </div>
 
   {% include 'partials/_navbar.html' %}
