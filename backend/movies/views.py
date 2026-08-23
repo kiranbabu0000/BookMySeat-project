@@ -34,6 +34,11 @@ from .services import (
     seat_states_for_show,
 )
 from .notifications import send_booking_confirmation
+from .reviews import (
+    annotate_review_verification,
+    find_verified_booking,
+    has_completed_viewing,
+)
 from admin_panel.models import Review, ReviewHelpful, Show, PaymentTransaction, AuditLog
 from admin_panel.services import ensure_movie_schedule, SCHEDULE_HORIZON_DAYS
 from .qr import build_qr_payload, ticket_qr_data_uri
@@ -121,14 +126,24 @@ def movie_detail(request, movie_id):
     gallery = movie.gallery_images.all()
     trailers = movie.trailers.all()
     review_base = Review.objects.filter(movie=movie, is_approved=True, is_hidden=False).select_related('user')
-    review_pages = Paginator(review_base.annotate(helpful_count=Count('helpful_votes')).order_by('-created_at'), 10)
+    review_annotated = annotate_review_verification(review_base, movie)
+    review_pages = Paginator(
+        review_annotated.annotate(helpful_count=Count('helpful_votes'))
+        .order_by('-created_at', '-id'),
+        10,
+    )
     page_num = request.GET.get('rpage', 1)
     reviews = review_pages.get_page(page_num)
-    verified_reviews = Review.objects.filter(
-        movie=movie, is_approved=True, is_hidden=False, booking__isnull=False
-    ).select_related('user').annotate(
-        helpful_count=Count('helpful_votes')
-    ).order_by('-rating', '-created_at')[:5]
+    verified_reviews = (
+        annotate_review_verification(
+            Review.objects.filter(movie=movie, is_approved=True, is_hidden=False)
+            .select_related('user'),
+            movie,
+        )
+        .filter(is_verified=True)
+        .annotate(helpful_count=Count('helpful_votes'))
+        .order_by('-rating', '-created_at', '-id')[:5]
+    )
     user_review = None
     user_helpful_ids = set()
     has_booked_and_completed = False
@@ -138,13 +153,7 @@ def movie_detail(request, movie_id):
             ReviewHelpful.objects.filter(user=request.user, review__movie=movie)
             .values_list('review_id', flat=True)
         )
-        user_bookings = Booking.objects.filter(movie=movie, user=request.user).select_related('theater')
-        for b in user_bookings:
-            duration_hours = (movie.duration or 180) / 60
-            show_end = b.theater.time + timezone.timedelta(hours=duration_hours)
-            if show_end < timezone.now():
-                has_booked_and_completed = True
-                break
+        has_booked_and_completed = has_completed_viewing(request.user, movie)
     avg_rating = review_base.aggregate(Avg('rating'))['rating__avg']
     total_reviews = review_base.count()
     rating_dist = {i: 0 for i in range(1, 6)}
@@ -161,6 +170,9 @@ def movie_detail(request, movie_id):
     recent_ids = [mid for mid in recent_ids if str(mid) != str(movie.id)]
     recent_ids.insert(0, movie.id)
     request.session['recently_viewed'] = recent_ids[:8]
+    # Consume any draft saved by a failed review submission so the user's
+    # entered rating/text is preserved exactly once and never lingers.
+    review_draft = request.session.pop('review_draft', None)
     in_wishlist = request.user.is_authenticated and Wishlist.objects.filter(
         user=request.user, movie=movie
     ).exists()
@@ -197,6 +209,7 @@ def movie_detail(request, movie_id):
         'theaters': theaters,
         'shows': shows,
         'in_wishlist': in_wishlist,
+        'review_draft': review_draft or {},
     })
 
 
@@ -1061,48 +1074,107 @@ def custom_500(request):
 
 
 @login_required(login_url='/login/')
+@require_POST
 def submit_review(request, movie_id):
+    """Create or update the signed-in user's single review for a movie.
+
+    Security: the movie comes from the URL resolver, the author is always
+    ``request.user`` and verification is derived server-side from real
+    booking/show/payment rows (see movies.reviews) â€” no client-supplied
+    field can influence the verified badge.
+
+    Business rules:
+    * One review per user per movie (DB-enforced unique_together); resubmits
+      update the existing row instead of duplicating it.
+    * Any signed-in user may post; only users with a completed viewing
+      (confirmed + paid booking whose show has ended, for THIS movie) get
+      the Verified Booking badge.
+    """
     movie = get_object_or_404(Movie, id=movie_id, is_deleted=False)
-    if request.method == 'POST':
-        rating = request.POST.get('rating')
-        comment = request.POST.get('comment', '').strip()
-        if not rating or not rating.isdigit() or int(rating) < 1 or int(rating) > 5:
-            messages.error(request, 'Please select a valid rating (1-5).')
-            return redirect('movie_detail', movie_id=movie.id)
-        if not comment:
-            messages.error(request, 'Please write a review comment.')
-            return redirect('movie_detail', movie_id=movie.id)
-        eligible_booking = None
-        user_bookings = Booking.objects.filter(movie=movie, user=request.user).select_related('theater')
-        for b in user_bookings:
-            duration_hours = (movie.duration or 180) / 60
-            show_end = b.theater.time + timezone.timedelta(hours=duration_hours)
-            if show_end < timezone.now():
-                eligible_booking = b
-                break
-        existing = Review.objects.filter(movie=movie, user=request.user).first()
-        if existing:
-            existing.rating = int(rating)
-            existing.comment = comment
-            if eligible_booking and not existing.booking:
-                existing.booking = eligible_booking
-            existing.edited_at = timezone.now()
-            existing.save()
-            messages.success(request, 'Your review has been updated.')
+    rating_raw = (request.POST.get('rating') or '').strip()
+    comment = (request.POST.get('comment') or '').strip()
+
+    def _fail(message):
+        # Preserve what the user typed so the re-rendered form keeps it.
+        request.session['review_draft'] = {'rating': rating_raw, 'comment': comment}
+        messages.error(request, message)
+        return redirect(f"{reverse('movie_detail', args=[movie.id])}#reviews")
+
+    try:
+        rating = int(rating_raw)
+    except (TypeError, ValueError):
+        return _fail('Please select a valid rating (1-5).')
+    if not 1 <= rating <= 5:
+        return _fail('Please select a valid rating (1-5).')
+    if not comment:
+        return _fail('Please write a review comment.')
+    if len(comment) > 5000:
+        return _fail('Your review is too long. Please keep it under 5000 characters.')
+
+    verified_booking = find_verified_booking(request.user, movie)
+    existing = Review.objects.filter(movie=movie, user=request.user).first()
+    if existing:
+        existing.rating = rating
+        existing.comment = comment
+        existing.edited_at = timezone.now()
+        update_fields = ['rating', 'comment', 'edited_at']
+        if verified_booking and not existing.booking_id:
+            existing.booking = verified_booking
+            update_fields.append('booking')
+        existing.save(update_fields=update_fields)
+        request.session.pop('review_draft', None)
+        if verified_booking:
+            messages.success(request, 'Your verified review has been updated!')
         else:
-            if not eligible_booking:
-                messages.error(request, 'You can only review movies you have watched. Book a ticket and watch the show first.')
-                return redirect('movie_detail', movie_id=movie.id)
-            Review.objects.create(
-                movie=movie,
-                user=request.user,
-                booking=eligible_booking,
-                rating=int(rating),
-                comment=comment,
+            messages.success(request, 'Your review has been updated.')
+    else:
+        Review.objects.create(
+            movie=movie,
+            user=request.user,
+            booking=verified_booking,
+            rating=rating,
+            comment=comment,
+            # Published immediately; moderation stays available to admins via
+            # the is_hidden / report flags instead of silent pre-approval.
+            is_approved=True,
+        )
+        request.session.pop('review_draft', None)
+        if verified_booking:
+            messages.success(request, 'Your verified review has been posted!')
+        else:
+            messages.success(request, 'Review posted successfully!')
+    return redirect(f"{reverse('movie_detail', args=[movie.id])}#reviews")
+
+
+
+
+
+
+logger_media = logging.getLogger('bookmyseat.media')
+
+
+@csrf_exempt
+@require_POST
+def log_missing_image(request):
+    """Client beacon when an <img> fails to load (missing poster/banner).
+
+    Keeps production debugging possible without hiding storage problems:
+    the browser reports the broken URL, we log it server-side at WARNING.
+    Accepts JSON {url: "..."} or a form field. Never raises to the client.
+    """
+    import json as _json
+    try:
+        if request.content_type and 'json' in request.content_type:
+            payload = _json.loads(request.body.decode('utf-8') or '{}')
+        else:
+            payload = {'url': request.POST.get('url', '')}
+        url = str(payload.get('url', ''))[:500]
+        page = request.META.get('HTTP_REFERER', '')[:500]
+        if url:
+            logger_media.warning(
+                'Missing image reported: url=%s page=%s ip=%s',
+                url, page, request.META.get('REMOTE_ADDR'),
             )
-            messages.success(request, 'Your review has been submitted for approval.')
-    return redirect('movie_detail', movie_id=movie.id)
-
-
-
-
+    except Exception:  # noqa: BLE001 — telemetry must never 500 the site
+        logger_media.warning('Malformed missing-image report', exc_info=True)
+    return JsonResponse({'ok': True})

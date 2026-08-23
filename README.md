@@ -2,6 +2,34 @@
 
 Online movie ticket booking platform built with Django (server-rendered). Customers can discover movies, select seats on a live seat map, pay through Razorpay, and receive PDF/QR tickets by email — while administrators manage content and monitor the business through an analytics dashboard.
 
+## Important Notices for Evaluators
+
+> [!IMPORTANT]
+> **Live Demo Deployment — Render Free Tier**
+>
+> This live demo is deployed on **Render's free tier**. When the application has been inactive for a long period, the Render service may enter **sleep mode**. Because of this, the first request after inactivity may take approximately **5–6 minutes** while the service wakes up.
+>
+> **Please wait for the application to load completely during your first visit.** After the service wakes up, subsequent loads will be much faster. However, after another long period of inactivity, Render may put the service back into sleep mode, and the initial delay will occur again on the next first request.
+
+> [!WARNING]
+> **Payment Testing Caution — Razorpay Demo/Test Mode**
+>
+> The deployed application uses **Razorpay Demo/Test Mode** for evaluation purposes — **no real money is charged**. Due to limitations in the current Razorpay demo environment, **Card and Net Banking payment methods may not work successfully** in the deployed demo. This limitation is related to the Razorpay demo/test environment only and does **not** indicate a problem with the application's booking workflow.
+>
+> **Successful demo payment flow:**
+>
+> 1. Select a movie/show.
+> 2. Select seats.
+> 3. Click **Continue to Payment**.
+> 4. Razorpay Checkout opens.
+> 5. Select **Wallet**.
+> 6. Select **MobiKwik**.
+> 7. Enter any 4-digit OTP when prompted.
+> 8. Complete the payment.
+> 9. The booking is confirmed after successful payment verification.
+>
+> For reference, the application implements complete Razorpay payment verification, webhook verification, transaction handling, and booking confirmation after successful verification.
+
 ## Features
 
 - Movie discovery with search, filters, sorting and personalised recommendations

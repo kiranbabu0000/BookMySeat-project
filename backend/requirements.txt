@@ -18,6 +18,15 @@ dj-database-url==3.1.2
 # Added to MIDDLEWARE in bookmyseat/settings.py; works on serverless.
 whitenoise==6.8.2
 
+# --- Persistent media storage ----------------------------------------------
+# Official Cloudinary SDK. When CLOUDINARY_URL is set (Render production),
+# bookmyseat/cloudinary_storage.CloudinaryMediaStorage uses it to store
+# uploaded posters/banners permanently — Render's local disk is ephemeral
+# and wipes runtime uploads on every restart/redeploy. Local development
+# without CLOUDINARY_URL keeps using the plain filesystem and never
+# imports this package.
+cloudinary==1.44.1
+
 # --- Database --------------------------------------------------------------
 # PostgreSQL driver used by dj-database-url when DATABASE_URL points at
 # PostgreSQL (Render / Railway / Vercel). Compatible with Python 3.12/3.13

@@ -764,7 +764,7 @@ class SecurityRegressionTests(TestCase):
             reverse('admin_trailer_edit', args=[trailer.pk]))
         self.assertEqual(response.status_code, 200)
         html = response.content.decode('utf-8')
-        self.assertIn('https://www.youtube.com/embed/dQw4w9WgXcQ', html)
+        self.assertIn('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ', html)
         self.assertNotIn(
             'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
             '" allowfullscreen', html)

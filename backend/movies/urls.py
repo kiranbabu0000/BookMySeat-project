@@ -26,4 +26,5 @@ urlpatterns=[
     path('api/ticket/verify/', views.verify_ticket_qr, name='verify_ticket_qr'),
     path('invoice/<str:booking_ref>/', views.booking_invoice, name='booking_invoice'),
     path('api/cleanup-expired/', views.cleanup_expired_reservations_view, name='api_cleanup_expired'),
+    path('api/images/missing-log/', views.log_missing_image, name='log_missing_image'),
 ]

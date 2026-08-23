@@ -151,6 +151,34 @@ EMAIL_OUTBOX_CLAIM_MAX_AGE = int(os.environ.get('EMAIL_OUTBOX_CLAIM_MAX_AGE_SECO
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+# ---------------------------------------------------------------------------
+# Media storage backend
+#
+# Render's web-service filesystem is EPHEMERAL: every restart, redeploy or
+# spin-down rebuilds the container from git and wipes files uploaded at
+# runtime. Storing admin-uploaded posters/banners on that disk is why images
+# vanished after a while while PostgreSQL kept their paths.
+#
+# When CLOUDINARY_URL is configured (production), every ImageField/FileField
+# switches to Cloudinary — uploads become permanent URLs and survive restarts,
+# redeploys and the next day. No model changes are needed: FileField resolves
+# its storage from STORAGES at runtime.
+#
+# Local development (no CLOUDINARY_URL) keeps the plain filesystem under
+# backend/media/ exactly as before. Static files always stay local and are
+# served by WhiteNoise in both modes — static and media remain separate.
+if os.environ.get('CLOUDINARY_URL'):
+    STORAGES = {
+        'default': {
+            'BACKEND': 'bookmyseat.cloudinary_storage.CloudinaryMediaStorage',
+        },
+        # Unchanged default so collectstatic/WhiteNoise behaviour is identical
+        # whether or not cloud media storage is enabled.
+        'staticfiles': {
+            'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+        },
+    }
+
 
 ROOT_URLCONF = 'bookmyseat.urls'
 LOGIN_URL='/login/'

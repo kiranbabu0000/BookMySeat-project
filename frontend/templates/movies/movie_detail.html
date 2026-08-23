@@ -315,66 +315,42 @@
       {% endif %}
 
       {% if user.is_authenticated %}
-        {% if has_booked_and_completed %}
         <div class="review-form-card mb-4">
           <h4 class="mb-3">
             {% if user_review %}Edit Your Review{% else %}Write a Review{% endif %}
           </h4>
-          <form method="POST" action="{% url 'submit_review' movie.id %}">
+          <form method="POST" action="{% url 'submit_review' movie.id %}" data-review-form>
             {% csrf_token %}
             <div class="star-rating mb-3">
               <p class="mb-2 text-muted small">Your Rating</p>
               <div class="star-rating__stars" id="starRating">
+                {% with draft_rating=review_draft.rating|default:'' %}
                 {% for i in "12345" %}
                 <input type="radio" name="rating" value="{{ i }}" id="star{{ i }}"
-                       {% if user_review and user_review.rating == forloop.counter %}checked{% endif %}>
+                       {% if draft_rating == i|stringformat:"s" %}checked{% elif user_review and user_review.rating == forloop.counter and not draft_rating %}checked{% endif %}>
                 <label for="star{{ i }}" title="{{ i }} star{% if i > 1 %}s{% endif %}">
                   <i class="bi bi-star-fill"></i>
                 </label>
                 {% endfor %}
+                {% endwith %}
               </div>
             </div>
             <div class="mb-3">
               <textarea name="comment" class="form-control form-bms" rows="3"
-                        placeholder="Share your experience...">{% if user_review %}{{ user_review.comment }}{% endif %}</textarea>
+                        placeholder="Share your experience...">{% if review_draft.comment %}{{ review_draft.comment }}{% elif user_review %}{{ user_review.comment }}{% endif %}</textarea>
             </div>
-            <button type="submit" class="btn btn-bms-primary">
+            <button type="submit" class="btn btn-bms-primary btn-bms-loading">
               <i class="bi bi-send"></i> {% if user_review %}Update Review{% else %}Submit Review{% endif %}
             </button>
+            {% if has_booked_and_completed %}
+            <small class="review-verify-hint d-inline-block ms-2">
+              <i class="bi bi-patch-check-fill"></i> Your completed booking earns this review a Verified Booking badge
+            </small>
+            {% elif not user_review %}
+            <small class="text-muted d-inline-block ms-2">Booked &amp; watched this movie? Your review gets a ✓ Verified Booking badge automatically.</small>
+            {% endif %}
           </form>
         </div>
-        {% elif user_review %}
-        <div class="review-form-card mb-4">
-          <h4 class="mb-3">Edit Your Review</h4>
-          <form method="POST" action="{% url 'submit_review' movie.id %}">
-            {% csrf_token %}
-            <div class="star-rating mb-3">
-              <p class="mb-2 text-muted small">Your Rating</p>
-              <div class="star-rating__stars" id="starRating">
-                {% for i in "12345" %}
-                <input type="radio" name="rating" value="{{ i }}" id="star{{ i }}"
-                       {% if user_review.rating == forloop.counter %}checked{% endif %}>
-                <label for="star{{ i }}" title="{{ i }} star{% if i > 1 %}s{% endif %}">
-                  <i class="bi bi-star-fill"></i>
-                </label>
-                {% endfor %}
-              </div>
-            </div>
-            <div class="mb-3">
-              <textarea name="comment" class="form-control form-bms" rows="3">{% if user_review %}{{ user_review.comment }}{% endif %}</textarea>
-            </div>
-            <button type="submit" class="btn btn-bms-primary">
-              <i class="bi bi-send"></i> Update Review
-            </button>
-          </form>
-        </div>
-        {% else %}
-        <div class="alert alert-bms alert-info mb-4">
-          <i class="bi bi-info-circle me-2"></i>
-          You need to book a ticket and attend the show before you can write a review.
-          <a href="{% url 'theater_list' movie.id %}" class="alert-link">Book Now</a>
-        </div>
-        {% endif %}
       {% else %}
       <div class="alert alert-bms alert-info mb-4">
         <i class="bi bi-info-circle me-2"></i>
@@ -383,6 +359,7 @@
       {% endif %}
 
       {% if verified_reviews %}
+      <h3 class="review-subheading">Top Verified Reviews</h3>
       <div class="verified-reviews mb-4">
         {% for review in verified_reviews %}
         <div class="review-card">
@@ -394,9 +371,9 @@
           <div class="review-card__body">
             <div class="review-card__header">
               <strong class="review-card__user">{{ review.user.username }}</strong>
-              {% if review.booking %}
-              <span class="review-card__verified" title="Verified ticket buyer">
-                <i class="bi bi-patch-check-fill"></i> Verified Viewer
+              {% if review.is_verified %}
+              <span class="review-card__verified" title="Verified ticket holder — attended this show">
+                <i class="bi bi-patch-check-fill"></i> Verified Booking
               </span>
               {% endif %}
               <span class="review-card__date">{{ review.created_at|date:"M d, Y" }}</span>
@@ -424,6 +401,12 @@
         </div>
         {% endfor %}
       </div>
+      {% else %}
+      <div class="verified-empty mb-4">
+        <div class="verified-empty__icon"><i class="bi bi-patch-check"></i></div>
+        <p class="verified-empty__title">No verified reviews yet</p>
+        <p class="verified-empty__text mb-0">Be the first verified viewer to share your experience.</p>
+      </div>
       {% endif %}
 
       {% if reviews %}
@@ -438,9 +421,9 @@
           <div class="review-card__body">
             <div class="review-card__header">
               <strong class="review-card__user">{{ review.user.username }}</strong>
-              {% if review.booking %}
-              <span class="review-card__verified" title="Verified ticket buyer">
-                <i class="bi bi-patch-check-fill"></i> Verified Viewer
+              {% if review.is_verified %}
+              <span class="review-card__verified" title="Verified ticket holder — attended this show">
+                <i class="bi bi-patch-check-fill"></i> Verified Booking
               </span>
               {% endif %}
               <span class="review-card__date">{{ review.created_at|date:"M d, Y" }}</span>
@@ -558,13 +541,25 @@
       </div>
       <div class="trailers-grid">
         {% for trailer in trailers %}
-        <div class="trailer-card">
+        {% with yid=trailer.url|youtube_id watch_url=trailer.url|youtube_watch_url %}
+        <div class="trailer-card" {% if yid %}data-yt-player="{{ yid }}" data-yt-title="{{ trailer.title|default:'Trailer' }}"{% endif %} data-yt-watch="{{ watch_url }}">
           <div class="trailer-card__embed">
-            {% with embed=trailer.url|youtube_embed %}
-            {% if embed %}
-            <iframe src="{{ embed }}" title="{{ trailer.title|default:'Trailer' }}" frameborder="0" allowfullscreen loading="lazy"></iframe>
+            {% if yid %}
+            <iframe class="trailer-card__frame"
+                    src="https://www.youtube-nocookie.com/embed/{{ yid }}?rel=0&amp;enablejsapi=1"
+                    title="{{ trailer.title|default:'Trailer' }}"
+                    loading="lazy"
+                    frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen
+                    referrerpolicy="strict-origin-when-cross-origin"></iframe>
+            {% else %}
+            <a class="trailer-fallback" href="{{ watch_url }}" target="_blank" rel="noopener noreferrer">
+              <span class="trailer-fallback__play"><i class="bi bi-play-fill"></i></span>
+              <span class="trailer-fallback__title">{% if trailer.title %}Watch {{ trailer.title }}{% else %}▶ Watch Trailer{% endif %}</span>
+              <span class="trailer-fallback__hint">Watch this trailer on YouTube</span>
+            </a>
             {% endif %}
-            {% endwith %}
           </div>
           {% if trailer.title %}
           <div class="trailer-card__info">
@@ -573,6 +568,7 @@
           </div>
           {% endif %}
         </div>
+        {% endwith %}
         {% endfor %}
       </div>
     </section>
@@ -920,6 +916,47 @@
   margin: 0;
   color: var(--text-primary);
 }
+.trailer-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  text-align: center;
+  padding: 1rem;
+  background:
+    radial-gradient(ellipse at center, rgba(212,175,55,0.10), transparent 65%),
+    linear-gradient(160deg, #14141c 0%, #1e1e2a 55%, #26161c 100%);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.trailer-fallback:hover { transform: translateY(-3px); box-shadow: 0 10px 28px rgba(0,0,0,0.35); }
+.trailer-fallback__play {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.9rem;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-primary), #8f1420);
+  box-shadow: 0 6px 18px rgba(229, 9, 20, 0.4);
+  transition: transform var(--transition-fast);
+}
+.trailer-fallback:hover .trailer-fallback__play { transform: scale(1.08); }
+.trailer-fallback__title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+.trailer-fallback__hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
 
 /* Rating Summary */
 .rating-summary {
@@ -950,6 +987,42 @@
 }
 
 /* Reviews */
+.review-subheading {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.review-verify-hint {
+  color: var(--accent-success);
+  font-size: 0.78rem;
+  max-width: 260px;
+  vertical-align: middle;
+}
+.verified-empty {
+  background: var(--bg-card);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+.verified-empty__icon {
+  font-size: 2rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.verified-empty__title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.15rem;
+}
+.verified-empty__text {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
 .review-form-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -1061,19 +1134,90 @@
   margin-top: 3rem;
   padding-top: 1rem;
 }
+
+@media (max-width: 576px) {
+  .review-card {
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+  .review-card__avatar-placeholder {
+    width: 36px;
+    height: 36px;
+    font-size: 0.95rem;
+  }
+  .review-card__date {
+    margin-left: 0;
+    width: 100%;
+  }
+  .review-verify-hint { display: block !important; margin-top: 0.5rem; }
+}
 </style>
 {% endblock %}
 
 {% block extra_js %}
+<template id="trailerFallbackTpl">
+  <a class="trailer-fallback" target="_blank" rel="noopener noreferrer">
+    <span class="trailer-fallback__play"><i class="bi bi-play-fill"></i></span>
+    <span class="trailer-fallback__title">▶ Watch Trailer</span>
+    <span class="trailer-fallback__hint">Watch this trailer on YouTube</span>
+  </a>
+</template>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    const textareas = document.querySelectorAll('.review-form-card textarea');
-    textareas.forEach(ta => {
+    // Auto-grow review textarea
+    document.querySelectorAll('.review-form-card textarea').forEach(function(ta) {
       ta.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = (this.scrollHeight) + 'px';
       });
     });
+
+    // Submit-in-progress state: prevent double posts, show feedback
+    var reviewForm = document.querySelector('[data-review-form]');
+    if (reviewForm) {
+      reviewForm.addEventListener('submit', function() {
+        var btn = reviewForm.querySelector('button[type="submit"]');
+        if (!btn || btn.disabled) return;
+        btn.disabled = true;
+        btn.dataset.label = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Posting…';
+      });
+    }
+
+    // Graceful trailer handling: if the YouTube player reports an error
+    // (deleted/private/embedding-disabled -> the old "Error 153"), swap in
+    // the cinematic fallback card instead of exposing a broken player.
+    // If the API script is blocked entirely the plain iframes keep working.
+    var cards = Array.prototype.slice.call(document.querySelectorAll('[data-yt-player]'));
+    if (!cards.length) return;
+    var tpl = document.getElementById('trailerFallbackTpl');
+
+    function swapToFallback(card) {
+      var embed = card.querySelector('.trailer-card__embed');
+      if (!embed || !tpl) return;
+      var link = tpl.content.firstElementChild.cloneNode(true);
+      link.href = card.getAttribute('data-yt-watch') || 'https://www.youtube.com/';
+      embed.innerHTML = '';
+      embed.appendChild(link);
+    }
+
+    function initPlayer(card) {
+      try {
+        new YT.Player(card.querySelector('.trailer-card__frame'), {
+          videoId: card.getAttribute('data-yt-player'),
+          playerVars: { rel: 0 },
+          events: { onError: function() { swapToFallback(card); } }
+        });
+      } catch (err) { /* keep the plain iframe */ }
+    }
+
+    window.onYouTubeIframeAPIReady = function() {
+      cards.forEach(initPlayer);
+    };
+    var api = document.createElement('script');
+    api.src = 'https://www.youtube.com/iframe_api';
+    api.async = true;
+    document.head.appendChild(api);
   });
 </script>
 {% endblock %}

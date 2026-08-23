@@ -45,6 +45,14 @@ services:
         value: "True"
       - key: RAZORPAY_DEMO_MODE
         value: "False"
+      # Persistent media storage (Cloudinary). REQUIRED in production: Render's
+      # disk is ephemeral, so without this every admin-uploaded poster/banner
+      # is lost on the next restart/redeploy while PostgreSQL keeps its path.
+      # When set, all ImageField uploads go to Cloudinary and survive restarts.
+      # Set via the sync:false prompt so the secret stays out of the repo.
+      # Format: cloudinary://<api_key>:<api_secret>@<cloud_name>
+      - key: CLOUDINARY_URL
+        sync: false
       # SMTP email. Production refuses to boot without EMAIL_HOST rather than
       # silently falling back to the console backend (which sends nothing), so
       # these secrets are required for the deploy even though the (optional)

@@ -14,11 +14,11 @@ urlpatterns = [
     path('', include('admin_panel.urls')),
 ]
 
-# Serve uploaded media (banners/posters/thumbnails) in both development and
-# production. Django 6's static() helper only registers routes when
-# DEBUG=True, so we register the /media/ route explicitly instead.
-# On Render/Vercel the movie image files are committed to the repo (see
-# .gitignore) because those platforms' disks are not persistent.
+# Serve uploaded media in development. In production with CLOUDINARY_URL set
+# (see settings.STORAGES) uploads live on Cloudinary and are served straight
+# from res.cloudinary.com; this route only handles legacy local files.
+# Django's static() helper only registers routes when DEBUG=True, so we
+# register the /media/ route explicitly instead.
 urlpatterns += [
     re_path(
         r'^media/(?P<path>.*)$',
