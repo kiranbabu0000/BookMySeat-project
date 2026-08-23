@@ -361,6 +361,35 @@
     });
   }
 
+  /* Auto-detection used to run directly on DOMContentLoaded, which made the
+     browser location-permission prompt appear on top of the cinematic intro
+     on first visit. main.js now broadcasts 'bms:intro-finished' once the intro
+     overlay is dismissed/skipped, so detection starts only after the main UI
+     is visible. Detection logic itself is unchanged. */
+  var INTRO_FINISHED_EVENT = 'bms:intro-finished';
+  var INTRO_HANDOFF_DELAY = 500; /* settle time after the intro hands over to the UI */
+
+  function scheduleAutoDetect() {
+    /* Intro already skipped or dismissed this session (refresh / repeat visit):
+       behave exactly as before — detect immediately. */
+    var overlay = document.getElementById('bmsIntroOverlay');
+    if (!overlay || overlay.dataset.dismissed) { init(); return; }
+
+    var started = false;
+    var watchdog = null;
+    function start() {
+      if (started) return;
+      started = true;
+      window.removeEventListener(INTRO_FINISHED_EVENT, start);
+      if (watchdog) clearTimeout(watchdog);
+      setTimeout(init, INTRO_HANDOFF_DELAY);
+    }
+    window.addEventListener(INTRO_FINISHED_EVENT, start);
+    /* Safety net: the intro has its own 5s failsafe dismissal; if its event
+       never arrives, still run detection instead of never running it. */
+    watchdog = setTimeout(start, 7500);
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     var root = document.getElementById('citySelector');
     if (!root) return;
@@ -473,6 +502,6 @@
       });
     });
 
-    init();
+    scheduleAutoDetect();
   });
 })();

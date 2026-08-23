@@ -59,6 +59,21 @@
      Clapperboard entrance → realistic clap → logo reveal → FLIP.
      Two spotlights, dust burst, sequential tagline. ~3.8 s.
      ============================================================ */
+
+  /* Broadcast exactly once when the intro has finished or been skipped,
+     so other modules (e.g. city detection) can defer work until the
+     main UI is visible instead of interrupting the intro. */
+  var INTRO_FINISHED_EVENT = 'bms:intro-finished';
+  var introFinishedSent = false;
+
+  function notifyIntroFinished() {
+    if (introFinishedSent) return;
+    introFinishedSent = true;
+    try {
+      window.dispatchEvent(new CustomEvent(INTRO_FINISHED_EVENT));
+    } catch (e) {}
+  }
+
   function initCinematicIntro() {
     var INTRO_KEY = 'bms-intro-seen';
     var overlay  = document.getElementById('bmsIntroOverlay');
@@ -68,13 +83,14 @@
     var clapEl   = document.getElementById('bmsIntroClap');
     var flashEl  = document.getElementById('bmsIntroFlash');
 
-    if (!overlay || !lockup) { removeIntroEl(); return; }
+    if (!overlay || !lockup) { removeIntroEl(); notifyIntroFinished(); return; }
 
     try {
       if (sessionStorage.getItem(INTRO_KEY)) {
         console.log('[BMS Intro] Skipped — already seen this session');
         removeIntroEl();
         triggerMicroSweep();
+        notifyIntroFinished();
         return;
       }
     } catch (e) {}
@@ -291,6 +307,7 @@
       lockup.style.willChange = '';
       try { sessionStorage.setItem(INTRO_KEY, '1'); } catch (e) {}
       overlay.remove();
+      notifyIntroFinished();
     }
 
     function showReducedMotionIntro() {
@@ -300,13 +317,17 @@
         overlay.remove();
         document.body.classList.remove('bms-intro-active');
         try { sessionStorage.setItem(INTRO_KEY, '1'); } catch (e) {}
+        notifyIntroFinished();
       }, 1400);
       setTimeout(function () {
         clearTimeout(rf);
         overlay.classList.add('is-fading');
         document.body.classList.remove('bms-intro-active');
         try { sessionStorage.setItem(INTRO_KEY, '1'); } catch (e) {}
-        setTimeout(function () { overlay.remove(); }, 700);
+        setTimeout(function () {
+          overlay.remove();
+          notifyIntroFinished();
+        }, 700);
       }, 700);
     }
 
