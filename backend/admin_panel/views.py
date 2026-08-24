@@ -27,7 +27,7 @@ import secrets
 import logging
 from movies.models import Movie, Theater, Seat, Booking, Reservation, ReservedSeat, SeatCategory, ShowPrice, TicketScan
 from movies.services import ReservationError, create_walkin_bookings, pricing_for_seats
-from movies.showtime import show_status_info, showtime_zone
+from movies.showtime import day_range_utc, show_status_info, showtime_zone
 from movies.ticket_scan import scan_ticket
 
 logger = logging.getLogger('admin_panel')
@@ -136,13 +136,72 @@ def _dashboard_pct(current, previous):
 
 
 def _dashboard_occupancy(day):
-    """Return (occupancy_pct, booked_seats, total_seats) for shows on ``day``."""
-    seats = Seat.objects.filter(theater__time__date=day)
+    """Return (occupancy_pct, booked_seats, total_seats) for shows on ``day``.
+
+    Filters the show time with an index-friendly half-open range instead of
+    ``theater__time__date``: the date-cast lookup wraps the column in a
+    timezone function so no index can be used and every Seat row of every
+    show gets joined and cast. On a seeded database (hundreds of thousands of
+    seat rows) that made each call take seconds and the dashboard tens of
+    seconds; the range form drives off the indexed ``Theater.time`` column.
+    """
+    start, end = day_range_utc(day)
+    seats = Seat.objects.filter(theater__time__gte=start, theater__time__lt=end)
     total = seats.count()
     booked = seats.filter(is_booked=True).count()
     if total == 0:
         return 0, booked, total
     return round(booked / total * 100), booked, total
+
+
+def _dashboard_occupancy_series(days):
+    """Per-day occupancy for the last ``days`` theatre-local days.
+
+    Returns ``{date: (occupancy_pct, booked_seats, total_seats)}`` computed in
+    a SINGLE grouped query (one indexed range scan instead of one full
+    join-per-day). Days without shows are simply absent from the mapping.
+    """
+    today = timezone.now().date()
+    window_start = day_range_utc(today - timedelta(days=days - 1))[0]
+    window_end = day_range_utc(today)[1]
+    rows = (
+        Seat.objects.filter(
+            theater__time__gte=window_start, theater__time__lt=window_end,
+        )
+        .annotate(day=TruncDate('theater__time'))
+        .values('day')
+        .annotate(
+            total=Count('id'),
+            booked=Count('id', filter=Q(is_booked=True)),
+        )
+    )
+    out = {}
+    for row in rows:
+        total, booked = row['total'], row['booked']
+        pct = round(booked / total * 100) if total else 0
+        day = row['day']
+        out[day if isinstance(day, date) else day.date()] = (pct, booked, total)
+    return out
+
+
+def _dashboard_active_show_counts(days):
+    """Active-show count per theatre-local day for the last ``days`` days.
+
+    One grouped query replaces what used to be one ``time__date`` cast query
+    per sparkline point.
+    """
+    today = timezone.now().date()
+    window_start = day_range_utc(today - timedelta(days=days - 1))[0]
+    window_end = day_range_utc(today)[1]
+    rows = (
+        Theater.objects.filter(
+            time__gte=window_start, time__lt=window_end, status='active',
+        )
+        .annotate(day=TruncDate('time'))
+        .values('day')
+        .annotate(c=Count('id'))
+    )
+    return {row['day']: row['c'] for row in rows}
 
 
 def _dashboard_series(days):
@@ -242,46 +301,85 @@ class DashboardView(AdminSessionMixin, TemplateView):
         month_start = today.replace(day=1)
         context['today'] = today
 
-        def revenue_on(day):
-            return Payment.objects.filter(status='completed', paid_at__date=day).aggregate(
-                total=Sum('amount')
-            )['total'] or Decimal('0.00')
+        # Index-friendly aware bounds for the theatre-local calendar windows.
+        # Half-open [start, end) ranges on the raw datetime columns let the
+        # database use the btree indexes; __date casts cannot.
+        today_start, tomorrow_start = day_range_utc(today)
+        yesterday_start = day_range_utc(yesterday)[0]
+        week_start_dt = day_range_utc(week_start)[0]
+        month_start_dt = day_range_utc(month_start)[0]
 
-        today_revenue = revenue_on(today)
-        yesterday_revenue = revenue_on(yesterday)
-        week_revenue = Payment.objects.filter(
-            status='completed', paid_at__date__gte=week_start
-        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        month_revenue = Payment.objects.filter(
-            status='completed', paid_at__date__gte=month_start
-        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        # --- Revenue + booking KPIs: one conditional-aggregation query each
+        # instead of four separate scans per metric family. ---
+        rev = Payment.objects.filter(
+            status='completed', paid_at__gte=month_start_dt,
+        ).aggregate(
+            today=Coalesce(Sum('amount', filter=Q(
+                paid_at__gte=today_start, paid_at__lt=tomorrow_start,
+            )), Decimal('0.00')),
+            yesterday=Coalesce(Sum('amount', filter=Q(
+                paid_at__gte=yesterday_start, paid_at__lt=today_start,
+            )), Decimal('0.00')),
+            week=Coalesce(Sum('amount', filter=Q(
+                paid_at__gte=week_start_dt,
+            )), Decimal('0.00')),
+            month=Coalesce(Sum('amount'), Decimal('0.00')),
+        )
+        today_revenue = rev['today']
+        yesterday_revenue = rev['yesterday']
+        week_revenue = rev['week']
+        month_revenue = rev['month']
 
-        today_bookings = Booking.objects.filter(booked_at__date=today).count()
-        yesterday_bookings = Booking.objects.filter(booked_at__date=yesterday).count()
-        week_bookings = Booking.objects.filter(booked_at__date__gte=week_start).count()
-        month_bookings = Booking.objects.filter(booked_at__date__gte=month_start).count()
+        bk = Booking.objects.filter(booked_at__gte=month_start_dt).aggregate(
+            today=Count('id', filter=Q(
+                booked_at__gte=today_start, booked_at__lt=tomorrow_start,
+            )),
+            yesterday=Count('id', filter=Q(
+                booked_at__gte=yesterday_start, booked_at__lt=today_start,
+            )),
+            week=Count('id', filter=Q(booked_at__gte=week_start_dt)),
+            month=Count('id'),
+            cancelled_today=Count('id', filter=Q(
+                booked_at__gte=today_start, booked_at__lt=tomorrow_start,
+                status='cancelled',
+            )),
+        )
+        today_bookings = bk['today']
+        yesterday_bookings = bk['yesterday']
+        week_bookings = bk['week']
+        month_bookings = bk['month']
+        cancelled_today = bk['cancelled_today']
 
-        occupancy_today, today_booked_seats, today_total_seats = _dashboard_occupancy(today)
-        occupancy_yesterday, _, _ = _dashboard_occupancy(yesterday)
+        # --- Occupancy: one grouped range query feeds the KPIs AND the
+        # sparkline (was two full join scans here plus six for the sparkline).
+        occupancy_map = _dashboard_occupancy_series(days=8)
+        occupancy_today, today_booked_seats, today_total_seats = (
+            occupancy_map.get(today, (0, 0, 0)))
+        occupancy_yesterday, _, _ = occupancy_map.get(yesterday, (0, 0, 0))
 
-        active_shows_today = Theater.objects.filter(time__date=today, status='active').count()
-        active_shows_yesterday = Theater.objects.filter(time__date=yesterday, status='active').count()
-        upcoming_shows = Theater.objects.filter(time__date__gte=today).exclude(status='cancelled').count()
+        # --- Active shows: one grouped query for the whole window.
+        show_counts = _dashboard_active_show_counts(days=8)
+        active_shows_today = show_counts.get(today, 0)
+        active_shows_yesterday = show_counts.get(yesterday, 0)
+        upcoming_shows = Theater.objects.filter(
+            time__gte=today_start,
+        ).exclude(status='cancelled').count()
         total_shows = Theater.objects.exclude(status='cancelled').count()
 
-        cancelled_today = Booking.objects.filter(status='cancelled', booked_at__date=today).count()
         pending_refunds = PaymentTransaction.objects.filter(status='refund_requested').count()
         active_reservations = Reservation.objects.filter(status='active').count()
         held_seats = ReservedSeat.objects.filter(reservation__status='active').count()
         unread_notifications = Notification.objects.filter(is_read=False).count()
 
-        # --- 7-day sparklines powering the KPI trend area ---
-        _, spark_revenue, spark_bookings = _dashboard_series(7)
+        # --- Business performance chart data for 7 / 30 / 90 days + 12 months.
+        # The 7-day series is computed once and reused for the KPI sparkline.
+        d7_labels, spark_revenue, spark_bookings = _dashboard_series(7)
         spark_occupancy = [
-            _dashboard_occupancy(today - timedelta(days=i))[0] for i in range(6, -1, -1)
+            occupancy_map.get(today - timedelta(days=i), (0, 0, 0))[0]
+            for i in range(6, -1, -1)
         ]
         spark_shows = [
-            Theater.objects.filter(time__date=today - timedelta(days=i), status='active').count()
+            show_counts.get(today - timedelta(days=i), 0)
             for i in range(6, -1, -1)
         ]
         rev_line, rev_area = _dashboard_sparkline(spark_revenue)
@@ -336,13 +434,14 @@ class DashboardView(AdminSessionMixin, TemplateView):
             },
         ]
 
-        # --- Business performance chart data for 7 / 30 / 90 days + 12 months ---
-        d7_labels, d7_rev, d7_book = _dashboard_series(7)
+        # --- Business performance chart data for 7 / 30 / 90 days + 12 months.
+        # The 7-day series was already computed above for the sparkline —
+        # reuse it instead of running the same grouped queries again.
         d30_labels, d30_rev, d30_book = _dashboard_series(30)
         d90_labels, d90_rev, d90_book = _dashboard_series(90)
         m_labels, m_rev, m_book = _dashboard_monthly(12)
         context['chart_ranges'] = json.dumps({
-            '7d': {'labels': d7_labels, 'revenue': d7_rev, 'bookings': d7_book},
+            '7d': {'labels': d7_labels, 'revenue': spark_revenue, 'bookings': spark_bookings},
             '30d': {'labels': d30_labels, 'revenue': d30_rev, 'bookings': d30_book},
             '90d': {'labels': d90_labels, 'revenue': d90_rev, 'bookings': d90_book},
             '12m': {'labels': m_labels, 'revenue': m_rev, 'bookings': m_book},
@@ -396,12 +495,12 @@ class DashboardView(AdminSessionMixin, TemplateView):
             .annotate(
                 recent_bookings=Count(
                     'booking',
-                    filter=Q(booking__booked_at__date__gte=month_start, booking__status='confirmed'),
+                    filter=Q(booking__booked_at__gte=month_start_dt, booking__status='confirmed'),
                 ),
                 recent_revenue=Coalesce(
                     Sum(
                         'booking__total',
-                        filter=Q(booking__booked_at__date__gte=month_start, booking__status='confirmed'),
+                        filter=Q(booking__booked_at__gte=month_start_dt, booking__status='confirmed'),
                     ),
                     Decimal('0.00'),
                 ),
@@ -410,21 +509,44 @@ class DashboardView(AdminSessionMixin, TemplateView):
         )
 
         # --- Theatre performance by venue name (occupancy + shows) ---
-        theatre_perf = []
-        for row in (
-            Theater.objects.values('name')
-            .annotate(
-                shows=Count('id', distinct=True),
-                total_seats=Count('seats'),
-                booked_seats=Count('seats', filter=Q(seats__is_booked=True)),
+        # Two-step aggregation: pick the top-5 venues by show count first
+        # (cheap, theatre-side only), then aggregate seat stats just for those
+        # venues. The previous single query joined EVERY seat row of every
+        # theatre before grouping, which scanned the whole (multi-hundred-
+        # thousand-row) seat table on each dashboard load.
+        top_names = [
+            row['name']
+            for row in (
+                Theater.objects.values('name').annotate(
+                    shows=Count('id'),
+                ).order_by('-shows')[:5]
             )
-            .order_by('-shows')[:5]
-        ):
-            total = row['total_seats'] or 0
-            booked = row['booked_seats'] or 0
+        ]
+        perf_shows = {
+            row['name']: row['shows']
+            for row in (
+                Theater.objects.filter(name__in=top_names)
+                .values('name')
+                .annotate(shows=Count('id', distinct=True))
+            )
+        } if top_names else {}
+        perf_seats = {
+            row['theater__name']: (row['total'], row['booked'])
+            for row in (
+                Seat.objects.filter(theater__name__in=top_names)
+                .values('theater__name')
+                .annotate(
+                    total=Count('id'),
+                    booked=Count('id', filter=Q(is_booked=True)),
+                )
+            )
+        } if top_names else {}
+        theatre_perf = []
+        for name in sorted(perf_shows, key=lambda n: -perf_shows[n]):
+            total, booked = perf_seats.get(name, (0, 0))
             theatre_perf.append({
-                'name': row['name'],
-                'shows': row['shows'],
+                'name': name,
+                'shows': perf_shows[name],
                 'total_seats': total,
                 'booked_seats': booked,
                 'available_seats': total - booked,
@@ -433,22 +555,34 @@ class DashboardView(AdminSessionMixin, TemplateView):
         context['theatre_perf'] = theatre_perf
 
         # --- Platform inventory summary ---
-        completed_payments = Payment.objects.filter(status='completed')
-        context['total_movies'] = Movie.objects.filter(is_deleted=False).count()
+        # Status-split counts collapse into one aggregate per table instead
+        # of one query per row of the summary grid.
+        movie_stats = Movie.objects.aggregate(
+            total=Count('id', filter=Q(is_deleted=False)),
+            active=Count('id', filter=Q(status='now_showing', is_deleted=False)),
+            upcoming=Count('id', filter=Q(status='coming_soon', is_deleted=False)),
+        )
+        seat_stats = Seat.objects.aggregate(
+            available=Count('id', filter=Q(is_booked=False)),
+            booked=Count('id', filter=Q(is_booked=True)),
+        )
+        context['total_movies'] = movie_stats['total']
         context['total_bookings'] = Booking.objects.count()
         context['total_users'] = User.objects.count()
         context['total_staff'] = AdminProfile.objects.count()
         context['total_theatres'] = Theater.objects.values('name').distinct().count()
         context['total_screens'] = Screen.objects.count()
         context['total_shows'] = total_shows
-        context['active_movies'] = Movie.objects.filter(status='now_showing', is_deleted=False).count()
-        context['upcoming_movies'] = Movie.objects.filter(status='coming_soon', is_deleted=False).count()
+        context['active_movies'] = movie_stats['active']
+        context['upcoming_movies'] = movie_stats['upcoming']
         context['pending_refunds'] = pending_refunds
         context['total_payments'] = Payment.objects.count()
         context['total_transactions'] = PaymentTransaction.objects.count()
-        context['total_revenue'] = completed_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        context['total_available_seats'] = Seat.objects.filter(is_booked=False).count()
-        context['total_booked_seats'] = Seat.objects.filter(is_booked=True).count()
+        context['total_revenue'] = Payment.objects.filter(
+            status='completed',
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        context['total_available_seats'] = seat_stats['available']
+        context['total_booked_seats'] = seat_stats['booked']
         context['total_active_reservations'] = active_reservations
         context['held_seats'] = held_seats
         context['cancelled_today'] = cancelled_today
