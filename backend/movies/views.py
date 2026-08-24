@@ -127,13 +127,6 @@ def movie_detail(request, movie_id):
     trailers = movie.trailers.all()
     review_base = Review.objects.filter(movie=movie, is_approved=True, is_hidden=False).select_related('user')
     review_annotated = annotate_review_verification(review_base, movie)
-    review_pages = Paginator(
-        review_annotated.annotate(helpful_count=Count('helpful_votes'))
-        .order_by('-created_at', '-id'),
-        10,
-    )
-    page_num = request.GET.get('rpage', 1)
-    reviews = review_pages.get_page(page_num)
     verified_reviews = (
         annotate_review_verification(
             Review.objects.filter(movie=movie, is_approved=True, is_hidden=False)
@@ -144,6 +137,19 @@ def movie_detail(request, movie_id):
         .annotate(helpful_count=Count('helpful_votes'))
         .order_by('-rating', '-created_at', '-id')[:5]
     )
+    # The same Review row must never render twice on one page: the "Top
+    # Verified Reviews" highlight block and the paginated list below it both
+    # match fresh verified reviews, which looked like the review "posted
+    # twice". Exclude the highlighted ids from the general list.
+    verified_ids = [review.pk for review in verified_reviews]
+    review_pages = Paginator(
+        review_annotated.annotate(helpful_count=Count('helpful_votes'))
+        .exclude(pk__in=verified_ids)
+        .order_by('-created_at', '-id'),
+        10,
+    )
+    page_num = request.GET.get('rpage', 1)
+    reviews = review_pages.get_page(page_num)
     user_review = None
     user_helpful_ids = set()
     has_booked_and_completed = False
@@ -1112,8 +1118,8 @@ def submit_review(request, movie_id):
         return _fail('Your review is too long. Please keep it under 5000 characters.')
 
     verified_booking = find_verified_booking(request.user, movie)
-    existing = Review.objects.filter(movie=movie, user=request.user).first()
-    if existing:
+
+    def _apply_update(existing):
         existing.rating = rating
         existing.comment = comment
         existing.edited_at = timezone.now()
@@ -1122,27 +1128,51 @@ def submit_review(request, movie_id):
             existing.booking = verified_booking
             update_fields.append('booking')
         existing.save(update_fields=update_fields)
-        request.session.pop('review_draft', None)
-        if verified_booking:
-            messages.success(request, 'Your verified review has been updated!')
-        else:
-            messages.success(request, 'Your review has been updated.')
-    else:
-        Review.objects.create(
-            movie=movie,
-            user=request.user,
-            booking=verified_booking,
-            rating=rating,
-            comment=comment,
-            # Published immediately; moderation stays available to admins via
-            # the is_hidden / report flags instead of silent pre-approval.
-            is_approved=True,
-        )
-        request.session.pop('review_draft', None)
+
+    # Serialize concurrent submissions for the same user+movie: two racing
+    # POSTs (double-click, retried request) must converge on ONE row â€” the
+    # loser of the race falls back to an UPDATE via the IntegrityError handler
+    # instead of ever surfacing a duplicate.
+    try:
+        with transaction.atomic():
+            existing = (
+                Review.objects.select_for_update()
+                .filter(movie=movie, user=request.user)
+                .first()
+            )
+            if existing:
+                _apply_update(existing)
+                created = False
+            else:
+                Review.objects.create(
+                    movie=movie,
+                    user=request.user,
+                    booking=verified_booking,
+                    rating=rating,
+                    comment=comment,
+                    # Published immediately; moderation stays available to admins via
+                    # the is_hidden / report flags instead of silent pre-approval.
+                    is_approved=True,
+                )
+                created = True
+    except IntegrityError:
+        # Lost the create race (unique_together movie+user fired): update the
+        # row the winner created so the outcome is identical to a single POST.
+        existing = Review.objects.get(movie=movie, user=request.user)
+        _apply_update(existing)
+        created = False
+
+    request.session.pop('review_draft', None)
+    if created:
         if verified_booking:
             messages.success(request, 'Your verified review has been posted!')
         else:
             messages.success(request, 'Review posted successfully!')
+    else:
+        if verified_booking:
+            messages.success(request, 'Your verified review has been updated!')
+        else:
+            messages.success(request, 'Your review has been updated.')
     return redirect(f"{reverse('movie_detail', args=[movie.id])}#reviews")
 
 
@@ -1175,6 +1205,6 @@ def log_missing_image(request):
                 'Missing image reported: url=%s page=%s ip=%s',
                 url, page, request.META.get('REMOTE_ADDR'),
             )
-    except Exception:  # noqa: BLE001 — telemetry must never 500 the site
+    except Exception:  # noqa: BLE001 ï¿½ telemetry must never 500 the site
         logger_media.warning('Malformed missing-image report', exc_info=True)
     return JsonResponse({'ok': True})
