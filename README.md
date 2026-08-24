@@ -16,7 +16,37 @@ Online movie ticket booking platform built with Django (server-rendered). Custom
 >
 > The deployed application uses **Razorpay Demo/Test Mode** for evaluation purposes — **no real money is charged**. Due to limitations in the current Razorpay demo environment, **Card and Net Banking payment methods may not work successfully** in the deployed demo. This limitation is related to the Razorpay demo/test environment only and does **not** indicate a problem with the application's booking workflow.
 >
-> **Successful demo payment flow:**
+> ### Card Payment — Razorpay Test Mode
+>
+> For testing card payments in Razorpay Test Mode, use either of the following Razorpay test card numbers:
+>
+> - `6527 6589 0000 1005`
+> - `5180 2872 0009 1001`
+>
+> Testing details:
+>
+> - Expiry date: Use any future expiry date.
+> - CVV: Use any 3-digit CVV.
+> - OTP: If an OTP is requested, enter any 4-digit or 6-digit number.
+> - These are TEST MODE cards only and do not perform a real payment.
+> - Do NOT use real card details.
+>
+> **Card payment flow:**
+>
+> 1. Select a movie/show.
+> 2. Select seats.
+> 3. Click **Continue to Payment**.
+> 4. Razorpay Checkout opens.
+> 5. Select **Card** as the payment method.
+> 6. Enter one of the test card numbers listed above.
+> 7. Enter any future expiry date and any 3-digit CVV.
+> 8. If an OTP is requested, enter any 4-digit or 6-digit number.
+> 9. Complete the payment.
+> 10. The booking is confirmed after successful payment verification.
+>
+> ### Wallet Payment — Razorpay Test Mode
+>
+> **Wallet payment flow:**
 >
 > 1. Select a movie/show.
 > 2. Select seats.
