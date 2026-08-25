@@ -50,7 +50,8 @@ TESTING = 'test' in sys.argv
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
 if not SECRET_KEY:
     if DEBUG:
-        SECRET_KEY = 'django-insecure-dev-only-7k9p2m4x8q1w6z3y5v0n7b2c4f6h8j0l'
+        import secrets as _secrets
+        SECRET_KEY = _secrets.token_urlsafe(50)
     else:
         from django.core.exceptions import ImproperlyConfigured
         raise ImproperlyConfigured(
@@ -93,6 +94,7 @@ MIDDLEWARE = [
     'users.middleware.LoggedOutGuardMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'users.middleware.SlowRequestMiddleware',
 ]
 
 AUTH_USER_MODEL='auth.User'
@@ -168,16 +170,11 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # backend/media/ exactly as before. Static files always stay local and are
 # served by WhiteNoise in both modes — static and media remain separate.
 if os.environ.get('CLOUDINARY_URL'):
-    STORAGES = {
-        'default': {
-            'BACKEND': 'bookmyseat.cloudinary_storage.CloudinaryMediaStorage',
-        },
-        # Unchanged default so collectstatic/WhiteNoise behaviour is identical
-        # whether or not cloud media storage is enabled.
-        'staticfiles': {
-            'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
-        },
-    }
+    # In production the WhiteNoise block above already set STORAGES['staticfiles']
+    # to CompressedManifestStaticFilesStorage.  Merge the media default so both
+    # coexist.
+    STORAGES.setdefault('default', {})
+    STORAGES['default']['BACKEND'] = 'bookmyseat.cloudinary_storage.CloudinaryMediaStorage'
 
 
 ROOT_URLCONF = 'bookmyseat.urls'
@@ -216,6 +213,9 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+    SECURE_SSL_REDIRECT = True
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_BROWSER_XSS_FILTER = True
 
 # Cache. Uses Redis (via REDIS_URL) when available so rate limiting, OTP and
 # analytics payload caching stay consistent across workers; otherwise falls
@@ -316,9 +316,18 @@ LOGGING = {
         },
     },
     'loggers': {
+        # Django request/error logging — gives visibility into 5xx and slow
+        # requests in Render's log stream without per-view instrumentation.
+        'django': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': True,
+        },
         'movies.gateway': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False},
         'movies.payments': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False},
         'movies.notifications': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        # Catch-all for slow-query / performance warnings emitted by custom code.
+        'bookmyseat': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
     },
 }
 
@@ -376,9 +385,23 @@ STATICFILES_DIRS = [str(FRONTEND_DIR / 'static')]
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # WhiteNoise serves the app's static files in production (no separate web
-# server / no deploy-time build step required on Vercel). USE_FINDERS serves
-# straight from STATICFILES_DIRS, so `collectstatic` is not mandatory.
-WHITENOISE_USE_FINDERS = True
+# server needed). In production the compressed/manifest storage gives us
+# automatic cache-busting hashes and Brotli/Gzip compression.  In DEBUG
+# mode we fall back to the default (uncollected) finders-based backend so
+# `collectstatic` is not mandatory during development.
+if DEBUG:
+    WHITENOISE_USE_FINDERS = True
+else:
+    STORAGES = {
+        'staticfiles': {
+            'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+        },
+    }
+    # Preserve the default media storage if Cloudinary is configured.
+    if os.environ.get('CLOUDINARY_URL'):
+        STORAGES['default'] = {
+            'BACKEND': 'bookmyseat.cloudinary_storage.CloudinaryMediaStorage',
+        }
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field

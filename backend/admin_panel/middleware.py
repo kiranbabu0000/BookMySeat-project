@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from .models import AdminProfile
 from .decorators import clear_admin_session
 
@@ -11,6 +12,8 @@ ADMIN_URL_PREFIXES = (
     '/reviews/', '/logs/', '/settings/', '/search-suggestions/', '/admin-search/',
     '/analytics/', '/account/', '/scanner/', '/scans/',
 )
+
+_CACHE_TTL = 30  # seconds — short enough to never serve stale after permission change
 
 
 def is_admin_request(path):
@@ -25,6 +28,9 @@ class AdminIdentityMiddleware:
     login and vice versa. This middleware maps the admin identity onto
     request.user only for admin portal URLs; customer pages keep their own
     customer identity (or remain anonymous).
+
+    The User + AdminProfile lookup is cached per session for a short TTL so
+    repeated admin-page loads do not hit the database on every request.
     """
 
     def __init__(self, get_response):
@@ -33,17 +39,25 @@ class AdminIdentityMiddleware:
     def __call__(self, request):
         admin_user_id = request.session.get('admin_user_id')
         if admin_user_id is not None and is_admin_request(request.path):
-            admin = None
-            try:
-                admin = User.objects.get(pk=admin_user_id, is_active=True)
-            except (User.DoesNotExist, ValueError, TypeError):
-                admin = None
-            if admin is not None and (
-                admin.is_superuser
-                or AdminProfile.objects.filter(user=admin, is_active=True).exists()
-            ):
+            cache_key = 'bms:admin_id:{}'.format(admin_user_id)
+            admin = cache.get(cache_key)
+            if admin is None:
+                try:
+                    admin = User.objects.get(pk=admin_user_id, is_active=True)
+                except (User.DoesNotExist, ValueError, TypeError):
+                    admin = None
+                if admin is not None and not (
+                    admin.is_superuser
+                    or AdminProfile.objects.filter(user=admin, is_active=True).exists()
+                ):
+                    admin = None
+                # Cache None too so we don't re-query a deleted/blocked admin
+                # on every subsequent request within the TTL window.
+                cache.set(cache_key, admin, _CACHE_TTL)
+            if admin is not None:
                 request.user = admin
             else:
+                cache.delete(cache_key)
                 clear_admin_session(request)
         response = self.get_response(request)
         return response

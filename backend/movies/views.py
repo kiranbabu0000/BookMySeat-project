@@ -163,9 +163,10 @@ def movie_detail(request, movie_id):
     avg_rating = review_base.aggregate(Avg('rating'))['rating__avg']
     total_reviews = review_base.count()
     rating_dist = {i: 0 for i in range(1, 6)}
-    for rating, count in review_base.values('rating').annotate(count=Count('rating')):
-        if rating in rating_dist:
-            rating_dist[rating] = count
+    for row in review_base.values('rating').annotate(cnt=Count('id')):
+        r = row['rating']
+        if r in rating_dist:
+            rating_dist[r] = row['cnt']
     from . import discovery
     similar_movies = discovery.similar_movies(movie, 6)
     trending_movies = discovery.trending_movies(6, movie.category)
@@ -663,7 +664,6 @@ def payment_verify_api(request, token):
             gateway_payment_id=param('razorpay_payment_id', ''),
             gateway_signature=param('razorpay_signature', ''),
             method=param('payment_method', 'upi'),
-            demo=str(param('demo', 'false')).lower() == 'true',
         )
         return JsonResponse({
             'ok': True,
@@ -1191,11 +1191,21 @@ def log_missing_image(request):
     Keeps production debugging possible without hiding storage problems:
     the browser reports the broken URL, we log it server-side at WARNING.
     Accepts JSON {url: "..."} or a form field. Never raises to the client.
+    Rate-limited to 10 requests per minute per IP.
     """
-    import json as _json
+    from django.core.cache import cache
+    ip = (request.META.get('HTTP_X_FORWARDED_FOR', '')
+          .split(',')[0].strip()
+          or request.META.get('REMOTE_ADDR', ''))
+    if ip:
+        rl_key = 'bms_missing_img_{}'.format(ip)
+        hits = cache.get(rl_key, 0) + 1
+        if hits > 10:
+            return JsonResponse({'ok': True})
+        cache.set(rl_key, hits, 60)
     try:
         if request.content_type and 'json' in request.content_type:
-            payload = _json.loads(request.body.decode('utf-8') or '{}')
+            payload = json.loads(request.body.decode('utf-8') or '{}')
         else:
             payload = {'url': request.POST.get('url', '')}
         url = str(payload.get('url', ''))[:500]
@@ -1205,6 +1215,6 @@ def log_missing_image(request):
                 'Missing image reported: url=%s page=%s ip=%s',
                 url, page, request.META.get('REMOTE_ADDR'),
             )
-    except Exception:  # noqa: BLE001 � telemetry must never 500 the site
+    except Exception:  # noqa: BLE001 - telemetry must never 500 the site
         logger_media.warning('Malformed missing-image report', exc_info=True)
     return JsonResponse({'ok': True})

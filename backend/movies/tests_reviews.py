@@ -13,6 +13,7 @@ Covers the required behaviour matrix:
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.db.models import Count
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -467,3 +468,209 @@ class TrailerPageRenderingTests(TestCase):
         content = response.content.decode()
         self.assertIn(f'data-yt-player="{VIDEO_ID}"', content)
         self.assertIn('trailer-fallback', content)
+
+
+class RatingDistributionTests(TestCase):
+    """Rating aggregation, distribution and star-display correctness (specs 8-9, 12, 22-25)."""
+
+    def setUp(self):
+        self.users = [
+            User.objects.create_user(f'reviewer{i}', f'r{i}@test.com', 'pass12345')
+            for i in range(6)
+        ]
+        self.movie = _movie(name='Rating Test Movie')
+        self.client.force_login(self.users[0])
+        self.url = reverse('submit_review', args=[self.movie.id])
+        self.detail = reverse('movie_detail', args=[self.movie.id])
+
+    def _submit(self, user, rating, comment='Test review'):
+        self.client.force_login(user)
+        return self.client.post(self.url, {'rating': str(rating), 'comment': comment})
+
+    def _get_context(self):
+        page = self.client.get(self.detail)
+        return page, page.context[-1]
+
+    # --- Single review tests ---
+
+    def test_single_review_rating5(self):
+        """Spec 24: One review with rating=5 must show 5.0 avg, 5-star bar=1."""
+        self._submit(self.users[0], 5)
+        page, ctx = self._get_context()
+        self.assertEqual(ctx['avg_rating'], 5.0)
+        self.assertEqual(ctx['total_reviews'], 1)
+        self.assertEqual(ctx['rating_dist'], {5: 1, 4: 0, 3: 0, 2: 0, 1: 0})
+        content = page.content.decode()
+        self.assertIn('5.0', content)
+        self.assertIn('1 review', content)
+
+    def test_single_review_rating1(self):
+        """One review with rating=1 must show 1.0 avg, 1-star bar=1."""
+        self._submit(self.users[0], 1)
+        _, ctx = self._get_context()
+        self.assertEqual(ctx['avg_rating'], 1.0)
+        self.assertEqual(ctx['total_reviews'], 1)
+        self.assertEqual(ctx['rating_dist'], {5: 0, 4: 0, 3: 0, 2: 0, 1: 1})
+
+    def test_single_review_rating3(self):
+        """One review with rating=3 must show 3.0 avg."""
+        self._submit(self.users[0], 3)
+        _, ctx = self._get_context()
+        self.assertEqual(ctx['avg_rating'], 3.0)
+        self.assertEqual(ctx['rating_dist'], {5: 0, 4: 0, 3: 1, 2: 0, 1: 0})
+
+    # --- Multiple review tests ---
+
+    def test_multiple_reviews_distribution(self):
+        """Spec 22: 6 reviews (5,5,4,3,2,1) → avg=3.33, correct distribution."""
+        ratings = [5, 5, 4, 3, 2, 1]
+        for i, r in enumerate(ratings):
+            self._submit(self.users[i], r, f'Review {i}')
+        _, ctx = self._get_context()
+        self.assertEqual(ctx['total_reviews'], 6)
+        self.assertAlmostEqual(ctx['avg_rating'], 3.3, places=1)
+        self.assertEqual(ctx['rating_dist'], {5: 2, 4: 1, 3: 1, 2: 1, 1: 1})
+
+    def test_distribution_counts_match_database(self):
+        """Spec 25: UI distribution counts must match DB counts."""
+        extra = [
+            User.objects.create_user(f'extra{i}', f'e{i}@test.com', 'pass12345')
+            for i in range(9)
+        ]
+        ratings = [5, 5, 4, 4, 4, 3, 2, 1, 1]
+        for i, r in enumerate(ratings):
+            self._submit(extra[i], r, f'Review {i}')
+        _, ctx = self._get_context()
+        db_rows = (
+            Review.objects.filter(movie=self.movie, is_approved=True, is_hidden=False)
+            .values('rating')
+            .annotate(cnt=Count('id'))
+        )
+        db_dist = {row['rating']: row['cnt'] for row in db_rows}
+        for star in range(1, 6):
+            self.assertEqual(ctx['rating_dist'][star], db_dist.get(star, 0),
+                             f'{star}-star count mismatch')
+
+    # --- Empty state test ---
+
+    def test_no_reviews(self):
+        """Spec 23: No reviews → rating summary not rendered, 0.0 avg."""
+        _, ctx = self._get_context()
+        self.assertIsNone(ctx['avg_rating'])
+        self.assertEqual(ctx['total_reviews'], 0)
+        self.assertEqual(ctx['rating_dist'], {5: 0, 4: 0, 3: 0, 2: 0, 1: 0})
+
+    # --- Star rendering in template ---
+
+    def test_review_card_star_display(self):
+        """Spec 13: Rating=5 review must show 5 filled stars in review card."""
+        self._submit(self.users[0], 5)
+        page = self.client.get(self.detail)
+        content = page.content.decode()
+        import re
+        card_stars = re.findall(r'review-card__rating">(.+?)</div>', content, re.DOTALL)
+        self.assertTrue(len(card_stars) >= 1, 'No review card rating found')
+        filled = len(re.findall(r'bi-star-fill', card_stars[-1]))
+        empty = len(re.findall(r'bi-star text-muted', card_stars[-1]))
+        self.assertEqual(filled, 5)
+        self.assertEqual(empty, 0)
+
+    def test_review_card_star_display_3(self):
+        """Rating=3 review must show 3 filled, 2 empty stars."""
+        self._submit(self.users[0], 3)
+        page = self.client.get(self.detail)
+        content = page.content.decode()
+        import re
+        card_stars = re.findall(r'review-card__rating">(.+?)</div>', content, re.DOTALL)
+        self.assertTrue(len(card_stars) >= 1)
+        filled = len(re.findall(r'bi-star-fill', card_stars[-1]))
+        empty = len(re.findall(r'bi-star text-muted', card_stars[-1]))
+        self.assertEqual(filled, 3)
+        self.assertEqual(empty, 2)
+
+    def test_summary_star_display(self):
+        """Rating summary must show correct number of filled stars for avg."""
+        ratings = [5, 5, 4, 4]
+        for i, r in enumerate(ratings):
+            self._submit(self.users[i], r, f'Review {i}')
+        page = self.client.get(self.detail)
+        content = page.content.decode()
+        import re
+        summary = re.search(r'rating-summary__stars mb-1">(.*?)</div>', content, re.DOTALL)
+        self.assertIsNotNone(summary, 'Rating summary stars not found')
+        filled = len(re.findall(r'bi-star-fill', summary.group(1)))
+        empty = len(re.findall(r'bi-star text-muted', summary.group(1)))
+        self.assertEqual(filled + empty, 5)
+        # avg = (5+5+4+4)/4 = 4.5 → 4 filled, 1 empty
+        self.assertEqual(filled, 4)
+        self.assertEqual(empty, 1)
+
+    # --- Duplicate protection ---
+
+    def test_duplicate_review_no_double_count(self):
+        """Spec: resubmit updates the same row, not creating a duplicate."""
+        self._submit(self.users[0], 4, 'First')
+        self._submit(self.users[0], 2, 'Updated')
+        _, ctx = self._get_context()
+        self.assertEqual(ctx['total_reviews'], 1)
+        self.assertEqual(ctx['avg_rating'], 2.0)
+        self.assertEqual(ctx['rating_dist'], {5: 0, 4: 0, 3: 0, 2: 1, 1: 0})
+
+    def test_review_edit_updates_distribution(self):
+        """Spec 19: Changing 1→5 updates dist and avg correctly."""
+        self._submit(self.users[0], 1, 'Bad initially')
+        _, ctx1 = self._get_context()
+        self.assertEqual(ctx1['rating_dist'], {5: 0, 4: 0, 3: 0, 2: 0, 1: 1})
+        self.assertEqual(ctx1['avg_rating'], 1.0)
+
+        self._submit(self.users[0], 5, 'Actually great!')
+        _, ctx2 = self._get_context()
+        self.assertEqual(ctx2['rating_dist'], {5: 1, 4: 0, 3: 0, 2: 0, 1: 0})
+        self.assertEqual(ctx2['avg_rating'], 5.0)
+
+    # --- All 5 star ratings ---
+
+    def test_all_five_ratings_individually(self):
+        """Spec 7/31: Each rating 1-5 must store correctly and reflect in avg."""
+        for rating in range(1, 6):
+            movie = _movie(name=f'Rating {rating} Movie')
+            user = User.objects.create_user(f'rate{rating}', f'r{rating}@t.com', 'p')
+            self.client.force_login(user)
+            self.client.post(
+                reverse('submit_review', args=[movie.id]),
+                {'rating': str(rating), 'comment': f'{rating} stars'}
+            )
+            review = Review.objects.get(movie=movie, user=user)
+            self.assertEqual(review.rating, rating)
+            detail = reverse('movie_detail', args=[movie.id])
+            page = self.client.get(detail)
+            ctx = page.context[-1]
+            self.assertEqual(ctx['avg_rating'], float(rating))
+            self.assertEqual(ctx['rating_dist'][rating], 1)
+            for other in range(1, 6):
+                if other != rating:
+                    self.assertEqual(ctx['rating_dist'][other], 0,
+                                     f'{other}-star should be 0 when rating is {rating}')
+
+    # --- Distribution bar width ---
+
+    def test_distribution_bar_widths(self):
+        """Rating bars should have correct percentage widths."""
+        ratings = [5, 5, 5, 3, 1]
+        for i, r in enumerate(ratings):
+            self._submit(self.users[i], r, f'Review {i}')
+        page = self.client.get(self.detail)
+        content = page.content.decode()
+        import re
+        widths = re.findall(r'rating-bar__fill" style="width:(\d+)%"', content)
+        # 5★: 3/5=60%, 4★: 0%, 3★: 1/5=20%, 2★: 0%, 1★: 1/5=20%
+        self.assertEqual(widths, ['60', '0', '20', '0', '20'])
+
+    # --- Unauthorized review ---
+
+    def test_unauthenticated_cannot_submit(self):
+        """Users without login cannot submit reviews."""
+        self.client.logout()
+        response = self.client.post(self.url, {'rating': '5', 'comment': 'Test'})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Review.objects.filter(movie=self.movie).exists())

@@ -25,6 +25,14 @@ app = application
 
 # Deliver queued emails (confirmation/OTP) from the web process itself so no
 # separate (paid) cron worker is required on Render's free tier.
-from movies.outbox_worker import start_outbox_worker  # noqa: E402
+# Deferred to a daemon thread so the WSGI module finishes importing quickly
+# and Gunicorn can begin accepting requests while the first poll waits.
+import threading  # noqa: E402
 
-start_outbox_worker()
+
+def _deferred_outbox_start():
+    from movies.outbox_worker import start_outbox_worker  # noqa: E402
+    start_outbox_worker()
+
+
+threading.Thread(target=_deferred_outbox_start, daemon=True).start()

@@ -323,16 +323,17 @@
             {% csrf_token %}
             <div class="star-rating mb-3">
               <p class="mb-2 text-muted small">Your Rating</p>
-              <div class="star-rating__stars" id="starRating">
-                {% with draft_rating=review_draft.rating|default:'' %}
+              {# Single source of truth for the submitted rating (1-5). #}
+              <input type="hidden" name="rating" id="rating"
+                     value="{% if review_draft.rating %}{{ review_draft.rating }}{% elif user_review %}{{ user_review.rating }}{% endif %}">
+              <div class="star-rating__stars" id="starRating" role="group" aria-label="Your rating">
                 {% for i in "12345" %}
-                <input type="radio" name="rating" value="{{ i }}" id="star{{ i }}"
-                       {% if draft_rating == i|stringformat:"s" %}checked{% elif user_review and user_review.rating == forloop.counter and not draft_rating %}checked{% endif %}>
-                <label for="star{{ i }}" title="{{ i }} star{% if i > 1 %}s{% endif %}">
-                  <i class="bi bi-star-fill"></i>
-                </label>
+                <button type="button" class="star-rating__star" data-rating="{{ i }}"
+                        title="{{ i }} star{% if i > 1 %}s{% endif %}"
+                        aria-label="{{ i }} star{% if i > 1 %}s{% endif %}">
+                  <i class="bi bi-star-fill" aria-hidden="true"></i>
+                </button>
                 {% endfor %}
-                {% endwith %}
               </div>
             </div>
             <div class="mb-3">
@@ -1031,21 +1032,26 @@
 }
 .star-rating__stars {
   display: flex;
-  flex-direction: row-reverse;
+  flex-direction: row;
   gap: 0.25rem;
 }
-.star-rating__stars input { display: none; }
-.star-rating__stars label {
+.star-rating__star {
+  background: none;
+  border: none;
+  padding: 0;
+  line-height: 1;
   font-size: 1.5rem;
   color: var(--text-muted);
   cursor: pointer;
-  transition: color var(--transition-fast);
+  transition: color var(--transition-fast), transform var(--transition-fast);
 }
-.star-rating__stars input:checked ~ label,
-.star-rating__stars label:hover,
-.star-rating__stars label:hover ~ label {
-  color: #ffc107;
+.star-rating__star:hover { transform: scale(1.15); }
+.star-rating__star:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
+.star-rating__star.is-filled { color: #ffc107; }
 .verified-reviews {
   display: flex;
   flex-direction: column;
@@ -1172,15 +1178,61 @@
       });
     });
 
-    // Submit-in-progress state: prevent double posts, show feedback
+    // Star rating: #rating is the single source of truth; every star carries
+    // an unambiguous numeric data-rating. Clicking the Nth star submits N.
+    (function () {
+      var wrap = document.getElementById('starRating');
+      var input = document.getElementById('rating');
+      if (!wrap || !input) return;
+      var stars = Array.prototype.slice.call(wrap.querySelectorAll('[data-rating]'));
+
+      function paint(selected) {
+        var value = parseInt(selected, 10);
+        if (!(value >= 1 && value <= 5)) value = 0;
+        stars.forEach(function (star) {
+          var filled = parseInt(star.getAttribute('data-rating'), 10) <= value;
+          star.classList.toggle('is-filled', filled);
+        });
+      }
+
+      stars.forEach(function (star) {
+        star.addEventListener('click', function () {
+          input.value = star.getAttribute('data-rating');
+          paint(input.value);
+        });
+        star.addEventListener('mouseenter', function () {
+          paint(star.getAttribute('data-rating'));
+        });
+      });
+      wrap.addEventListener('mouseleave', function () { paint(input.value); });
+
+      paint(input.value);   // reflect draft / previously saved rating on load
+    })();
+
+    // ONE submission path: the native form POST, guarded so a click (or
+    // double-click / retried event) can only ever send exactly one request.
     var reviewForm = document.querySelector('[data-review-form]');
     if (reviewForm) {
-      reviewForm.addEventListener('submit', function() {
+      var reviewSubmitting = false;
+      reviewForm.addEventListener('submit', function (event) {
+        if (reviewSubmitting) { event.preventDefault(); return; }
+        reviewSubmitting = true;
         var btn = reviewForm.querySelector('button[type="submit"]');
-        if (!btn || btn.disabled) return;
+        if (!btn) return;
         btn.disabled = true;
         btn.dataset.label = btn.innerHTML;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Posting…';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Updating…';
+      });
+      // Browser back/forward cache restore: re-arm the form so a legitimate
+      // later edit is possible without a stale disabled button.
+      window.addEventListener('pageshow', function (event) {
+        if (!event.persisted) return;
+        reviewSubmitting = false;
+        var btn = reviewForm.querySelector('button[type="submit"]');
+        if (btn && btn.dataset.label) {
+          btn.innerHTML = btn.dataset.label;
+          btn.disabled = false;
+        }
       });
     }
 

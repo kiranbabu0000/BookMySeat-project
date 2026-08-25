@@ -253,7 +253,7 @@ def _send_failure_email_once(tx):
 
 
 def verify_and_confirm(user, token, *, gateway_order_id, gateway_payment_id,
-                       gateway_signature, method='upi', demo=False):
+                       gateway_signature, method='upi'):
     """Verify a checkout callback and confirm the booking. Idempotent.
 
     Returns (reservation, bookings). Raises PaymentError for unverified or
@@ -261,13 +261,14 @@ def verify_and_confirm(user, token, *, gateway_order_id, gateway_payment_id,
     """
     reservation, _ = _owned_active_reservation(user, token)
     tx = _transaction_for_order(user, gateway_order_id)
+    demo = gateway.demo_mode()
     logger.info(
         'verify_and_confirm callback: reservation=%s order=%s payment=%s signature=%s... demo=%s tx=%s tx.status=%s',
         token, gateway_order_id, gateway_payment_id, (gateway_signature or '')[:16],
         demo, tx.pk, tx.status,
     )
 
-    if not demo and not gateway.demo_mode():
+    if not demo:
         if tx.reservation_id != reservation.id:
             raise PaymentError('Order does not belong to this reservation.')
 

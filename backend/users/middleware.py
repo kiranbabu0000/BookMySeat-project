@@ -1,7 +1,12 @@
+import logging
+import time
+
 from datetime import datetime, timedelta
 
 from django.shortcuts import redirect
 from django.utils import timezone
+
+logger = logging.getLogger('bookmyseat')
 
 
 CACHEABLE_STATIC_PREFIXES = ('/static/', '/media/')
@@ -76,4 +81,32 @@ class LoggedOutGuardMiddleware:
         if location.startswith('/login/?'):
             del request.session[JUST_LOGGED_OUT_FLAG]
             return redirect('home')
+        return response
+
+
+_SLOW_THRESHOLD = 2.0  # seconds
+
+
+class SlowRequestMiddleware:
+    """Log requests that exceed the slow-request threshold.
+
+    Runs last in the middleware chain so it measures the full round-trip
+    (DB + template + static).  Logs at WARNING so Render picks it up
+    without needing DEBUG-level verbosity.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        start = time.monotonic()
+        response = self.get_response(request)
+        elapsed = time.monotonic() - start
+        if elapsed > _SLOW_THRESHOLD:
+            logger.warning(
+                'SLOW REQUEST %.2fs %s %s',
+                elapsed,
+                request.method,
+                request.path,
+            )
         return response

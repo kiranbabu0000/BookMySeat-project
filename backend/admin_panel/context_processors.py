@@ -1,4 +1,7 @@
+from django.core.cache import cache
 from .models import Notification
+
+_CACHE_TTL = 30
 
 
 def admin_notifications(request):
@@ -12,4 +15,9 @@ def admin_notifications(request):
         and request.session.get('admin_user_id')
     ):
         return {}
-    return {'notifications': Notification.objects.filter(is_read=False).count()}
+    cache_key = 'bms:admin_notif_count'
+    count = cache.get(cache_key)
+    if count is None:
+        count = Notification.objects.filter(is_read=False).count()
+        cache.set(cache_key, count, _CACHE_TTL)
+    return {'notifications': count}

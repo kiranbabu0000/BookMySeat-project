@@ -42,7 +42,7 @@ def _confirmed_reservation(user, show, seats):
         gateway_order_id=tx.gateway_order_id,
         gateway_payment_id='pay_DEMO_pending',
         gateway_signature=checkout['demo_signature'],
-        method='upi', demo=True,
+        method='upi',
     )
     reservation.refresh_from_db()
     return reservation

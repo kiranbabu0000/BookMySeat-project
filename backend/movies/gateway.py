@@ -57,8 +57,9 @@ def create_order(amount, receipt, notes=None, currency='INR'):
         return None
     amount_paise = paise_from_decimal(amount)
     logger.info(
-        'Razorpay create_order request: key=%s amount=%s paise currency=%s receipt=%s notes=%s',
-        settings.RAZORPAY_KEY_ID, amount_paise, currency, receipt, notes,
+        'Razorpay create_order request: key=%s*** amount=%s paise currency=%s receipt=%s notes=%s',
+        settings.RAZORPAY_KEY_ID[:8] if settings.RAZORPAY_KEY_ID else '',
+        amount_paise, currency, receipt, notes,
     )
     try:
         order = client.order.create(data={
@@ -170,7 +171,7 @@ def demo_signature(order_id, payment_id):
     demo path is only reachable when the gateway is not configured.
     """
     secret = settings.RAZORPAY_KEY_SECRET or 'bookmyseat-demo-secret'
-    return hmac.new(
+    return hmac.HMAC(
         secret.encode('utf-8'),
         '{}|{}'.format(order_id, payment_id).encode('utf-8'),
         hashlib.sha256,
@@ -187,7 +188,7 @@ def verify_webhook_signature(body, signature):
         return False
     if isinstance(body, str):
         body = body.encode('utf-8')
-    expected = hmac.new(
+    expected = hmac.HMAC(
         secret.encode('utf-8'), body, hashlib.sha256
     ).hexdigest()
     ok = hmac.compare_digest(expected, signature or '')

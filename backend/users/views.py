@@ -29,30 +29,24 @@ from .otp import (
 )
 
 def home(request):
-    movies = Movie.objects.filter(
+    # One base queryset for all homepage category tabs, avoiding separate
+    # DB hits for movies / laughing_therapy / live_concert.
+    _home_base = Movie.objects.filter(
         status='now_showing',
         show_on_homepage=True,
         is_deleted=False,
-        category='movie',
-    ).annotate(min_price=_min_price_subquery())
-    laughing_therapy = Movie.objects.filter(
-        status='now_showing',
-        show_on_homepage=True,
-        is_deleted=False,
-        category='laughing_therapy',
-    ).annotate(min_price=_min_price_subquery())
-    live_concerts = Movie.objects.filter(
-        status='now_showing',
-        show_on_homepage=True,
-        is_deleted=False,
-        category='live_concert',
-    ).annotate(min_price=_min_price_subquery())
+    ).prefetch_related('languages', 'genres').annotate(min_price=_min_price_subquery())
+    all_home = list(_home_base)
+    movies = [m for m in all_home if m.category == 'movie']
+    laughing_therapy = [m for m in all_home if m.category == 'laughing_therapy']
+    live_concerts = [m for m in all_home if m.category == 'live_concert']
     recent_ids = request.session.get('recently_viewed', [])
     recent_movies = []
     if recent_ids:
         recent_movies = list(
             Movie.objects.filter(id__in=recent_ids, is_deleted=False)
             .exclude(status__in=['archived', 'hidden'])
+            .prefetch_related('languages', 'genres')
             .annotate(min_price=_min_price_subquery())
         )
         ordered = {mid: i for i, mid in enumerate(recent_ids)}
@@ -60,6 +54,7 @@ def home(request):
     top_rated = list(
         Movie.objects.filter(is_deleted=False, category='movie')
         .exclude(status__in=['archived', 'hidden'])
+        .prefetch_related('languages', 'genres')
         .annotate(min_price=_min_price_subquery())
         .order_by('-rating', '-release_date')[:8]
     )
@@ -75,12 +70,13 @@ def home(request):
                 shows__status='active',
             )
             .distinct()
+            .prefetch_related('languages', 'genres')
             .annotate(min_price=_min_price_subquery())[:10]
         )
     carousel_slides = []
-    for movie in list(movies)[:3]:
+    for movie in movies[:3]:
         carousel_slides.append({'type': 'movie', 'movie': movie})
-    event = (live_concerts.first() or laughing_therapy.first())
+    event = (live_concerts[0] if live_concerts else None) or (laughing_therapy[0] if laughing_therapy else None)
     if event:
         carousel_slides.append({'type': 'event', 'movie': event})
     offer = Coupon.objects.filter(
@@ -95,7 +91,7 @@ def home(request):
     )
     visible_movie_ids = Movie.objects.filter(is_deleted=False).exclude(
         status__in=['archived', 'hidden']
-    )
+    ).values_list('pk', flat=True)
     genres = list(
         Genre.objects.filter(movies__in=visible_movie_ids)
         .distinct().order_by('name')
@@ -430,6 +426,8 @@ def my_notifications(request):
     unread_ids = list(notifications.filter(is_read=False).values_list('id', flat=True))
     if unread_ids and request.method == 'POST':
         Notification.objects.filter(id__in=unread_ids, user=request.user).update(is_read=True)
+        from django.core.cache import cache
+        cache.delete('bms:unread_notif:{}'.format(request.user.pk))
         return redirect('my_notifications')
     return render(request, 'users/notifications.html', {'notifications': notifications})
 
@@ -439,6 +437,8 @@ def mark_notification_read(request, pk):
     if request.method == 'POST':
         notification.is_read = True
         notification.save()
+        from django.core.cache import cache
+        cache.delete('bms:unread_notif:{}'.format(request.user.pk))
         return redirect('my_notifications')
     return redirect('my_notifications')
 

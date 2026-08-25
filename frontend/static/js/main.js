@@ -101,9 +101,48 @@
       return;
     }
 
-    document.body.classList.add('bms-intro-active');
-    var failsafe = setTimeout(function () { dismissIntro(); }, 5000);
+    /* AUTO-PLAYING cinematic intro — no gate, it simply shows.
+       One unavoidable browser rule: audio created before the user's
+       first interaction starts muted-suspended. So we create the
+       AudioContext immediately, keep politely re-asking it to run,
+       and listen silently for the first click/tap/key. The moment
+       audio becomes runnable (or a browser that allows autoplay),
+       the remaining beats are heard perfectly in sync. The visuals
+       NEVER wait on anything. */
     var audioCtx = null;
+    var audioGestureSeen = false;
+    var failsafe = null;
+    var audioRetry = null;
+
+    function ensureAudioCtx() {
+      if (!audioCtx) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) audioCtx = new AC();
+      }
+      return audioCtx;
+    }
+    function tryResumeAudio() {
+      ensureAudioCtx();
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume()['catch'](function () {});
+      }
+    }
+    function onFirstGesture() {
+      /* Real user activation: also lets beat-time sounds ride an
+         in-flight resume so they stay visually in sync. */
+      audioGestureSeen = true;
+      tryResumeAudio();
+    }
+
+    ['pointerdown', 'keydown', 'touchstart'].forEach(function (type) {
+      document.addEventListener(type, onFirstGesture,
+        type === 'touchstart' ? { passive: true } : undefined);
+    });
+    tryResumeAudio();
+    audioRetry = setInterval(tryResumeAudio, 400);
+
+    document.body.classList.add('bms-intro-active');
+    failsafe = setTimeout(function () { dismissIntro(); }, 5000);
 
     createDust(dustBox);
 
@@ -168,59 +207,135 @@
     }
 
     /* ----------------------------------------------------------
-       playClapSound — Web Audio synthesis of a realistic clap.
-       Two layers: high-freq noise crack + low resonant thump.
+       playClapSound — RESTORED ORIGINAL first-version clap.
+       Two layers, exactly as originally shipped:
+         1) High-frequency crack (noise burst through bandpass)
+         2) Low resonant thump (body of the clap)
+       Same filters, frequencies, gains and envelopes as the first
+       version — direct to output, no added processing. Only the
+       sync wrapper differs (fires on the snap beat / rides an
+       unlock landed milliseconds earlier; never plays late).
        ---------------------------------------------------------- */
     function playClapSound() {
       try {
-        if (!audioCtx) {
-          var AC = window.AudioContext || window.webkitAudioContext;
-          if (AC) audioCtx = new AC();
+        if (!ensureAudioCtx()) return;
+
+        function boom() {
+          if (!audioCtx || overlay.dataset.dismissed) return;
+          var now = audioCtx.currentTime;
+
+          /* High-frequency crack (noise burst through bandpass) */
+          var bufLen = audioCtx.sampleRate * 0.06;
+          var buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+          var data = buf.getChannelData(0);
+          for (var i = 0; i < bufLen; i++) {
+            data[i] = Math.random() * 2 - 1;
+          }
+          var noise = audioCtx.createBufferSource();
+          noise.buffer = buf;
+
+          var bandpass = audioCtx.createBiquadFilter();
+          bandpass.type = 'bandpass';
+          bandpass.frequency.value = 2200;
+          bandpass.Q.value = 1.2;
+
+          var noiseGain = audioCtx.createGain();
+          noiseGain.gain.setValueAtTime(0.35, now);
+          noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+          noise.connect(bandpass);
+          bandpass.connect(noiseGain);
+          noiseGain.connect(audioCtx.destination);
+          noise.start(now);
+          noise.stop(now + 0.06);
+
+          /* Low resonant thump (body of the clap) */
+          var osc = audioCtx.createOscillator();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(250, now);
+          osc.frequency.exponentialRampToValueAtTime(80, now + 0.07);
+
+          var oscGain = audioCtx.createGain();
+          oscGain.gain.setValueAtTime(0.22, now);
+          oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+          osc.connect(oscGain);
+          oscGain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.08);
         }
-        if (!audioCtx) return;
-        if (audioCtx.state === 'suspended') audioCtx.resume();
 
-        var now = audioCtx.currentTime;
-
-        /* High-frequency crack (noise burst through bandpass) */
-        var bufLen = audioCtx.sampleRate * 0.06;
-        var buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
-        var data = buf.getChannelData(0);
-        for (var i = 0; i < bufLen; i++) {
-          data[i] = Math.random() * 2 - 1;
+        if (audioCtx.state === 'running') { boom(); return; }
+        /* Locked, but the user just tapped: resume resolves within a few
+           ms of their gesture, so firing then stays visually in sync. */
+        if (audioGestureSeen) {
+          audioCtx.resume().then(boom)['catch'](function () {});
         }
-        var noise = audioCtx.createBufferSource();
-        noise.buffer = buf;
+      } catch (e) {}
+    }
 
-        var bandpass = audioCtx.createBiquadFilter();
-        bandpass.type = 'bandpass';
-        bandpass.frequency.value = 2200;
-        bandpass.Q.value = 1.2;
+    /* ----------------------------------------------------------
+       playFlipWhoosh — soft, elegant air-swish that follows the
+       logo's flight from centre stage into the navbar: it swells
+       as the movement starts, pans gently toward the navbar side,
+       and fades out exactly as the logo settles into place. No
+       bass hit, no drama. Same strict on-beat rules as the clap.
+       ---------------------------------------------------------- */
+    function playFlipWhoosh() {
+      try {
+        if (!ensureAudioCtx()) return;
 
-        var noiseGain = audioCtx.createGain();
-        noiseGain.gain.setValueAtTime(0.35, now);
-        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+        function boom() {
+          if (!audioCtx || overlay.dataset.dismissed) return;
+          var t0 = audioCtx.currentTime;
 
-        noise.connect(bandpass);
-        bandpass.connect(noiseGain);
-        noiseGain.connect(audioCtx.destination);
-        noise.start(now);
-        noise.stop(now + 0.06);
+          /* One airy noise bed spanning the whole FLIP transition */
+          var len = Math.floor(audioCtx.sampleRate * 0.9);
+          var buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+          var data = buf.getChannelData(0);
+          for (var i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+          var src = audioCtx.createBufferSource();
+          src.buffer = buf;
 
-        /* Low resonant thump (body of the clap) */
-        var osc = audioCtx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(250, now);
-        osc.frequency.exponentialRampToValueAtTime(80, now + 0.07);
+          /* Descending band sweep = light "swish" character */
+          var bp = audioCtx.createBiquadFilter();
+          bp.type = 'bandpass';
+          bp.Q.value = 0.9;
+          bp.frequency.setValueAtTime(2600, t0);
+          bp.frequency.exponentialRampToValueAtTime(750, t0 + 0.8);
 
-        var oscGain = audioCtx.createGain();
-        oscGain.gain.setValueAtTime(0.22, now);
-        oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+          /* Smooth swell in, long gentle fade-out aligned with the
+             0.9 s transition — no abrupt cuts anywhere */
+          var g = audioCtx.createGain();
+          g.gain.setValueAtTime(0.0001, t0);
+          g.gain.linearRampToValueAtTime(0.055, t0 + 0.16);
+          g.gain.linearRampToValueAtTime(0.04, t0 + 0.45);
+          g.gain.linearRampToValueAtTime(0.0001, t0 + 0.84);
 
-        osc.connect(oscGain);
-        oscGain.connect(audioCtx.destination);
-        osc.start(now);
-        osc.stop(now + 0.08);
+          src.connect(bp);
+          bp.connect(g);
+
+          /* Spatial cue: the navbar brand sits on the left, so the
+             air drifts subtly from centre toward it (guarded for
+             older mobile browsers without StereoPanner) */
+          if (audioCtx.createStereoPanner) {
+            var pan = audioCtx.createStereoPanner();
+            pan.pan.setValueAtTime(0.12, t0);
+            pan.pan.linearRampToValueAtTime(-0.5, t0 + 0.78);
+            g.connect(pan);
+            pan.connect(audioCtx.destination);
+          } else {
+            g.connect(audioCtx.destination);
+          }
+
+          src.start(t0);
+          src.stop(t0 + 0.9);
+        }
+
+        if (audioCtx.state === 'running') { boom(); return; }
+        if (audioGestureSeen) {
+          audioCtx.resume().then(boom)['catch'](function () {});
+        }
       } catch (e) {}
     }
 
@@ -273,6 +388,7 @@
     function animateToNavbar() {
       var navbarBrand = document.querySelector('.navbar-bms .navbar-brand');
       if (!navbarBrand) { dismissIntro(); return; }
+      playFlipWhoosh();   // airy whoosh on the flight into the navbar
       var target = navbarBrand.getBoundingClientRect();
       var source = lockup.getBoundingClientRect();
       var deltaX = target.left - source.left;
@@ -299,7 +415,8 @@
     }
 
     function dismissIntro() {
-      clearTimeout(failsafe);
+      if (failsafe) clearTimeout(failsafe);
+      if (audioRetry) clearInterval(audioRetry);
       if (!overlay || overlay.dataset.dismissed) return;
       overlay.dataset.dismissed = '1';
       document.body.classList.remove('bms-intro-active');

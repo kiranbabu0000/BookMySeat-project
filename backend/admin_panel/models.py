@@ -374,7 +374,7 @@ class PaymentTransaction(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     captured_at = models.DateTimeField(null=True, blank=True)
-    refund_id = models.CharField(max_length=255, blank=True, default='')
+    refund_id = models.CharField(max_length=255, blank=True, default='', db_index=True)
     refunded_at = models.DateTimeField(null=True, blank=True)
     # Email idempotency: each transaction may send at most one confirmation and
     # one failure email, even when the callback and the webhook race.

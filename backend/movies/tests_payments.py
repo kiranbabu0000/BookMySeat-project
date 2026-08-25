@@ -123,7 +123,7 @@ class PaymentServiceTests(TestCase):
             gateway_order_id=tx.gateway_order_id,
             gateway_payment_id=payment_id,
             gateway_signature=checkout['demo_signature'],
-            method='upi', demo=True,
+            method='upi',
         )
         reservation.refresh_from_db()
         self.assertEqual(reservation.status, 'booked')
@@ -145,7 +145,7 @@ class PaymentServiceTests(TestCase):
                 gateway_order_id=tx.gateway_order_id,
                 gateway_payment_id='pay_DEMO_bad',
                 gateway_signature='deadbeef',
-                method='upi', demo=True,
+                method='upi',
             )
         self.reservation.refresh_from_db()
         self.assertEqual(self.reservation.status, 'active')
@@ -158,7 +158,7 @@ class PaymentServiceTests(TestCase):
                 self.user, self.reservation.token,
                 gateway_order_id='order_DEMO0000000000000000',
                 gateway_payment_id='pay_DEMO_x',
-                gateway_signature='x', method='upi', demo=True,
+                gateway_signature='x', method='upi',
             )
 
     def test_verify_rejects_another_users_order(self):
@@ -168,7 +168,7 @@ class PaymentServiceTests(TestCase):
                 self.other, self.reservation.token,
                 gateway_order_id=tx.gateway_order_id,
                 gateway_payment_id='pay_DEMO_pending',
-                gateway_signature='x', method='upi', demo=True,
+                gateway_signature='x', method='upi',
             )
 
     def test_verify_rejects_amount_change_after_start(self):
@@ -183,7 +183,7 @@ class PaymentServiceTests(TestCase):
                 gateway_order_id=tx.gateway_order_id,
                 gateway_payment_id='pay_DEMO_pending',
                 gateway_signature=checkout['demo_signature'],
-                method='upi', demo=True,
+                method='upi',
             )
 
     def test_verify_is_idempotent(self):
@@ -192,7 +192,7 @@ class PaymentServiceTests(TestCase):
             gateway_order_id=tx.gateway_order_id,
             gateway_payment_id='pay_DEMO_pending',
             gateway_signature=checkout['demo_signature'],
-            method='upi', demo=True,
+            method='upi',
         )
         r1, bookings1 = verify_and_confirm(self.user, self.reservation.token, **kwargs)
         r2, bookings2 = verify_and_confirm(self.user, self.reservation.token, **kwargs)
@@ -227,7 +227,7 @@ class PaymentServiceTests(TestCase):
             gateway_order_id=retry.gateway_order_id,
             gateway_payment_id='pay_DEMO_pending',
             gateway_signature=checkout['demo_signature'],
-            method='upi', demo=True,
+            method='upi',
         )
         self.reservation.refresh_from_db()
         self.assertEqual(self.reservation.status, 'booked')
@@ -239,7 +239,7 @@ class PaymentServiceTests(TestCase):
             gateway_order_id=tx.gateway_order_id,
             gateway_payment_id='pay_DEMO_pending',
             gateway_signature=checkout['demo_signature'],
-            method='upi', demo=True,
+            method='upi',
         )
         tx.refresh_from_db()
         refund_transaction(tx, reason='Cancelled by user')
@@ -255,7 +255,7 @@ class PaymentServiceTests(TestCase):
             gateway_order_id=tx.gateway_order_id,
             gateway_payment_id='pay_DEMO_pending',
             gateway_signature=checkout['demo_signature'],
-            method='upi', demo=True,
+            method='upi',
         )
         cancel_booking(self.user, _bookings[0].id)
         tx.refresh_from_db()
@@ -274,7 +274,7 @@ class PaymentServiceTests(TestCase):
             gateway_order_id=tx.gateway_order_id,
             gateway_payment_id='pay_DEMO_pending',
             gateway_signature=checkout['demo_signature'],
-            method='upi', demo=True,
+            method='upi',
         )
         self.reservation.refresh_from_db()
         count = refund_reservation_transactions(self.reservation)
@@ -435,7 +435,7 @@ class PaymentWebhookTests(TestCase):
             gateway_order_id=self.tx.gateway_order_id,
             gateway_payment_id='pay_DEMO_pending',
             gateway_signature=self.checkout['demo_signature'],
-            method='upi', demo=True,
+            method='upi',
         )
         self.tx.refresh_from_db()
         body, sig = _signed_body({
@@ -538,7 +538,7 @@ class PaymentRealGatewayTests(TestCase):
             gateway_order_id=tx.gateway_order_id,
             gateway_payment_id='pay_REAL_1',
             gateway_signature='real-signature',
-            method='upi', demo=False,
+            method='upi',
         )
         reservation.refresh_from_db()
         self.assertEqual(reservation.status, 'booked')
@@ -566,7 +566,7 @@ class PaymentRealGatewayTests(TestCase):
                 gateway_order_id=tx.gateway_order_id,
                 gateway_payment_id='pay_REAL_1',
                 gateway_signature='real-signature',
-                method='upi', demo=False,
+                method='upi',
             )
 
     @patch('movies.gateway.fetch_payment')
@@ -588,7 +588,7 @@ class PaymentRealGatewayTests(TestCase):
                 gateway_order_id=tx.gateway_order_id,
                 gateway_payment_id='pay_REAL_1',
                 gateway_signature='real-signature',
-                method='upi', demo=False,
+                method='upi',
             )
 
     @patch('movies.gateway.create_order',
@@ -601,7 +601,7 @@ class PaymentRealGatewayTests(TestCase):
                 gateway_order_id=tx.gateway_order_id,
                 gateway_payment_id='pay_DEMO_pending',
                 gateway_signature='demo-forged',
-                method='upi', demo=True,
+                method='upi',
             )
 
 
@@ -813,7 +813,7 @@ class PaymentAdminTests(TestCase):
             gateway_order_id=tx.gateway_order_id,
             gateway_payment_id='pay_DEMO_pending',
             gateway_signature=checkout['demo_signature'],
-            method='upi', demo=True,
+            method='upi',
         )
         self.reservation.refresh_from_db()
 

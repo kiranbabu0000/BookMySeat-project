@@ -418,7 +418,7 @@ class ProfilePendingPaymentsTests(TestCase):
             gateway_order_id=tx.gateway_order_id,
             gateway_payment_id='pay_DEMO_pending',
             gateway_signature=checkout['demo_signature'],
-            method='upi', demo=True,
+            method='upi',
         )
         response = self.client.get(reverse('profile'))
         self.assertContains(response, 'Nothing pending')
@@ -456,7 +456,7 @@ class ProfileBookingCardsTests(TestCase):
             gateway_order_id=tx.gateway_order_id,
             gateway_payment_id='pay_DEMO_pending',
             gateway_signature=checkout['demo_signature'],
-            method='upi', demo=True,
+            method='upi',
         )
         reservation.refresh_from_db()
         self.assertEqual(reservation.status, 'booked')
