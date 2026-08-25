@@ -34,9 +34,12 @@
           <td><span class="badge-bms-info">{{ u.booking_count }}</span></td>
           <td>
             <a href="{% url 'admin_user_bookings' u.id %}" class="btn btn-sm btn-outline-info" title="View Bookings"><i class="bi bi-ticket"></i></a>
-            <a href="{% url 'admin_user_toggle_active' u.id %}" class="btn btn-sm btn-outline-{% if u.is_active %}warning{% else %}success{% endif %}" title="{% if u.is_active %}Deactivate{% else %}Activate{% endif %}">
-              <i class="bi bi-{% if u.is_active %}pause-circle{% else %}play-circle{% endif %}"></i>
-            </a>
+            <form method="POST" action="{% url 'admin_user_toggle_active' u.id %}" class="d-inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-{% if u.is_active %}warning{% else %}success{% endif %}" title="{% if u.is_active %}Deactivate{% else %}Activate{% endif %}">
+                <i class="bi bi-{% if u.is_active %}pause-circle{% else %}play-circle{% endif %}"></i>
+              </button>
+            </form>
           </td>
         </tr>
         {% empty %}

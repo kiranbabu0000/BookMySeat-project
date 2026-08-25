@@ -83,12 +83,21 @@
                 <a href="{% url 'admin_movie_detail' movie.id %}" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
                 <a href="{% url 'admin_movie_edit' movie.id %}" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
                 {% if movie.is_deleted %}
-                <a href="{% url 'admin_movie_restore' movie.id %}" class="btn btn-sm btn-outline-success" title="Restore this movie and make it visible again?"><i class="bi bi-arrow-counterclockwise"></i> Restore</a>
+                <form method="POST" action="{% url 'admin_movie_restore' movie.id %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-success" title="Restore this movie and make it visible again?"><i class="bi bi-arrow-counterclockwise"></i> Restore</button>
+                </form>
                 {% else %}
                 <a href="{% url 'admin_movie_delete' movie.id %}" class="btn btn-sm btn-outline-danger" title="Delete movie"><i class="bi bi-trash me-1"></i> Delete</a>
                 {% endif %}
-                <a href="{% url 'admin_movie_toggle_status' movie.id %}" class="btn btn-sm btn-outline-secondary" title="Toggle Status"><i class="bi bi-arrow-left-right"></i></a>
-                <a href="{% url 'admin_movie_toggle_homepage' movie.id %}" class="btn btn-sm btn-outline-warning" title="Toggle Homepage Visibility"><i class="bi bi-house{% if movie.show_on_homepage %}-dash{% endif %}{% if not movie.show_on_homepage %}-add{% endif %}"></i></a>
+                <form method="POST" action="{% url 'admin_movie_toggle_status' movie.id %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-secondary" title="Toggle Status"><i class="bi bi-arrow-left-right"></i></button>
+                </form>
+                <form method="POST" action="{% url 'admin_movie_toggle_homepage' movie.id %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-warning" title="Toggle Homepage Visibility"><i class="bi bi-house{% if movie.show_on_homepage %}-dash{% endif %}{% if not movie.show_on_homepage %}-add{% endif %}"></i></button>
+                </form>
               </div>
             </td>
           </tr>

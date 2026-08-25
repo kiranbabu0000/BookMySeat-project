@@ -61,21 +61,33 @@
           <td>{% if r.is_approved %}<span class="badge-bms-success">Yes</span>{% else %}<span class="badge-bms-warning">No</span>{% endif %}</td>
           <td>
             <div class="d-flex gap-1 flex-nowrap">
-              <a href="{% url 'admin_review_approve' r.id %}" class="btn btn-sm btn-outline-{% if r.is_approved %}warning{% else %}success{% endif %}" title="{% if r.is_approved %}Unapprove{% else %}Approve{% endif %}">
-                <i class="bi bi-{% if r.is_approved %}x-circle{% else %}check-circle{% endif %}"></i>
-              </a>
+              <form method="POST" action="{% url 'admin_review_approve' r.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-{% if r.is_approved %}warning{% else %}success{% endif %}" title="{% if r.is_approved %}Unapprove{% else %}Approve{% endif %}">
+                  <i class="bi bi-{% if r.is_approved %}x-circle{% else %}check-circle{% endif %}"></i>
+                </button>
+              </form>
               {% if r.is_hidden %}
-              <a href="{% url 'admin_review_restore' r.id %}" class="btn btn-sm btn-outline-info" title="Restore to public view">
-                <i class="bi bi-eye"></i>
-              </a>
+              <form method="POST" action="{% url 'admin_review_restore' r.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-info" title="Restore to public view">
+                  <i class="bi bi-eye"></i>
+                </button>
+              </form>
               {% else %}
-              <a href="{% url 'admin_review_hide' r.id %}" class="btn btn-sm btn-outline-secondary" title="Hide from public">
-                <i class="bi bi-eye-slash"></i>
-              </a>
+              <form method="POST" action="{% url 'admin_review_hide' r.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Hide from public">
+                  <i class="bi bi-eye-slash"></i>
+                </button>
+              </form>
               {% endif %}
-              <a href="{% url 'admin_review_delete' r.id %}" class="btn btn-sm btn-outline-danger" title="Delete permanently" data-confirm="Delete this review permanently?">
-                <i class="bi bi-trash"></i>
-              </a>
+              <form method="POST" action="{% url 'admin_review_delete' r.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete permanently" data-confirm="Delete this review permanently?">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
             </div>
           </td>
         </tr>

@@ -87,6 +87,8 @@ def home(request):
         carousel_slides.append({'type': 'offer', 'coupon': offer})
     coming_soon = list(
         Movie.objects.filter(status='coming_soon', is_deleted=False, category='movie')
+        .prefetch_related('languages', 'genres')
+        .annotate(min_price=_min_price_subquery())
         .order_by('release_date')[:8]
     )
     visible_movie_ids = Movie.objects.filter(is_deleted=False).exclude(

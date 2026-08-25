@@ -146,6 +146,26 @@ class MovieForm(forms.ModelForm):
 
         return cleaned_data
 
+    def save(self, commit=True):
+        if self.instance.pk:
+            preserved = {}
+            for field_name in ('image', 'thumbnail', 'banner'):
+                if field_name not in self.files:
+                    preserved[field_name] = (
+                        type(self.instance).objects.filter(
+                            pk=self.instance.pk,
+                        ).values_list(field_name, flat=True).first() or ''
+                    )
+            instance = super().save(commit=False)
+            for field_name, value in preserved.items():
+                if value and not getattr(instance, field_name):
+                    setattr(instance, field_name, value)
+            if commit:
+                instance.save()
+                self.save_m2m()
+            return instance
+        return super().save(commit=commit)
+
 
 class GenreForm(forms.ModelForm):
     class Meta:

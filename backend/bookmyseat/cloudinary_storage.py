@@ -150,7 +150,7 @@ class CloudinaryMediaStorage(Storage):
 
     def url(self, name):
         if not name:
-            raise ValueError('Empty media name has no URL.')
+            return ''
         import cloudinary.utils
 
         self._validate_name(name)

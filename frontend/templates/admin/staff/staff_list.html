@@ -43,7 +43,10 @@
             <div class="d-flex gap-1">
               <a href="{% url 'admin_staff_edit' s.id %}" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
               <a href="{% url 'admin_staff_permissions' s.id %}" class="btn btn-sm btn-outline-info" title="Permissions"><i class="bi bi-shield-check"></i></a>
-              <a href="{% url 'admin_staff_delete' s.id %}" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></a>
+              <form method="POST" action="{% url 'admin_staff_delete' s.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
+              </form>
             </div>
           </td>
         </tr>

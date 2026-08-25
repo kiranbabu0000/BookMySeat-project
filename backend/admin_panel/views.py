@@ -295,6 +295,20 @@ class DashboardView(AdminSessionMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        try:
+            return self._build_dashboard_context(context)
+        except Exception:
+            logger.exception('Dashboard query error')
+            context['kpis'] = []
+            context['chart_ranges'] = '{}'
+            context['operations'] = []
+            context['recent_bookings'] = []
+            context['top_content'] = []
+            context['theatre_perf'] = []
+            messages.error(self.request, 'A dashboard widget failed to load. Some data may be missing.')
+            return context
+
+    def _build_dashboard_context(self, context):
         today = timezone.now().date()
         yesterday = today - timedelta(days=1)
         week_start = today - timedelta(days=6)
@@ -649,7 +663,15 @@ class MovieCreateView(AdminSessionMixin, CreateView):
     success_url = reverse_lazy('admin_movie_list')
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        try:
+            response = super().form_valid(form)
+        except Exception as exc:
+            logger.exception('Movie creation failed')
+            messages.error(
+                self.request,
+                f'Failed to create movie: {exc}. Please try again.',
+            )
+            return self.form_invalid(form)
         messages.success(self.request, 'Movie added successfully.')
         AuditLog.objects.create(
             user=self.request.user,
@@ -669,7 +691,15 @@ class MovieUpdateView(AdminSessionMixin, UpdateView):
     success_url = reverse_lazy('admin_movie_list')
 
     def form_valid(self, form):
-        response = super().form_valid(form)
+        try:
+            response = super().form_valid(form)
+        except Exception as exc:
+            logger.exception('Movie update failed for pk=%s', form.instance.pk)
+            messages.error(
+                self.request,
+                f'Failed to save movie: {exc}. Please try again.',
+            )
+            return self.form_invalid(form)
         messages.success(self.request, 'Movie updated successfully.')
         AuditLog.objects.create(
             user=self.request.user,
@@ -874,6 +904,7 @@ class MovieDetailView(AdminSessionMixin, TemplateView):
         return context
 
 
+@require_POST
 @admin_session_required
 @permission_required('movie', 'can_edit')
 def movie_toggle_status(request, pk):
@@ -899,6 +930,7 @@ def movie_toggle_status(request, pk):
     return redirect('admin_movie_list')
 
 
+@require_POST
 @admin_session_required
 @permission_required('movie', 'can_edit')
 def movie_toggle_homepage(request, pk):
@@ -918,6 +950,7 @@ def movie_toggle_homepage(request, pk):
     return redirect('admin_movie_list')
 
 
+@require_POST
 @admin_session_required
 @permission_required('movie', 'can_edit')
 def movie_restore(request, pk):
@@ -1787,20 +1820,24 @@ class ShowDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
         obj = self.get_object()
         theater = None
         if obj.theater_id is not None:
-            theater = Theater.objects.get(pk=obj.theater_id)
-            has_bookings = (
-                Booking.objects.filter(theater=theater).exists()
-                or Reservation.objects.filter(show=theater).exists()
-            )
-            if has_bookings:
-                Theater.objects.filter(pk=theater.pk).update(status='cancelled')
-                messages.warning(
-                    request,
-                    'Show has existing bookings, so the linked show was kept and marked cancelled '
-                    'to preserve booking history.'
+            try:
+                theater = Theater.objects.get(pk=obj.theater_id)
+            except Theater.DoesNotExist:
+                theater = None
+            if theater is not None:
+                has_bookings = (
+                    Booking.objects.filter(theater=theater).exists()
+                    or Reservation.objects.filter(show=theater).exists()
                 )
-            else:
-                theater.delete()
+                if has_bookings:
+                    Theater.objects.filter(pk=theater.pk).update(status='cancelled')
+                    messages.warning(
+                        request,
+                        'Show has existing bookings, so the linked show was kept and marked cancelled '
+                        'to preserve booking history.'
+                    )
+                else:
+                    theater.delete()
         AuditLog.objects.create(
             user=request.user,
             action='Show Deleted',
@@ -1813,6 +1850,7 @@ class ShowDeleteView(AdminDeleteViewMixin, AdminSessionMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
+@require_POST
 @admin_session_required
 @permission_required('show', 'can_edit')
 def show_toggle_status(request, pk):
@@ -2286,6 +2324,7 @@ def booking_transaction_detail(request, pk):
     })
 
 
+@require_POST
 @admin_session_required
 @permission_required('booking', 'can_edit')
 def booking_transaction_cancel(request, pk):
@@ -2345,6 +2384,7 @@ def booking_transaction_cancel(request, pk):
     return redirect('admin_booking_list')
 
 
+@require_POST
 @admin_session_required
 @permission_required('booking', 'can_edit')
 def booking_cancel(request, pk):
@@ -2714,6 +2754,7 @@ class UserListView(AdminSessionMixin, ListView):
         return qs
 
 
+@require_POST
 @admin_session_required
 @permission_required('user', 'can_edit')
 def user_toggle_active(request, pk):
@@ -2983,6 +3024,7 @@ def staff_edit(request, pk):
     })
 
 
+@require_POST
 @admin_session_required
 @permission_required('staff', 'can_delete')
 def staff_delete(request, pk):
@@ -3229,6 +3271,7 @@ def notification_create(request):
     })
 
 
+@require_POST
 @admin_session_required
 @permission_required('notification', 'can_view')
 def notification_mark_read(request, pk):
@@ -3238,6 +3281,7 @@ def notification_mark_read(request, pk):
     return redirect('admin_notification_list')
 
 
+@require_POST
 @admin_session_required
 @permission_required('notification', 'can_delete')
 def notification_delete(request, pk):
@@ -3303,6 +3347,7 @@ class ReviewListView(AdminSessionMixin, ListView):
         return context
 
 
+@require_POST
 @admin_session_required
 @permission_required('review', 'can_edit')
 def review_approve(request, pk):
@@ -3322,6 +3367,7 @@ def review_approve(request, pk):
     return redirect('admin_review_list')
 
 
+@require_POST
 @admin_session_required
 @permission_required('review', 'can_edit')
 def review_hide(request, pk):
@@ -3340,6 +3386,7 @@ def review_hide(request, pk):
     return redirect('admin_review_list')
 
 
+@require_POST
 @admin_session_required
 @permission_required('review', 'can_edit')
 def review_restore(request, pk):
@@ -3358,6 +3405,7 @@ def review_restore(request, pk):
     return redirect('admin_review_list')
 
 
+@require_POST
 @admin_session_required
 @permission_required('review', 'can_delete')
 def review_delete(request, pk):

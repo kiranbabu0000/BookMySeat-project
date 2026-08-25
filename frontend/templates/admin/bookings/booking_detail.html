@@ -135,13 +135,19 @@
       <div class="card-bms-body">
         <div class="d-grid gap-2">
           {% if reservation %}
-          <a href="{% url 'admin_booking_transaction_cancel' reservation.id %}" class="btn btn-outline-danger" data-confirm="Cancel this entire booking?">
-            <i class="bi bi-x-circle me-2"></i>Cancel Booking
-          </a>
+          <form method="POST" action="{% url 'admin_booking_transaction_cancel' reservation.id %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger" data-confirm="Cancel this entire booking?">
+              <i class="bi bi-x-circle me-2"></i>Cancel Booking
+            </button>
+          </form>
           {% else %}
-          <a href="{% url 'admin_booking_cancel' booking.id %}" class="btn btn-outline-danger" data-confirm="Cancel this booking?">
-            <i class="bi bi-x-circle me-2"></i>Cancel Booking
-          </a>
+          <form method="POST" action="{% url 'admin_booking_cancel' booking.id %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger" data-confirm="Cancel this booking?">
+              <i class="bi bi-x-circle me-2"></i>Cancel Booking
+            </button>
+          </form>
           <a href="{% url 'admin_booking_modify' booking.id %}" class="btn btn-outline-warning">
             <i class="bi bi-pencil me-2"></i>Modify Booking
           </a>

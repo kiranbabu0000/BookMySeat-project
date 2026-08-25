@@ -189,6 +189,14 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SECURE = os.environ.get(
     'CSRF_COOKIE_SECURE', str(COOKIE_SECURE).lower()
 ) == 'True'
+# Render deploys on *.onrender.com. Ensure CSRF accepts cross-origin POSTs
+# from the production domain. Add extra domains via comma-separated env var.
+_csrf_trusted = os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '')
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in _csrf_trusted.split(',') if o.strip()
+] if _csrf_trusted else [
+    'https://*.onrender.com',
+]
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_NAME = 'bms_sessionid'
 

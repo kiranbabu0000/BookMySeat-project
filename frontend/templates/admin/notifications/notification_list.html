@@ -44,9 +44,15 @@
           <td>
             <div class="d-flex gap-1">
               {% if not n.is_read %}
-              <a href="{% url 'admin_notification_mark_read' n.id %}" class="btn btn-sm btn-outline-success" title="Mark Read"><i class="bi bi-check2"></i></a>
+              <form method="POST" action="{% url 'admin_notification_mark_read' n.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-success" title="Mark Read"><i class="bi bi-check2"></i></button>
+              </form>
               {% endif %}
-              <a href="{% url 'admin_notification_delete' n.id %}" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></a>
+              <form method="POST" action="{% url 'admin_notification_delete' n.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
+              </form>
             </div>
           </td>
         </tr>

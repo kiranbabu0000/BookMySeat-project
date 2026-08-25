@@ -103,10 +103,16 @@
             <td>
               {% if b.reservation %}
               <a href="{% url 'admin_booking_transaction_detail' b.reservation.id %}" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
-              <a href="{% url 'admin_booking_transaction_cancel' b.reservation.id %}" class="btn btn-sm btn-outline-danger" title="Cancel" data-confirm="Cancel this entire booking?"><i class="bi bi-x-circle"></i></a>
+              <form method="POST" action="{% url 'admin_booking_transaction_cancel' b.reservation.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancel" data-confirm="Cancel this entire booking?"><i class="bi bi-x-circle"></i></button>
+              </form>
               {% else %}
               <a href="{% url 'admin_booking_detail' b.id %}" class="btn btn-sm btn-outline-info" title="View"><i class="bi bi-eye"></i></a>
-              <a href="{% url 'admin_booking_cancel' b.id %}" class="btn btn-sm btn-outline-danger" title="Cancel" data-confirm="Cancel this booking?"><i class="bi bi-x-circle"></i></a>
+              <form method="POST" action="{% url 'admin_booking_cancel' b.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Cancel" data-confirm="Cancel this booking?"><i class="bi bi-x-circle"></i></button>
+              </form>
               {% endif %}
             </td>
           </tr>
