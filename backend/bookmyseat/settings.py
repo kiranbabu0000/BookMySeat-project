@@ -169,14 +169,6 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Local development (no CLOUDINARY_URL) keeps the plain filesystem under
 # backend/media/ exactly as before. Static files always stay local and are
 # served by WhiteNoise in both modes — static and media remain separate.
-if os.environ.get('CLOUDINARY_URL'):
-    # In production the WhiteNoise block above already set STORAGES['staticfiles']
-    # to CompressedManifestStaticFilesStorage.  Merge the media default so both
-    # coexist.
-    STORAGES.setdefault('default', {})
-    STORAGES['default']['BACKEND'] = 'bookmyseat.cloudinary_storage.CloudinaryMediaStorage'
-
-
 ROOT_URLCONF = 'bookmyseat.urls'
 LOGIN_URL='/login/'
 
@@ -397,10 +389,17 @@ else:
             'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
         },
     }
-    # Preserve the default media storage if Cloudinary is configured.
+    # Media storage: Cloudinary in production (persistent uploads) or local
+    # filesystem as fallback.  The "default" key MUST always exist — Django
+    # crashes with InvalidStorageError when an ImageField resolves .url()
+    # and "default" is missing from STORAGES.
     if os.environ.get('CLOUDINARY_URL'):
         STORAGES['default'] = {
             'BACKEND': 'bookmyseat.cloudinary_storage.CloudinaryMediaStorage',
+        }
+    else:
+        STORAGES['default'] = {
+            'BACKEND': 'django.core.files.storage.FileSystemStorage',
         }
 
 # Default primary key field type
