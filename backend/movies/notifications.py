@@ -12,8 +12,6 @@ import json
 import logging
 import re
 from pathlib import Path
-from urllib.error import URLError
-from urllib.request import Request, urlopen
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
@@ -22,7 +20,6 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from admin_panel.models import Notification
-from movies.qr import build_qr_payload, ticket_qr_png_bytes
 from .models import EmailOutbox
 
 logger = logging.getLogger(__name__)
@@ -118,6 +115,7 @@ def _email_content(user, show, bookings, total, payment_tx=None, reservation=Non
         except Exception:
             pass
 
+    from movies.qr import build_qr_payload, ticket_qr_png_bytes
     qr_payload = build_qr_payload(booking_ref, show.movie.name, show.name, seats)
     qr_bytes = ticket_qr_png_bytes(qr_payload) or b''
     context = {
@@ -339,6 +337,8 @@ def _send_via_brevo(outbox):
     production sends email as a JSON POST instead of a raw SMTP connection.
     Raises on failure so the worker records the error and schedules a retry.
     """
+    from urllib.error import URLError
+    from urllib.request import Request, urlopen
     name, email = _from_address()
     payload = {
         'sender': {'name': name, 'email': email},

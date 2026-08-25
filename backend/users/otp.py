@@ -13,7 +13,6 @@ from django.core.cache import cache
 from django.template.loader import render_to_string
 
 from movies.models import EmailOutbox
-from movies.notifications import logo_data_uri
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +94,7 @@ def send_otp_email(user, otp):
         '\u2014 BookMySeat',
     ]
     try:
+        from movies.notifications import logo_data_uri
         html_body = render_to_string('emails/otp_email.html', {
             'user': user,
             'otp': otp,
