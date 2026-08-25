@@ -7,9 +7,7 @@ LOCKOUT_KEY = 'bms_rl_locked'
 
 
 def _ip(request):
-    return (request.META.get('HTTP_X_FORWARDED_FOR', '')
-            .split(',')[0].strip()
-            or request.META.get('REMOTE_ADDR', ''))
+    return request.META.get('REMOTE_ADDR', '')
 
 
 def _keys(scope, ip, username):

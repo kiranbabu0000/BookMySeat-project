@@ -80,7 +80,7 @@ def send_otp_email(user, otp):
     if not recipient:
         logger.warning('OTP EMAIL SKIPPED: user=%s has no email address', user.id)
         return False
-    subject = 'BookMySeat — Your verification code is {}'.format(otp)
+    subject = 'BookMySeat — Verify your email'
     lines = [
         'Hi {},'.format(user.username),
         '',

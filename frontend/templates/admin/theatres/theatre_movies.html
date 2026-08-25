@@ -25,7 +25,7 @@
                 {% endif %}
               </td>
               <td>
-                <form method="post" action="{% url 'admin_theatre_remove_movie' %}" onsubmit="return confirm('Remove &quot;{{ movie.name }}&quot; from {{ theatre.name }}? All future shows will be cancelled. Past bookings remain intact.')">
+                <form method="post" action="{% url 'admin_theatre_remove_movie' %}" onsubmit="return confirm('Remove &quot;{{ movie.name|escapejs }}&quot; from {{ theatre.name|escapejs }}? All future shows will be cancelled. Past bookings remain intact.')">
                   {% csrf_token %}
                   <input type="hidden" name="theatre_id" value="{{ theatre.id }}">
                   <input type="hidden" name="movie_id" value="{{ movie.id }}">

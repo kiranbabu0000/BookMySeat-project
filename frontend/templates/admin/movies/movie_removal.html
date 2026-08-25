@@ -119,7 +119,7 @@
           </td>
           <td class="text-center">
             {% if row.can_delete %}
-            <form method="post" action="{% url 'admin_movie_delete' row.movie.id %}" class="d-inline" onsubmit="return confirm('Permanently delete \'{{ row.movie.name }}\' with all its shows, seats, trailers and images? This cannot be undone.');">
+            <form method="post" action="{% url 'admin_movie_delete' row.movie.id %}" class="d-inline" onsubmit="return confirm('Permanently delete \'{{ row.movie.name|escapejs }}\' with all its shows, seats, trailers and images? This cannot be undone.');">
               {% csrf_token %}
               <input type="hidden" name="action" value="hard_delete">
               <input type="hidden" name="next" value="{% url 'admin_movie_removal' %}">

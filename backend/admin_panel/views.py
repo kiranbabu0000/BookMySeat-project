@@ -54,15 +54,15 @@ def admin_login_view(request):
 
     if request.method == 'POST':
         form = AdminLoginForm(request.POST)
+        username = form.data.get('username', '').strip()
+        if is_locked_out('admin', request, username):
+            messages.error(
+                request,
+                'Too many failed attempts. Please wait a few minutes and try again.',
+            )
+            return render(request, 'admin/login.html', {'form': form})
         if form.is_valid():
-            username = form.cleaned_data['username']
             password = form.cleaned_data['password']
-            if is_locked_out('admin', request, username):
-                messages.error(
-                    request,
-                    'Too many failed attempts. Please wait a few minutes and try again.',
-                )
-                return render(request, 'admin/login.html', {'form': form})
             user = authenticate(request, username=username, password=password)
             if user is not None:
                 if not user.is_active:

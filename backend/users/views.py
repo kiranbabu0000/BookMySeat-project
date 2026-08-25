@@ -10,6 +10,7 @@ from django.contrib.auth.models import User
 from django.contrib import messages
 from django.utils import timezone
 from django.http import JsonResponse
+from django.conf import settings as django_settings
 from django.urls import reverse
 from movies.models import Movie, Booking, Reservation, Wishlist, TicketDownload
 from movies.discovery import trending_movies, recently_released, recommended_for_user, _min_price_subquery
@@ -149,12 +150,13 @@ def login_view(request):
     if not next_url.startswith('/') or next_url.startswith('//'):
         next_url = '/'
     if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        if is_locked_out('user', request, username):
+            form = AuthenticationForm(request, data=request.POST)
+            messages.error(request, 'Too many failed attempts. Please wait a few minutes and try again.')
+            return render(request,'users/login.html',{'form':form, 'next': next_url})
         form=AuthenticationForm(request,data=request.POST)
         if form.is_valid():
-            username = form.cleaned_data.get('username', '')
-            if is_locked_out('user', request, username):
-                messages.error(request, 'Too many failed attempts. Please wait a few minutes and try again.')
-                return render(request,'users/login.html',{'form':form, 'next': next_url})
             user=form.get_user()
             if user.is_staff or user.is_superuser or AdminProfile.objects.filter(user=user, is_active=True).exists():
                 messages.error(request, 'This is an admin account. Please sign in through the admin portal.')
@@ -164,7 +166,6 @@ def login_view(request):
             request.session.pop('just_logged_out', None)
             return redirect(next_url)
         else:
-            username = request.POST.get('username', '')
             login_failed('user', request, username)
             if is_locked_out('user', request, username):
                 messages.error(request, 'Too many failed attempts. Please wait a few minutes and try again.')
@@ -404,6 +405,8 @@ def profile(request):
 
 @login_required
 def toggle_wishlist(request, movie_id):
+    if request.method != 'POST':
+        return redirect('movie_detail', movie_id=movie_id)
     movie = get_object_or_404(Movie, id=movie_id)
     entry = Wishlist.objects.filter(user=request.user, movie=movie)
     if entry.exists():
@@ -460,10 +463,14 @@ def reset_password(request):
 def user_logout_view(request):
     if request.method != 'POST':
         return render(request, 'users/logout.html')
-    request.session.cycle_key()
-    for key in ('_auth_user_id', '_auth_user_backend', '_auth_user_hash'):
-        request.session.pop(key, None)
     request.session['just_logged_out'] = timezone.now().isoformat()
-    response = redirect('home')
-    response.delete_cookie('csrftoken')
-    return response
+    preserve = {
+        'just_logged_out',
+        'admin_user_id', 'is_admin_authenticated',
+        'admin_login_time', 'admin_session_id',
+        'admin_ip_address', 'admin_user_agent',
+    }
+    for key in list(request.session.keys()):
+        if key not in preserve:
+            del request.session[key]
+    return redirect('home')

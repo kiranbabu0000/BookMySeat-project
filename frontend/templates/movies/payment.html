@@ -137,10 +137,10 @@
   (function () {
     'use strict';
 
-    var expiresAt = new Date('{{ reservation.expires_at|date:"c" }}');
-    var serverRemaining = Number('{{ remaining }}');
+    var expiresAt = new Date('{{ reservation.expires_at|date:"c"|escapejs }}');
+    var serverRemaining = Number('{{ remaining|escapejs }}');
     var timeOffsetMs = (expiresAt.getTime() - (isNaN(serverRemaining) ? 0 : serverRemaining) * 1000) - Date.now();
-    var token = '{{ reservation.token }}';
+    var token = '{{ reservation.token|escapejs }}';
     var timerEl = document.getElementById('reservationTimer');
     var payBtn = document.getElementById('payBtn');
     var feedbackEl = document.getElementById('paymentFeedback');
@@ -156,13 +156,13 @@
     var razorpayKey = '{{ razorpay_key|escapejs }}';
 
     var pricing = {
-      subtotal: '{{ pricing.subtotal }}',
-      platform_fee: '{{ pricing.platform_fee }}',
-      misc_fee: '{{ pricing.misc_fee }}',
-      gst_rate: '{{ pricing.gst_rate }}',
-      gst: '{{ pricing.gst }}',
-      discount: '{{ pricing.discount }}',
-      total: '{{ pricing.total }}'
+      subtotal: '{{ pricing.subtotal|escapejs }}',
+      platform_fee: '{{ pricing.platform_fee|escapejs }}',
+      misc_fee: '{{ pricing.misc_fee|escapejs }}',
+      gst_rate: '{{ pricing.gst_rate|escapejs }}',
+      gst: '{{ pricing.gst|escapejs }}',
+      discount: '{{ pricing.discount|escapejs }}',
+      total: '{{ pricing.total|escapejs }}'
     };
     var ticketCount = {{ seats|length }};
     var currentTotal = Number(pricing.total);

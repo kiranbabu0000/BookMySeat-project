@@ -167,7 +167,7 @@ class RegisterOtpFlowTests(TestCase):
         self.assertFalse(user.is_active)
         outbox = EmailOutbox.objects.filter(recipient='carol@example.com').first()
         self.assertIsNotNone(outbox)
-        self.assertIn('verification code', outbox.subject.lower())
+        self.assertIn('verify your email', outbox.subject.lower())
         self.assertRegex(outbox.plain_body, r'\b\d{6}\b')
         self.assertEqual(self.client.session.get('otp_user_id'), user.id)
 
@@ -200,7 +200,7 @@ class RegisterOtpFlowTests(TestCase):
         )
         self._assert_register_rejected(
             self._payload(username='carol', email='brand.new@example.com'),
-            'This name is already registered. Please use a different name.',
+            'This name is already registered.',
         )
         self.assertFalse(User.objects.filter(username='carol').exists())
 
@@ -210,7 +210,7 @@ class RegisterOtpFlowTests(TestCase):
         )
         self._assert_register_rejected(
             self._payload(username='carol', email='CAROL@Example.com'),
-            'An account with this email is already registered.',
+            'An account with this email already exists.',
         )
         self.assertFalse(User.objects.filter(username='carol').exists())
 

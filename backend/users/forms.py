@@ -13,7 +13,7 @@ class UserRegisterForm(UserCreationForm):
         username = self.cleaned_data['username']
         if User.objects.filter(username__iexact=username).exists():
             raise forms.ValidationError(
-                'This name is already registered. Please use a different name.'
+                'This name is already registered.'
             )
         return username
 
@@ -21,7 +21,7 @@ class UserRegisterForm(UserCreationForm):
         email = (self.cleaned_data.get('email') or '').strip().lower()
         if User.objects.filter(email__iexact=email).exists():
             raise forms.ValidationError(
-                'An account with this email is already registered.'
+                'An account with this email already exists.'
             )
         return email
 

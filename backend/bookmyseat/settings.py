@@ -40,7 +40,7 @@ FRONTEND_DIR = PROJECT_ROOT / 'frontend'
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
 # True while running the test suite. Used to bypass short-lived feed caches so
 # tests always see fresh data.
@@ -182,12 +182,12 @@ COOKIE_SECURE = os.environ.get(
     'COOKIE_SECURE', 'False' if DEBUG else 'True'
 ) == 'True'
 SESSION_COOKIE_SECURE = os.environ.get(
-    'SESSION_COOKIE_SECURE', str(COOKIE_SECURE).lower()
+    'SESSION_COOKIE_SECURE', 'True' if COOKIE_SECURE else 'False'
 ) == 'True'
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SECURE = os.environ.get(
-    'CSRF_COOKIE_SECURE', str(COOKIE_SECURE).lower()
+    'CSRF_COOKIE_SECURE', 'True' if COOKIE_SECURE else 'False'
 ) == 'True'
 # Render deploys on *.onrender.com. Ensure CSRF accepts cross-origin POSTs
 # from the production domain. Add extra domains via comma-separated env var.
