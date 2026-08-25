@@ -2,12 +2,13 @@ from datetime import timedelta
 
 from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm
 from .forms import UserRegisterForm, UserUpdateForm
-from .models import NameChange
+from .models import NameChange, PendingSignup
 from django.shortcuts import render,redirect,get_object_or_404
 from django.contrib.auth import login, authenticate, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.http import JsonResponse
 from django.conf import settings as django_settings
@@ -28,6 +29,8 @@ from .otp import (
     send_otp_email,
     verify as verify_otp,
 )
+
+SESSION_PENDING_KEY = 'otp_pending_key'
 
 def home(request):
     # One base queryset for all homepage category tabs, avoiding separate
@@ -127,23 +130,104 @@ def home(request):
 
 def register(request):
     if request.method == 'POST':
-        form=UserRegisterForm(request.POST)
+        form = UserRegisterForm(request.POST)
         if form.is_valid():
-            user = form.save(commit=False)
-            user.is_active = False
-            user.save()
-            reset_resend_count(user.id)
-            otp = generate_and_store(user)
-            if send_otp_email(user, otp):
-                request.session['otp_user_id'] = user.id
-                request.session['otp_purpose'] = 'register'
-                messages.info(request, 'Verify your email: a one-time code was sent to {}.'.format(mask_email(user.email)))
+            pending = PendingSignup.create_from_form(
+                username=form.cleaned_data['username'],
+                email=form.cleaned_data['email'],
+                raw_password=form.cleaned_data['password1'],
+            )
+            request.session[SESSION_PENDING_KEY] = str(pending.key)
+            reset_resend_count(pending.key)
+            otp = generate_and_store(pending.key)
+            if send_otp_email(
+                form.cleaned_data['email'],
+                form.cleaned_data['username'],
+                otp,
+            ):
+                messages.info(
+                    request,
+                    'Verify your email: a one-time code was sent to {}.'.format(
+                        mask_email(form.cleaned_data['email'])
+                    ),
+                )
                 return redirect('register_otp')
-            user.delete()
+            pending.delete()
+            request.session.pop(SESSION_PENDING_KEY, None)
             messages.error(request, 'We could not send the verification code to your email. Please try again.')
     else:
-        form=UserRegisterForm()
-    return render(request,'users/register.html',{'form':form})
+        form = UserRegisterForm()
+    return render(request, 'users/register.html', {'form': form})
+
+
+def _get_pending_signup(request):
+    """Return (pending_key_str, PendingSignup) or (None, None)."""
+    pending_key = request.session.get(SESSION_PENDING_KEY)
+    if not pending_key:
+        return None, None
+    try:
+        pending_signup = PendingSignup.objects.get(key=pending_key)
+    except PendingSignup.DoesNotExist:
+        return pending_key, None
+    return pending_key, pending_signup
+
+
+def _cleanup_pending(request):
+    """Delete the PendingSignup record (if any) and clear the session key."""
+    pending_key = request.session.pop(SESSION_PENDING_KEY, None)
+    if pending_key:
+        PendingSignup.objects.filter(key=pending_key).delete()
+
+
+def register_otp(request):
+    pending_key, pending_signup = _get_pending_signup(request)
+    if pending_signup is None:
+        _cleanup_pending(request)
+        return redirect('register')
+
+    if request.method == 'POST':
+        ok, msg = verify_otp(pending_key, request.POST.get('otp', ''))
+        if not ok:
+            if 'expired' in msg:
+                messages.error(request, 'OTP has timed out. Please request a new OTP.')
+                return render(request, 'users/register_otp.html', {
+                    'email': mask_email(pending_signup.email),
+                    'remaining': 0,
+                    'resends_left': max(0, OTP_MAX_RESENDS - resend_count(pending_key)),
+                })
+            if 'Too many' in msg:
+                _cleanup_pending(request)
+                messages.error(request, 'Too many failed attempts. Please sign up again.')
+                return redirect('register')
+            messages.error(request, 'Incorrect OTP. Please enter the latest OTP sent to your email.')
+            remaining = remaining_attempts(pending_key)
+            resends_left = max(0, OTP_MAX_RESENDS - resend_count(pending_key))
+            return render(request, 'users/register_otp.html', {
+                'email': mask_email(pending_signup.email),
+                'remaining': remaining,
+                'resends_left': resends_left,
+            })
+        try:
+            with transaction.atomic():
+                User.objects.create(
+                    username=pending_signup.username,
+                    email=pending_signup.email,
+                    password=pending_signup.password_hash,
+                )
+                pending_signup.delete()
+        except IntegrityError:
+            pending_signup.delete()
+        _cleanup_pending(request)
+        messages.success(request, 'Account created successfully. Please log in with your credentials.')
+        return redirect('login')
+
+    remaining = remaining_attempts(pending_key)
+    resends_left = max(0, OTP_MAX_RESENDS - resend_count(pending_key))
+    return render(request, 'users/register_otp.html', {
+        'email': mask_email(pending_signup.email),
+        'remaining': remaining,
+        'resends_left': resends_left,
+    })
 
 def login_view(request):
     next_url = request.POST.get('next') or request.GET.get('next') or '/'
@@ -174,68 +258,22 @@ def login_view(request):
     return render(request,'users/login.html',{'form':form, 'next': next_url})
 
 
-def _register_pending_user(request):
-    """Return the inactive user awaiting email-OTP verification, or None."""
-    user_id = request.session.get('otp_user_id')
-    if not user_id or request.session.get('otp_purpose') != 'register':
-        return None
-    try:
-        user = User.objects.get(pk=user_id, is_active=False)
-    except User.DoesNotExist:
-        return None
-    return user
-
-
-def register_otp(request):
-    user = _register_pending_user(request)
-    if user is None:
-        request.session.pop('otp_user_id', None)
-        request.session.pop('otp_purpose', None)
-        return redirect('register')
-
-    if request.method == 'POST':
-        ok, msg = verify_otp(user.id, request.POST.get('otp', ''))
-        if not ok:
-            messages.error(request, msg)
-            if 'expired' in msg or 'Too many' in msg:
-                request.session.pop('otp_user_id', None)
-                request.session.pop('otp_purpose', None)
-                return redirect('register')
-            return render(request, 'users/register_otp.html', {
-                'email': mask_email(user.email),
-                'remaining': remaining_attempts(user.id),
-                'resends_left': max(0, OTP_MAX_RESENDS - resend_count(user.id)),
-            })
-        user.is_active = True
-        user.save(update_fields=['is_active'])
-        request.session.pop('otp_user_id', None)
-        request.session.pop('otp_purpose', None)
-        login(request, user)
-        return redirect('profile')
-
-    return render(request, 'users/register_otp.html', {
-        'email': mask_email(user.email),
-        'remaining': remaining_attempts(user.id),
-        'resends_left': max(0, OTP_MAX_RESENDS - resend_count(user.id)),
-    })
-
-
 def register_otp_resend(request):
     if request.method != 'POST':
         return redirect('register_otp')
-    user = _register_pending_user(request)
-    if user is None:
+    pending_key, pending_signup = _get_pending_signup(request)
+    if pending_signup is None:
         return redirect('register')
-    if not can_resend(user.id):
-        if resend_count(user.id) >= OTP_MAX_RESENDS:
-            messages.error(request, 'You have reached the limit for resend requests. Please sign in again to get a fresh code.')
+    if not can_resend(pending_key):
+        if resend_count(pending_key) >= OTP_MAX_RESENDS:
+            messages.error(request, 'You have reached the limit for resend requests. Please sign up again to get a fresh code.')
         else:
             messages.error(request, 'Please wait a moment before requesting another code.')
         return redirect('register_otp')
-    otp = generate_and_store(user)
-    mark_resend(user.id)
-    if send_otp_email(user, otp):
-        messages.info(request, 'A new verification code was sent to {}.'.format(mask_email(user.email)))
+    otp = generate_and_store(pending_key)
+    mark_resend(pending_key)
+    if send_otp_email(pending_signup.email, pending_signup.username, otp):
+        messages.info(request, 'A new verification code was sent to {}.'.format(mask_email(pending_signup.email)))
     else:
         messages.error(request, 'We could not send a new code. Please try again shortly.')
     return redirect('register_otp')

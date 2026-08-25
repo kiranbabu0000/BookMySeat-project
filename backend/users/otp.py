@@ -48,8 +48,11 @@ def mask_email(email):
     return '{}***@{}'.format(first, domain)
 
 
-def generate_and_store(user):
-    """Generate a fresh code for the user and store it in the cache.
+def generate_and_store(key):
+    """Generate a fresh code for *key* and store it in the cache.
+
+    *key* may be an integer user ID or any hashable string (e.g. a UUID for
+    a pending signup that has no DB record yet).
 
     Attempts reset, but the resend counter is left untouched so a re-sent
     code still counts toward the absolute resend cap.
@@ -57,9 +60,9 @@ def generate_and_store(user):
     otp = '{:0{d}}'.format(
         secrets.randbelow(10 ** OTP_CODE_LENGTH), d=OTP_CODE_LENGTH
     )
-    cache.set(_otp_key(user.id), otp, OTP_TTL_SECONDS)
-    cache.set(_attempts_key(user.id), 0, OTP_TTL_SECONDS)
-    cache.delete(_cooldown_key(user.id))
+    cache.set(_otp_key(key), otp, OTP_TTL_SECONDS)
+    cache.set(_attempts_key(key), 0, OTP_TTL_SECONDS)
+    cache.delete(_cooldown_key(key))
     return otp
 
 
@@ -69,20 +72,23 @@ def reset_resend_count(user_id):
     cache.delete(_cooldown_key(user_id))
 
 
-def send_otp_email(user, otp):
+def send_otp_email(email, username, otp):
     """Enqueue the code into the async email outbox.
+
+    *email* and *username* are raw strings so this works before a User
+    record exists (pending-signup flow).
 
     Returns True when the message was queued. Delivery happens asynchronously
     via the ``process_email_outbox`` worker, so a slow or unreachable SMTP
     server never blocks (or hangs) the register request.
     """
-    recipient = (user.email or '').strip()
+    recipient = (email or '').strip()
     if not recipient:
-        logger.warning('OTP EMAIL SKIPPED: user=%s has no email address', user.id)
+        logger.warning('OTP EMAIL SKIPPED: no email address provided')
         return False
     subject = 'BookMySeat — Verify your email'
     lines = [
-        'Hi {},'.format(user.username),
+        'Hi {},'.format(username),
         '',
         'Your one-time verification code is:',
         '',
@@ -96,7 +102,7 @@ def send_otp_email(user, otp):
     try:
         from movies.notifications import logo_data_uri
         html_body = render_to_string('emails/otp_email.html', {
-            'user': user,
+            'username': username,
             'otp': otp,
             'otp_expiry_minutes': OTP_TTL_SECONDS // 60,
             'site_url': getattr(settings, 'SITE_URL', '').rstrip('/'),
@@ -111,7 +117,7 @@ def send_otp_email(user, otp):
         )
         return True
     except Exception as exc:  # noqa: BLE001 - registration must never fail on email
-        logger.warning('OTP EMAIL ENQUEUE FAILED for user=%s: %s', user.id, exc)
+        logger.warning('OTP EMAIL ENQUEUE FAILED for %s: %s', email, exc)
         return False
 
 

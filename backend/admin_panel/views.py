@@ -161,7 +161,7 @@ def _dashboard_occupancy_series(days):
     a SINGLE grouped query (one indexed range scan instead of one full
     join-per-day). Days without shows are simply absent from the mapping.
     """
-    today = timezone.now().date()
+    today = timezone.localdate()
     window_start = day_range_utc(today - timedelta(days=days - 1))[0]
     window_end = day_range_utc(today)[1]
     rows = (
@@ -190,7 +190,7 @@ def _dashboard_active_show_counts(days):
     One grouped query replaces what used to be one ``time__date`` cast query
     per sparkline point.
     """
-    today = timezone.now().date()
+    today = timezone.localdate()
     window_start = day_range_utc(today - timedelta(days=days - 1))[0]
     window_end = day_range_utc(today)[1]
     rows = (
@@ -206,7 +206,7 @@ def _dashboard_active_show_counts(days):
 
 def _dashboard_series(days):
     """Daily revenue (completed payments) and booking counts, oldest first."""
-    start_date = timezone.now().date() - timedelta(days=days - 1)
+    start_date = timezone.localdate() - timedelta(days=days - 1)
     start = timezone.make_aware(datetime.combine(start_date, datetime.min.time()), showtime_zone())
     rev_map = {
         row['day']: row['total']
@@ -237,7 +237,7 @@ def _dashboard_series(days):
 
 def _dashboard_monthly(months=12):
     """Monthly revenue + booking counts for the last ``months`` months."""
-    today = timezone.now().date()
+    today = timezone.localdate()
     starts = []
     for k in range(months - 1, -1, -1):
         offset = today.month - k

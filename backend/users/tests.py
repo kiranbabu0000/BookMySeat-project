@@ -9,8 +9,10 @@ from admin_panel.models import AdminProfile
 
 from .otp import generate_and_store
 from .middleware import JUST_LOGGED_OUT_FLAG, JUST_LOGGED_OUT_WINDOW
+from .models import PendingSignup
 from movies.models import EmailOutbox
 from movies.testutils import DEMO_RAZORPAY
+from .views import SESSION_PENDING_KEY
 
 
 class OTPHelpersTests(TestCase):
@@ -28,18 +30,18 @@ class OTPHelpersTests(TestCase):
         self.assertEqual(mask_email('alice@example.com'), 'a***@example.com')
 
     def test_generate_and_store_roundtrip(self):
-        otp = generate_and_store(self.user)
+        otp = generate_and_store(self.user.id)
         self.assertEqual(len(otp), 6)
         self.assertTrue(otp.isdigit())
 
     def test_verify_accepts_correct_code(self):
-        otp = generate_and_store(self.user)
+        otp = generate_and_store(self.user.id)
         ok, msg = __import__('users.otp', fromlist=['verify']).verify(self.user.id, otp)
         self.assertTrue(ok)
         self.assertEqual(msg, 'ok')
 
     def test_verify_rejects_wrong_code_and_counts_attempts(self):
-        otp = generate_and_store(self.user)
+        otp = generate_and_store(self.user.id)
         from .otp import verify, remaining_attempts
         ok, _ = verify(self.user.id, '000000')
         self.assertFalse(ok)
@@ -48,7 +50,7 @@ class OTPHelpersTests(TestCase):
         self.assertTrue(ok)
 
     def test_verify_expires_when_code_gone(self):
-        generate_and_store(self.user)
+        generate_and_store(self.user.id)
         cache.clear()
         from .otp import verify
         ok, msg = verify(self.user.id, '123456')
@@ -59,7 +61,7 @@ class OTPHelpersTests(TestCase):
         from .otp import (
             OTP_MAX_RESENDS, _cooldown_key, can_resend, mark_resend, resend_count,
         )
-        generate_and_store(self.user)
+        generate_and_store(self.user.id)
         self.assertTrue(can_resend(self.user.id))
         for _ in range(OTP_MAX_RESENDS):
             self.assertTrue(can_resend(self.user.id))
@@ -97,7 +99,7 @@ class LoginFlowTests(TestCase):
         self.assertRedirects(response, '/')
         self.assertEqual(int(self.client.session['_auth_user_id']), self.user.id)
         self.assertEqual(len(mail.outbox), 0)
-        self.assertNotIn('otp_user_id', self.client.session)
+        self.assertNotIn(SESSION_PENDING_KEY, self.client.session)
 
     def test_login_honors_next_url(self):
         response = self.client.post(reverse('login'), {
@@ -156,20 +158,27 @@ class RegisterOtpFlowTests(TestCase):
             'password2': 'Str0ngPass!',
         })
 
-    def _get_code(self, user_id):
-        from .otp import _otp_key
-        return cache.get(_otp_key(user_id))
+    def _get_pending_key(self):
+        return self.client.session.get(SESSION_PENDING_KEY)
 
-    def test_register_creates_inactive_user_and_sends_otp(self):
+    def _get_code(self, key):
+        from .otp import _otp_key
+        return cache.get(_otp_key(key))
+
+    def test_register_creates_pending_signup_and_sends_otp(self):
         response = self._register_post()
         self.assertRedirects(response, reverse('register_otp'))
-        user = User.objects.get(username='carol')
-        self.assertFalse(user.is_active)
+        self.assertFalse(User.objects.filter(username='carol').exists())
+        pending = PendingSignup.objects.filter(username='carol').first()
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.email, 'carol@example.com')
+        from django.contrib.auth.hashers import check_password
+        self.assertTrue(check_password('Str0ngPass!', pending.password_hash))
+        self.assertEqual(self.client.session.get(SESSION_PENDING_KEY), str(pending.key))
         outbox = EmailOutbox.objects.filter(recipient='carol@example.com').first()
         self.assertIsNotNone(outbox)
         self.assertIn('verify your email', outbox.subject.lower())
         self.assertRegex(outbox.plain_body, r'\b\d{6}\b')
-        self.assertEqual(self.client.session.get('otp_user_id'), user.id)
 
     def test_register_otp_page_requires_started_flow(self):
         response = self.client.get(reverse('register_otp'))
@@ -191,7 +200,7 @@ class RegisterOtpFlowTests(TestCase):
             EmailOutbox.objects.count(), 0,
             'no OTP email may be enqueued for an invalid registration',
         )
-        self.assertNotIn('otp_user_id', self.client.session)
+        self.assertNotIn(SESSION_PENDING_KEY, self.client.session)
         return response
 
     def test_duplicate_name_rejected_before_otp(self):
@@ -234,38 +243,56 @@ class RegisterOtpFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'c***@example.com')
 
-    def test_correct_otp_activates_account_and_logs_in(self):
+    def test_correct_otp_creates_user_and_redirects_to_login(self):
         self._register_post()
-        user = User.objects.get(username='carol')
-        code = self._get_code(user.id)
+        pending_key = self._get_pending_key()
+        code = self._get_code(pending_key)
         response = self.client.post(reverse('register_otp'), {'otp': code})
-        self.assertRedirects(response, reverse('profile'))
-        user.refresh_from_db()
-        self.assertTrue(user.is_active)
-        self.assertEqual(int(self.client.session['_auth_user_id']), user.id)
-        self.assertNotIn('otp_user_id', self.client.session)
-
-    def test_unverified_user_cannot_login(self):
-        self._register_post()
+        self.assertRedirects(response, reverse('login'))
         user = User.objects.get(username='carol')
-        self.assertFalse(user.is_active)
-        response = self.client.post(reverse('login'), {
-            'username': 'carol', 'password': 'Str0ngPass!',
-        })
-        self.assertEqual(response.status_code, 200)
+        self.assertTrue(user.is_active)
+        self.assertEqual(user.email, 'carol@example.com')
+        self.assertFalse(PendingSignup.objects.filter(username='carol').exists())
         self.assertNotIn('_auth_user_id', self.client.session)
-        self.assertEqual(
-            EmailOutbox.objects.filter(recipient='carol@example.com').count(), 1
-        )
+        self.assertNotIn(SESSION_PENDING_KEY, self.client.session)
 
-    def test_wrong_otp_keeps_user_inactive(self):
+    def test_no_user_created_before_otp_verification(self):
+        self._register_post()
+        self.assertFalse(User.objects.filter(username='carol').exists())
+        self.client.post(reverse('register_otp'), {'otp': '000000'})
+        self.assertFalse(User.objects.filter(username='carol').exists())
+
+    def test_wrong_otp_shows_error_and_stays_on_otp_page(self):
         self._register_post()
         response = self.client.post(reverse('register_otp'), {'otp': '000000'})
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Incorrect code')
-        user = User.objects.get(username='carol')
-        self.assertFalse(user.is_active)
+        self.assertContains(response, 'Incorrect OTP')
+        self.assertContains(response, 'c***@example.com')
         self.assertNotIn('_auth_user_id', self.client.session)
+        self.assertIsNotNone(self._get_pending_key())
+
+    def test_expired_otp_stays_on_otp_page(self):
+        self._register_post()
+        cache.clear()
+        response = self.client.post(reverse('register_otp'), {'otp': '123456'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'OTP has timed out')
+        self.assertContains(response, 'c***@example.com')
+        self.assertIsNotNone(self._get_pending_key())
+        self.assertFalse(User.objects.filter(username='carol').exists())
+
+    def test_resend_after_expiration_creates_account(self):
+        self._register_post()
+        cache.clear()
+        self.client.post(reverse('register_otp'), {'otp': '123456'})
+        pending_key = self._get_pending_key()
+        self.client.post(reverse('register_otp_resend'))
+        code = self._get_code(pending_key)
+        self.assertIsNotNone(code)
+        response = self.client.post(reverse('register_otp'), {'otp': code})
+        self.assertRedirects(response, reverse('login'))
+        user = User.objects.get(username='carol')
+        self.assertTrue(user.is_active)
 
     def test_exhausting_attempts_redirects_to_register(self):
         self._register_post()
@@ -273,25 +300,27 @@ class RegisterOtpFlowTests(TestCase):
             self.client.post(reverse('register_otp'), {'otp': '000000'})
         response = self.client.post(reverse('register_otp'), {'otp': '000000'})
         self.assertRedirects(response, reverse('register'))
-        self.assertNotIn('otp_user_id', self.client.session)
-
-    def test_expired_otp_redirects_to_register(self):
-        self._register_post()
-        cache.clear()
-        response = self.client.post(reverse('register_otp'), {'otp': '123456'})
-        self.assertRedirects(response, reverse('register'))
-        self.assertNotIn('otp_user_id', self.client.session)
+        self.assertNotIn(SESSION_PENDING_KEY, self.client.session)
 
     def test_resend_sends_new_code(self):
         self._register_post()
-        user = User.objects.get(username='carol')
-        first = self._get_code(user.id)
+        pending_key = self._get_pending_key()
+        first = self._get_code(pending_key)
         response = self.client.post(reverse('register_otp_resend'))
         self.assertRedirects(response, reverse('register_otp'))
         self.assertEqual(
             EmailOutbox.objects.filter(recipient='carol@example.com').count(), 2
         )
-        self.assertNotEqual(self._get_code(user.id), first)
+        self.assertNotEqual(self._get_code(pending_key), first)
+
+    def test_resend_invalidates_old_otp(self):
+        self._register_post()
+        pending_key = self._get_pending_key()
+        old_code = self._get_code(pending_key)
+        self.client.post(reverse('register_otp_resend'))
+        response = self.client.post(reverse('register_otp'), {'otp': old_code})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Incorrect OTP')
 
     def test_resend_without_flow_redirects_to_register(self):
         response = self.client.post(reverse('register_otp_resend'))
@@ -300,17 +329,17 @@ class RegisterOtpFlowTests(TestCase):
     def test_resend_blocked_once_limit_reached(self):
         from .otp import OTP_MAX_RESENDS, _cooldown_key
         self._register_post()
-        user = User.objects.get(username='carol')
+        pending_key = self._get_pending_key()
         base = EmailOutbox.objects.filter(recipient='carol@example.com').count()
         for _ in range(OTP_MAX_RESENDS):
-            cache.delete(_cooldown_key(user.id))
+            cache.delete(_cooldown_key(pending_key))
             response = self.client.post(reverse('register_otp_resend'))
             self.assertRedirects(response, reverse('register_otp'))
         self.assertEqual(
             EmailOutbox.objects.filter(recipient='carol@example.com').count(),
             base + OTP_MAX_RESENDS,
         )
-        cache.delete(_cooldown_key(user.id))
+        cache.delete(_cooldown_key(pending_key))
         response = self.client.post(reverse('register_otp_resend'), follow=True)
         self.assertRedirects(response, reverse('register_otp'))
         self.assertContains(response, 'limit for resend requests')
@@ -318,6 +347,74 @@ class RegisterOtpFlowTests(TestCase):
             EmailOutbox.objects.filter(recipient='carol@example.com').count(),
             base + OTP_MAX_RESENDS,
         )
+
+    def test_duplicate_signup_creates_separate_pending_records(self):
+        self.client.post(reverse('register'), {
+            'username': 'carol',
+            'email': 'carol@example.com',
+            'password1': 'Str0ngPass!',
+            'password2': 'Str0ngPass!',
+        })
+        first_key = self._get_pending_key()
+        self.client.post(reverse('register'), {
+            'username': 'carol2',
+            'email': 'carol2@example.com',
+            'password1': 'Str0ngPass!',
+            'password2': 'Str0ngPass!',
+        })
+        second_key = self._get_pending_key()
+        self.assertIsNotNone(second_key)
+        self.assertNotEqual(first_key, second_key)
+        self.assertTrue(PendingSignup.objects.filter(key=second_key).exists())
+
+    def test_verify_correct_otp_then_login_works(self):
+        self._register_post()
+        pending_key = self._get_pending_key()
+        code = self._get_code(pending_key)
+        self.client.post(reverse('register_otp'), {'otp': code})
+        response = self.client.post(reverse('login'), {
+            'username': 'carol', 'password': 'Str0ngPass!',
+        })
+        self.assertEqual(response.status_code, 302)
+
+    def test_password_hashed_in_pending_signup(self):
+        self._register_post()
+        pending = PendingSignup.objects.filter(username='carol').first()
+        self.assertIsNotNone(pending)
+        self.assertNotEqual(pending.password_hash, 'Str0ngPass!')
+        from django.contrib.auth.hashers import check_password
+        self.assertTrue(check_password('Str0ngPass!', pending.password_hash))
+
+    def test_no_raw_password_in_session(self):
+        self._register_post()
+        for key, value in self.client.session.items():
+            if isinstance(value, str):
+                self.assertNotIn('Str0ngPass!', value,
+                    'raw password must not appear in session key {}'.format(key))
+
+    def test_double_verification_creates_only_one_user(self):
+        self._register_post()
+        pending_key = self._get_pending_key()
+        code = self._get_code(pending_key)
+        self.client.post(reverse('register_otp'), {'otp': code})
+        self.client.post(reverse('register_otp'), {'otp': code})
+        self.assertEqual(User.objects.filter(username='carol').count(), 1)
+
+    def test_correct_otp_clears_pending_signup(self):
+        self._register_post()
+        pending_key = self._get_pending_key()
+        code = self._get_code(pending_key)
+        self.client.post(reverse('register_otp'), {'otp': code})
+        self.assertFalse(PendingSignup.objects.filter(key=pending_key).exists())
+        self.assertNotIn(SESSION_PENDING_KEY, self.client.session)
+
+    def test_created_user_password_works(self):
+        self._register_post()
+        pending_key = self._get_pending_key()
+        code = self._get_code(pending_key)
+        self.client.post(reverse('register_otp'), {'otp': code})
+        user = User.objects.get(username='carol')
+        self.assertTrue(user.check_password('Str0ngPass!'))
 
 
 class LoggedOutGuardTests(TestCase):
