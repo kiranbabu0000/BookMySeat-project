@@ -463,12 +463,18 @@ class ReviewForm(forms.ModelForm):
             'movie': forms.Select(attrs={'class': 'form-select'}),
             'user': forms.Select(attrs={'class': 'form-select'}),
             'booking': forms.Select(attrs={'class': 'form-select'}),
-            'rating': forms.NumberInput(attrs={'class': 'form-control'}),
+            'rating': forms.NumberInput(attrs={'class': 'form-control', 'min': '1', 'max': '5'}),
             'comment': forms.Textarea(attrs={'class': 'form-control'}),
             'is_approved': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'is_hidden': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'is_reported': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
+
+    def clean_rating(self):
+        rating = self.cleaned_data.get('rating')
+        if rating is not None and not (1 <= rating <= 5):
+            raise forms.ValidationError('Rating must be between 1 and 5.')
+        return rating
 
 
 class ReserveBookingForm(forms.Form):

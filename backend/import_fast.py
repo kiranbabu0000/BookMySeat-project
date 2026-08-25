@@ -29,6 +29,29 @@ for label in by_model:
         continue
     present_models.append(model)
 
+REVIEW_RATING_FIELD = 'rating'
+
+
+def _validate_review_rating(row):
+    """Ensure review rating is 1-5 before bulk_create (bypasses model validation)."""
+    if row['model'] != 'admin_panel.review':
+        return
+    fields = row.get('fields', {})
+    r = fields.get(REVIEW_RATING_FIELD)
+    if r is not None:
+        try:
+            r = int(r)
+        except (TypeError, ValueError):
+            print(f'  WARNING: Review pk={row.get("pk")} has non-integer rating={r!r}, clamping to 1')
+            r = 1
+        if r < 1 or r > 5:
+            print(f'  WARNING: Review pk={row.get("pk")} has out-of-range rating={r}, clamping to 1-5')
+            fields[REVIEW_RATING_FIELD] = max(1, min(5, r))
+
+
+for obj in data:
+    _validate_review_rating(obj)
+
 
 def dependency_order(models):
     model_set = set(models)

@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.contrib.auth.models import User
 from movies.models import Movie, Theater, Seat, Booking
@@ -298,9 +299,20 @@ class Review(models.Model):
     class Meta:
         ordering = ['-created_at']
         unique_together = ['movie', 'user']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(rating__gte=1) & models.Q(rating__lte=5),
+                name='review_rating_range',
+            ),
+        ]
         indexes = [
             models.Index(fields=['movie', 'is_approved', 'is_hidden']),
         ]
+
+    def clean(self):
+        super().clean()
+        if self.rating is not None and not (1 <= self.rating <= 5):
+            raise ValidationError({'rating': 'Rating must be between 1 and 5.'})
 
     def __str__(self):
         return f'{self.user.username} - {self.movie.name} ({self.rating}/5)'
