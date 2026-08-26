@@ -21,7 +21,7 @@ threads = int(os.environ.get('GUNICORN_THREADS', '2'))
 # Sync workers are still the base; threads provide concurrency within
 # the single worker process without the memory overhead of multiple
 # pre-forked processes.
-worker_class = 'threaded'
+worker_class = 'gthread'
 
 # Timeouts ---------------------------------------------------------------
 # Render's reverse proxy kills idle connections after ~30 s.  The Django
