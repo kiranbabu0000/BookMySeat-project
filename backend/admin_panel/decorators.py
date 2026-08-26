@@ -13,10 +13,13 @@ ADMIN_SESSION_KEYS = (
     'admin_login_time', 'admin_ip_address', 'admin_user_agent',
 )
 
+ADMIN_BROWSER_MARKER = 'bms_admin_bsession'
+
 
 def clear_admin_session(request):
     for key in ADMIN_SESSION_KEYS:
         request.session.pop(key, None)
+    request.COOKIES.pop(ADMIN_BROWSER_MARKER, None)
 
 
 def _verify_admin_session(request):

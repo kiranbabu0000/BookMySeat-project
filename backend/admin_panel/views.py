@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.contrib.auth import update_session_auth_hash
@@ -39,7 +40,7 @@ from .forms import (
     AdminPermissionForm, CouponForm, NotificationForm, ReviewForm,
     ReserveBookingForm, RefundForm, AdminProfileSelfEditForm, AdminUserSelfEditForm
 )
-from .decorators import admin_session_required, AdminSessionMixin, permission_required, clear_admin_session
+from .decorators import admin_session_required, AdminSessionMixin, permission_required, clear_admin_session, ADMIN_BROWSER_MARKER
 from bookmyseat.ratelimit import is_locked_out, login_failed, login_succeeded, remaining_attempts
 from .services import (
     BookingTransaction,
@@ -51,7 +52,10 @@ from .services import (
 
 def admin_login_view(request):
     if request.session.get('is_admin_authenticated'):
-        return redirect('admin_dashboard')
+        if not request.COOKIES.get(ADMIN_BROWSER_MARKER):
+            clear_admin_session(request)
+        else:
+            return redirect('admin_dashboard')
 
     if request.method == 'POST':
         form = AdminLoginForm(request.POST)
@@ -90,7 +94,17 @@ def admin_login_view(request):
                     module='Auth',
                     ip_address=request.META.get('REMOTE_ADDR')
                 )
-                return redirect('admin_dashboard')
+                response = redirect('admin_dashboard')
+                # Volatile browser-session marker — deleted automatically
+                # when the browser closes, forcing a fresh admin login on
+                # the next visit.
+                response.set_cookie(
+                    ADMIN_BROWSER_MARKER, '1',
+                    max_age=None, httponly=True,
+                    samesite='Lax',
+                    secure=not settings.DEBUG,
+                )
+                return response
             else:
                 login_failed('admin', request, username)
                 remaining = remaining_attempts('admin', request, username)
@@ -126,7 +140,12 @@ def admin_logout_view(request):
                 ip_address=request.META.get('REMOTE_ADDR')
             )
     clear_admin_session(request)
-    return redirect('admin_login')
+    response = redirect('admin_login')
+    response.delete_cookie(
+        ADMIN_BROWSER_MARKER,
+        samesite='Lax',
+    )
+    return response
 
 
 def _dashboard_pct(current, previous):
@@ -384,7 +403,14 @@ class DashboardView(AdminSessionMixin, TemplateView):
         pending_refunds = PaymentTransaction.objects.filter(status='refund_requested').count()
         active_reservations = Reservation.objects.filter(status='active').count()
         held_seats = ReservedSeat.objects.filter(reservation__status='active').count()
-        unread_notifications = Notification.objects.filter(is_read=False).count()
+        # Reuse the cached count from the context processor instead of
+        # running an identical uncached query.
+        from django.core.cache import cache as _cache
+        notif_cache_key = 'bms:admin_notif_count'
+        unread_notifications = _cache.get(notif_cache_key)
+        if unread_notifications is None:
+            unread_notifications = Notification.objects.filter(is_read=False).count()
+            _cache.set(notif_cache_key, unread_notifications, 30)
 
         # --- Business performance chart data for 7 / 30 / 90 days + 12 months.
         # The 7-day series is computed once and reused for the KPI sparkline.
@@ -3596,7 +3622,12 @@ class AuditLogListView(AdminSessionMixin, ListView):
 
 @admin_session_required
 def get_notifications(request):
-    count = Notification.objects.filter(is_read=False).count()
+    from django.core.cache import cache as _cache
+    cache_key = 'bms:admin_notif_count'
+    count = _cache.get(cache_key)
+    if count is None:
+        count = Notification.objects.filter(is_read=False).count()
+        _cache.set(cache_key, count, 30)
     return JsonResponse({'count': count})
 
 

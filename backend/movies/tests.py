@@ -1000,6 +1000,8 @@ class MovieRestoreVisibilityTests(TestCase):
         session['is_admin_authenticated'] = True
         session['admin_login_time'] = str(timezone.now())
         session.save()
+        from movies.testutils import ADMIN_BROWSER_MARKER
+        self.client.cookies[ADMIN_BROWSER_MARKER] = '1'
 
         response = self.client.post(reverse('admin_movie_restore', args=[movie.pk]))
 

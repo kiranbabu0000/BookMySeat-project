@@ -823,6 +823,8 @@ class PaymentAdminTests(TestCase):
         session['is_admin_authenticated'] = True
         session['admin_login_time'] = str(timezone.now())
         session.save()
+        from movies.testutils import ADMIN_BROWSER_MARKER
+        self.client.cookies[ADMIN_BROWSER_MARKER] = '1'
 
     def test_payment_list_page_renders(self):
         response = self.client.get(reverse('admin_payment_list'))

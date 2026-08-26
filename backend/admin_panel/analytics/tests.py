@@ -323,13 +323,8 @@ class AnalyticsViewTests(TestCase):
         self.customer = User.objects.create_user('cust', 'cust@example.com', 'password123')
 
     def _admin_session(self, client, user):
-        client.force_login(user)
-        session = client.session
-        session['admin_user_id'] = user.id
-        session['is_admin_authenticated'] = True
-        session['admin_session_id'] = session.session_key
-        session['admin_login_time'] = str(timezone.now())
-        session.save()
+        from movies.testutils import set_admin_session
+        set_admin_session(client, user)
 
     def test_anonymous_redirected_to_admin_login(self):
         for url in ('/analytics/', '/analytics/revenue/', '/analytics/data/overview/'):
@@ -484,13 +479,8 @@ class AnalyticsPageRenderTests(AnalyticsDataTestCase):
         )
 
     def setUp(self):
-        self.client.force_login(self.superuser)
-        session = self.client.session
-        session['admin_user_id'] = self.superuser.id
-        session['is_admin_authenticated'] = True
-        session['admin_session_id'] = session.session_key
-        session['admin_login_time'] = str(timezone.now())
-        session.save()
+        from movies.testutils import set_admin_session
+        set_admin_session(self.client, self.superuser)
 
     def test_overview_shows_seeded_totals(self):
         r = self.client.get('/analytics/?range=last_7_days')

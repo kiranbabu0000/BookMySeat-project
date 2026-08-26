@@ -26,12 +26,8 @@ from .ticket_scan import scan_ticket
 
 
 def _admin_session(client, user):
-    client.force_login(user)
-    session = client.session
-    session['admin_user_id'] = user.id
-    session['is_admin_authenticated'] = True
-    session['admin_login_time'] = str(timezone.now())
-    session.save()
+    from .testutils import set_admin_session
+    set_admin_session(client, user)
 
 
 def _confirmed_reservation(user, show, seats):
@@ -93,13 +89,7 @@ class ScannerAccessTests(TestCase):
         middleware does not know the path it leaves ``request.user`` anonymous
         and the scanner redirects to /admin-login/ forever.
         """
-        session = self.client.session
-        session['admin_user_id'] = self.admin.id
-        session['is_admin_authenticated'] = True
-        session['admin_login_time'] = str(timezone.now())
-        session.save()
-        session['admin_session_id'] = session.session_key
-        session.save()
+        _admin_session(self.client, self.admin)
         response = self.client.get(reverse('admin_ticket_scanner'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Camera Scanner')
