@@ -1,4 +1,5 @@
 {% extends 'admin/base_admin.html' %}
+{% load admin_tags %}
 {% block title %}{{ user_obj.username }} Bookings{% endblock %}
 {% block page_title %}Booking History: {{ user_obj.username }}{% endblock %}
 {% block content %}
@@ -22,7 +23,7 @@
           <td>{{ b.movie.name }}</td>
           <td>{{ b.theater.name }}</td>
           <td>{{ b.seat.seat_number }}</td>
-          <td><i class="bi bi-currency-rupee"></i>{% if b.payment %}{{ b.payment.amount }}{% else %}—{% endif %}</td>
+          <td><i class="bi bi-currency-rupee"></i>{% with amt=payment_amounts|get_item:b.id|default:"" %}{% if amt %}{{ amt }}{% else %}—{% endif %}{% endwith %}</td>
           <td>{{ b.booked_at|date:"d M Y, g:i A" }}</td>
         </tr>
         {% empty %}
@@ -32,5 +33,10 @@
     </table>
     </div>
   </div>
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="card-bms-footer">
+    {% include 'admin/partials/_pagination.html' %}
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

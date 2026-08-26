@@ -820,7 +820,9 @@ class BookingTransactionRepresentationTests(TestCase):
         response = self.client.get(reverse('admin_booking_list'))
         self.assertEqual(response.status_code, 200)
         html = response.content.decode('utf-8')
-        self.assertEqual(html.count('BMSMULTI'), 1, 'purchase must appear once, not once per seat')
+        import re
+        matches = [(m.start(), html[max(0,m.start()-40):m.end()+40]) for m in re.finditer('BMSMULTI', html)]
+        self.assertEqual(html.count('BMSMULTI'), 1, f'purchase must appear once, not once per seat; found {len(matches)}: {matches}')
         self.assertIn('<span class="badge-bms-info">3</span>', html)
 
     def test_grouped_booking_detail_renders_transaction(self):

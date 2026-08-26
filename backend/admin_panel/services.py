@@ -18,7 +18,7 @@ from django.utils import timezone
 from movies.models import Booking, Movie, Seat, SeatCategory, ShowPrice, Theater
 
 from .layouts import build_layout_spec
-from .models import Show
+from .models import Payment, Show
 
 
 def _row_label(index):
@@ -327,11 +327,11 @@ class BookingTransaction:
         reservation = self.reservation
         if reservation is not None and reservation.payment_status:
             return reservation.payment_status
-        statuses = {
-            b.payment.status
-            for b in self.bookings
-            if b.payment_id is not None and b.payment is not None
-        }
+        booking_ids = [b.id for b in self.bookings]
+        payment_statuses = Payment.objects.filter(
+            booking_id__in=booking_ids,
+        ).values_list('status', flat=True)
+        statuses = set(payment_statuses)
         if len(statuses) == 1:
             return next(iter(statuses))
         if statuses:

@@ -42,6 +42,7 @@ from .forms import (
 from .decorators import admin_session_required, AdminSessionMixin, permission_required, clear_admin_session
 from bookmyseat.ratelimit import is_locked_out, login_failed, login_succeeded, remaining_attempts
 from .services import (
+    BookingTransaction,
     hide_theater_for_show,
     sync_theater_from_show,
     group_bookings_into_transactions,
@@ -309,7 +310,7 @@ class DashboardView(AdminSessionMixin, TemplateView):
             return context
 
     def _build_dashboard_context(self, context):
-        today = timezone.now().date()
+        today = timezone.localdate()
         yesterday = today - timedelta(days=1)
         week_start = today - timedelta(days=6)
         month_start = today.replace(day=1)
@@ -807,37 +808,12 @@ class MovieDeleteView(AdminSessionMixin, DeleteView):
 def movie_removal_list(request):
     now = timezone.now()
     week_ago = now - timedelta(days=7)
-    running_movie_bookings = Booking.objects.filter(
-        movie=OuterRef('pk'), theater__time__gte=now
-    )
-    movie_bookings = Booking.objects.filter(movie=OuterRef('pk'))
-    movies = (
+
+    movies_qs = (
         Movie.objects.annotate(
-            bookings=Coalesce(
-                Subquery(
-                    movie_bookings.values('movie')
-                    .annotate(c=Count('id'))
-                    .values('c')
-                ),
-                0,
-            ),
-            revenue=Coalesce(
-                Subquery(
-                    movie_bookings.values('movie')
-                    .annotate(t=Sum('total'))
-                    .values('t')
-                ),
-                Decimal('0.00'),
-            ),
-            last7=Coalesce(
-                Subquery(
-                    movie_bookings.filter(booked_at__gte=week_ago)
-                    .values('movie')
-                    .annotate(c=Count('id'))
-                    .values('c')
-                ),
-                0,
-            ),
+            bookings=Count('booking'),
+            revenue=Coalesce(Sum('booking__total'), Decimal('0.00')),
+            last7=Count('booking', filter=Q(booking__booked_at__gte=week_ago)),
             theater_count=Count('theaters', distinct=True),
             shows_count=Count('shows', distinct=True),
             seat_capacity=Count('theaters__seats', distinct=True),
@@ -849,12 +825,23 @@ def movie_removal_list(request):
                 filter=Q(shows__date__gte=now.date(), shows__status='active'),
                 distinct=True,
             ),
-            has_running_bookings=Exists(running_movie_bookings),
+            has_running_bookings=Exists(
+                Booking.objects.filter(movie=OuterRef('pk'), theater__time__gte=now)
+            ),
         )
         .order_by('-id')
     )
+
+    per_page = 20
+    paginator = Paginator(movies_qs, per_page)
+    page_num = request.GET.get('page', 1)
+    try:
+        page_obj = paginator.page(page_num)
+    except Exception:
+        page_obj = paginator.page(1)
+
     rows = []
-    for m in movies:
+    for m in page_obj:
         occupancy = round(m.bookings / m.seat_capacity * 100, 1) if m.seat_capacity else 0
         runs_days = (now.date() - m.release_date).days if m.release_date else None
         running_with_bookings = m.has_running_bookings
@@ -874,7 +861,12 @@ def movie_removal_list(request):
             'can_delete': not running_with_bookings,
         })
 
-    total_revenue = sum((r['revenue'] for r in rows), Decimal('0.00'))
+    totals = Movie.objects.aggregate(
+        total_revenue=Coalesce(Sum('booking__total', filter=Q(
+            booking__status='confirmed',
+        )), Decimal('0.00')),
+        total_bookings=Count('booking'),
+    )
     chart_json = {
         'labels': [r['movie'].name for r in rows],
         'bookings': [r['bookings'] for r in rows],
@@ -882,9 +874,10 @@ def movie_removal_list(request):
     }
     return render(request, 'admin/movies/movie_removal.html', {
         'rows': rows,
-        'total_movies': len(rows),
-        'total_bookings': sum(r['bookings'] for r in rows),
-        'total_revenue': total_revenue,
+        'page_obj': page_obj,
+        'total_movies': paginator.count,
+        'total_bookings': totals['total_bookings'],
+        'total_revenue': totals['total_revenue'],
         'chart_json': chart_json,
     })
 
@@ -2192,7 +2185,7 @@ def seat_management(request):
 
     context = {
         'theatre_names': theatre_names,
-        'theatres_list': Theater.objects.select_related('movie').all().order_by('-time'),
+        'theatres_list': Theater.objects.select_related('movie').order_by('-time')[:50],
         'selected_theater': selected_theater,
         'seats': seats,
     }
@@ -2212,7 +2205,7 @@ class BookingListView(AdminSessionMixin, ListView):
 
     def _base_queryset(self):
         return Booking.objects.select_related(
-            'user', 'movie', 'theater', 'seat', 'payment', 'reservation'
+            'user', 'movie', 'theater', 'seat', 'reservation'
         )
 
     def _apply_filters(self, qs):
@@ -2252,25 +2245,87 @@ class BookingListView(AdminSessionMixin, ListView):
             qs = qs.order_by('-booked_at')
         return qs
 
-    def get_transactions(self):
-        """Return one BookingTransaction per actual purchase.
-
-        Per-seat Booking rows are grouped by their parent Reservation, so a
-        single transaction (e.g. 5 seats bought together) renders as one row.
-        """
-        qs = self._apply_sort(self._apply_filters(self._base_queryset()))
-        return group_bookings_into_transactions(qs)
-
     def get(self, request, *args, **kwargs):
-        transactions = self.get_transactions()
-        paginator = Paginator(transactions, self.get_paginate_by(transactions))
-        page = paginator.get_page(request.GET.get('page'))
-        self.object_list = page.object_list
+        per_page = self.get_paginate_by(None)
+        page_num = request.GET.get('page', 1)
+        try:
+            page_num = int(page_num)
+        except (ValueError, TypeError):
+            page_num = 1
+        if page_num < 1:
+            page_num = 1
+
+        base_qs = self._apply_sort(self._apply_filters(self._base_queryset()))
+
+        # Count standalone bookings (no reservation) and grouped reservations
+        # at the database level to get total transaction count.
+        standalone_qs = base_qs.filter(reservation__isnull=True)
+        grouped_qs = base_qs.filter(reservation__isnull=False)
+
+        standalone_count = standalone_qs.count()
+        grouped_res_count = (
+            grouped_qs
+            .values('reservation_id')
+            .distinct()
+            .count()
+        )
+        total_transactions = standalone_count + grouped_res_count
+
+        # Determine which transactions fall on the requested page.
+        page_start = (page_num - 1) * per_page
+        page_end = page_start + per_page
+
+        page_transactions = []
+
+        if page_start < standalone_count:
+            # Current page includes some standalone bookings.
+            standalone_page_end = min(page_end, standalone_count)
+            standalone_bookings = list(
+                standalone_qs[page_start:standalone_page_end]
+            )
+            page_transactions.extend(
+                BookingTransaction([b]) for b in standalone_bookings
+            )
+
+        if page_end > standalone_count and grouped_res_count:
+            # Current page includes some grouped transactions.
+            grp_start = max(0, page_start - standalone_count)
+            grp_end = max(0, page_end - standalone_count)
+
+            # Fetch the distinct reservation IDs for this page of groups.
+            res_ids = list(
+                grouped_qs.values_list('reservation_id', flat=True).order_by('reservation_id').distinct()[grp_start:grp_end]
+            )
+
+            if res_ids:
+                page_bookings = list(
+                    grouped_qs.filter(reservation_id__in=res_ids)
+                )
+                tx_map = {}
+                for b in page_bookings:
+                    tx_map.setdefault(b.reservation_id, []).append(b)
+                for rid in res_ids:
+                    bookings = tx_map.get(rid, [])
+                    if bookings:
+                        page_transactions.append(BookingTransaction(bookings))
+
+        # Build a fake paginator for template compatibility.
+        from django.core.paginator import EmptyPage, PageNotAnInteger
+        paginator = Paginator(range(total_transactions), per_page)
+        try:
+            page_obj = paginator.page(page_num)
+        except PageNotAnInteger:
+            page_obj = paginator.page(1)
+        except EmptyPage:
+            page_obj = paginator.page(paginator.num_pages)
+        page_obj.object_list = page_transactions
+
+        self.object_list = page_transactions
         context = self.get_context_data(
-            object_list=self.object_list,
+            object_list=page_transactions,
             paginator=paginator,
-            page_obj=page,
-            is_paginated=page.has_other_pages(),
+            page_obj=page_obj,
+            is_paginated=page_obj.has_other_pages(),
         )
         return render(request, self.template_name, context)
 
@@ -2292,13 +2347,17 @@ def booking_detail(request, pk):
     )
     if booking.reservation_id:
         return booking_transaction_detail(request, booking.reservation_id)
+    try:
+        ps = booking.payment.status
+    except Exception:
+        ps = ''
     return render(request, 'admin/bookings/booking_detail.html', {
         'booking': booking,
         'bookings': [booking],
         'reservation': None,
         'booking_ref': booking.booking_ref or str(booking.id),
         'total_amount': booking.total,
-        'payment_status': booking.payment.status if booking.payment_id else '',
+        'payment_status': ps,
         'status': booking.status,
     })
 
@@ -2463,9 +2522,12 @@ def booking_reserve(request):
             return redirect('admin_booking_list')
     return render(request, 'admin/bookings/booking_reserve.html', {
         'form': form,
-        'users': User.objects.filter(is_active=True),
-        'movies': Movie.objects.all(),
-        'shows': Theater.objects.filter(time__gte=timezone.now()).select_related('movie'),
+        'users': User.objects.filter(is_active=True).order_by('username')[:200],
+        'movies': Movie.objects.filter(is_deleted=False).order_by('name'),
+        'shows': Theater.objects.filter(
+            time__gte=timezone.now(),
+            time__lt=timezone.now() + timedelta(days=7),
+        ).select_related('movie').order_by('time'),
     })
 
 
@@ -2791,10 +2853,24 @@ def user_toggle_active(request, pk):
 @permission_required('user', 'can_view')
 def user_booking_history(request, pk):
     user_obj = get_object_or_404(User, id=pk)
-    bookings = Booking.objects.filter(user=user_obj).select_related('movie', 'theater', 'seat').order_by('-booked_at')
+    bookings_qs = Booking.objects.filter(user=user_obj).select_related('movie', 'theater', 'seat').order_by('-booked_at')
+    paginator = Paginator(bookings_qs, 20)
+    page_num = request.GET.get('page', 1)
+    try:
+        page_obj = paginator.page(page_num)
+    except Exception:
+        page_obj = paginator.page(1)
+
+    booking_ids = [b.id for b in page_obj]
+    payment_amounts = {
+        p.booking_id: p.amount
+        for p in Payment.objects.filter(booking_id__in=booking_ids).only('booking_id', 'amount')
+    }
     return render(request, 'admin/users/user_bookings.html', {
         'user_obj': user_obj,
-        'bookings': bookings,
+        'bookings': page_obj,
+        'page_obj': page_obj,
+        'payment_amounts': payment_amounts,
     })
 
 
@@ -3634,13 +3710,23 @@ def pricing_dashboard(request):
     if search:
         shows = shows.filter(Q(name__icontains=search) | Q(movie__name__icontains=search))
 
+    per_page = 20
+    paginator = Paginator(shows, per_page)
+    page_num = request.GET.get('page', 1)
+    try:
+        page_obj = paginator.page(page_num)
+    except Exception:
+        page_obj = paginator.page(1)
+
+    page_ids = [s.id for s in page_obj]
     price_map = {}
-    for sp in ShowPrice.objects.filter(theater__in=shows):
+    for sp in ShowPrice.objects.filter(theater_id__in=page_ids):
         price_map.setdefault(sp.theater_id, {})[sp.category_id] = sp.price
 
     config, _ = PricingConfig.objects.get_or_create(pk=1)
     return render(request, 'admin/pricing/pricing_dashboard.html', {
-        'shows': shows,
+        'shows': page_obj,
+        'page_obj': page_obj,
         'categories': categories,
         'price_map': price_map,
         'config': config,

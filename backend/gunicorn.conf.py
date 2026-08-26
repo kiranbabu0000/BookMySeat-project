@@ -1,28 +1,34 @@
 """Gunicorn configuration for BookMySeat on Render Free Tier.
 
-Render Free Tier gives 512 MB RAM and one shared vCPU.  Two sync workers
-fit comfortably; a third would risk OOM-kills on cold starts when all
-workers spin up simultaneously and load Django + its ORM.
+Render Free Tier gives 512 MB RAM and one shared vCPU.  A single worker
+with two threads keeps memory under ~200 MB even under load, leaving
+headroom for the OS, database connections, WhiteNoise, and the email
+outbox daemon thread.  Two sync workers caused OOM on 512 MB instances.
 """
 import os
-import multiprocessing
 
 # Workers ---------------------------------------------------------------
-# (2 * cpu_count) + 1 is the standard formula but on Render's shared vCPU
-# that gives 3 workers which is tight on 512 MB.  2 workers keep memory
-# usage under ~350 MB even under load.
-workers = int(os.environ.get('GUNICORN_WORKERS', '2'))
+# 1 worker + 2 threads is the most memory-efficient safe configuration
+# for Django on a 512 MB instance.  Django is thread-safe; the ORM,
+# WhiteNoise, and the email outbox worker all handle concurrency correctly.
+# Two sync workers doubled memory usage to ~350-400 MB, leaving almost no
+# headroom and triggering OOM kills on cold starts.
+workers = 1
+threads = int(os.environ.get('GUNICORN_THREADS', '2'))
 
 # Worker class -----------------------------------------------------------
-# Sync workers are the safest choice for a Django WSGI app with DB-backed
-# sessions and blocking email delivery.  No async framework is used.
-worker_class = 'sync'
+# Threaded worker allows handling 2 concurrent requests per worker.
+# Sync workers are still the base; threads provide concurrency within
+# the single worker process without the memory overhead of multiple
+# pre-forked processes.
+worker_class = 'threaded'
 
 # Timeouts ---------------------------------------------------------------
-# Render's reverse-proxy kills idle connections after 30 s.  Keep-alive
-# must be shorter so Gunicorn closes the socket before the proxy does,
-# preventing broken-pipe noise in logs.
-timeout = 30
+# Render's reverse proxy kills idle connections after ~30 s.  The Django
+# timeout is generous (120 s) to accommodate heavy admin views (dashboard,
+# movie removal analytics) that run multiple aggregation queries.  A 30 s
+# timeout caused worker timeouts on those pages, producing 502 errors.
+timeout = 120
 graceful_timeout = 30
 keepalive = 5
 

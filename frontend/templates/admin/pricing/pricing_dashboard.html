@@ -106,5 +106,10 @@
       </tbody>
     </table>
   </div>
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="card-bms-footer">
+    {% include 'admin/partials/_pagination.html' %}
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

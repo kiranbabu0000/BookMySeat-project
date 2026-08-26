@@ -1355,6 +1355,23 @@ a:focus-visible {
   border-color: var(--border-color);
 }
 
+[data-theme="dark"] .topbar-right .user-avatar-dropdown .dropdown-toggle {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .topbar-right .user-avatar-dropdown .dropdown-toggle:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .topbar-right .notification-btn {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .topbar-right .theme-toggle {
+  color: var(--text-primary);
+}
+
 [data-theme="dark"] .card-bms-footer,
 [data-theme="dark"] .card-bms .card-footer {
   background: var(--bg-tertiary);
@@ -1505,6 +1522,29 @@ a:focus-visible {
   font-size: 0.6875rem !important;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* ---- Dark-mode topbar profile section ----------------------------------- */
+[data-theme="dark"] .topbar-right .user-avatar-dropdown .dropdown-toggle .fw-medium {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .topbar-right .user-avatar-dropdown .dropdown-menu {
+  background: var(--bg-card);
+  border-color: var(--border-color);
+}
+
+[data-theme="dark"] .topbar-right .user-avatar-dropdown .dropdown-menu .dropdown-header {
+  color: var(--text-muted);
+}
+
+[data-theme="dark"] .topbar-right .user-avatar-dropdown .dropdown-menu .dropdown-item {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .topbar-right .user-avatar-dropdown .dropdown-menu .dropdown-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
 }
 
 /* ===== SEAT MANAGEMENT ===== */

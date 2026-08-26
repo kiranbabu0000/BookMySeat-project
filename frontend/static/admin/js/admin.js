@@ -374,6 +374,34 @@
     };
   }
 
+  function initSidebarScroll() {
+    var SCROLL_KEY = 'bms-admin-sidebar-scroll';
+    var sidebar = document.getElementById('adminSidebar');
+    if (!sidebar) return;
+
+    try {
+      var saved = sessionStorage.getItem(SCROLL_KEY);
+      if (saved !== null) {
+        sidebar.scrollTop = parseInt(saved, 10);
+      }
+    } catch (e) {}
+
+    sidebar.addEventListener('scroll', function () {
+      try {
+        sessionStorage.setItem(SCROLL_KEY, sidebar.scrollTop);
+      } catch (e) {}
+    });
+
+    var activeLink = sidebar.querySelector('.sidebar-link.active');
+    if (activeLink) {
+      var rect = activeLink.getBoundingClientRect();
+      var sidebarRect = sidebar.getBoundingClientRect();
+      if (rect.top < sidebarRect.top || rect.bottom > sidebarRect.bottom) {
+        activeLink.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+      }
+    }
+  }
+
   function initSidebarGroups() {
     const storeKey = 'bms-admin-sidebar-groups';
     let saved = {};
@@ -606,6 +634,7 @@
 
   function init() {
     initSidebar();
+    initSidebarScroll();
     initTooltips();
     initPopovers();
     initNotificationPolling();
