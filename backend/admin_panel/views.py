@@ -1607,7 +1607,25 @@ class ScreenListView(AdminSessionMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['theatre_names'] = Theater.objects.values_list('name', flat=True).distinct().order_by('name')
+        self._annotate_bulk_seat_counts(context.get('page_obj') or context.get('screens') or [])
         return context
+
+    @staticmethod
+    def _annotate_bulk_seat_counts(page_theaters):
+        if not page_theaters:
+            return
+        ids = [t.id for t in page_theaters]
+        counts = (
+            Theater.objects.filter(pk__in=ids)
+            .annotate(_total=Count('seats'), _avail=Count('seats', filter=Q(seats__is_booked=False)))
+            .values_list('pk', '_total', '_avail')
+        )
+        map_ = {pk: (total, avail) for pk, total, avail in counts}
+        for t in page_theaters:
+            total, avail = map_.get(t.id, (0, 0))
+            t.total_seats = total
+            t.available_seats = avail
+            t.booked_seats = total - avail
 
 
 class ScreenCreateView(AdminSessionMixin, CreateView):
@@ -1754,12 +1772,30 @@ class ShowListView(AdminSessionMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['movies'] = Movie.objects.all()
+        context['movies'] = Movie.objects.filter(is_deleted=False)
         context['theatre_names'] = Theater.objects.values_list('name', flat=True).distinct().order_by('name')
         shows = context.get('page_obj') or context.get(self.context_object_name) or []
         for s in shows:
             s.status_info = show_status_info(s)
+        self._annotate_bulk_seat_counts(shows)
         return context
+
+    @staticmethod
+    def _annotate_bulk_seat_counts(page_theaters):
+        if not page_theaters:
+            return
+        ids = [t.id for t in page_theaters]
+        counts = (
+            Theater.objects.filter(pk__in=ids)
+            .annotate(_total=Count('seats'), _avail=Count('seats', filter=Q(seats__is_booked=False)))
+            .values_list('pk', '_total', '_avail')
+        )
+        map_ = {pk: (total, avail) for pk, total, avail in counts}
+        for t in page_theaters:
+            total, avail = map_.get(t.id, (0, 0))
+            t.total_seats = total
+            t.available_seats = avail
+            t.booked_seats = total - avail
 
 
 class ShowCreateView(AdminSessionMixin, CreateView):
@@ -3694,15 +3730,7 @@ def profile_view(request):
 @permission_required('settings', 'can_view')
 def pricing_dashboard(request):
     categories = list(SeatCategory.objects.all())
-    shows = (
-        Theater.objects.select_related('movie')
-        .annotate(
-            total_seats=Count('seats'),
-            available_seats=Count('seats', filter=Q(seats__is_booked=False)),
-            booked_seats=Count('seats', filter=Q(seats__is_booked=True)),
-        )
-        .order_by('-time')
-    )
+    shows = Theater.objects.select_related('movie').order_by('-time')
     movie_id = request.GET.get('movie')
     search = request.GET.get('search')
     if movie_id:
@@ -3723,6 +3751,18 @@ def pricing_dashboard(request):
     for sp in ShowPrice.objects.filter(theater_id__in=page_ids):
         price_map.setdefault(sp.theater_id, {})[sp.category_id] = sp.price
 
+    counts = (
+        Theater.objects.filter(pk__in=page_ids)
+        .annotate(_total=Count('seats'), _avail=Count('seats', filter=Q(seats__is_booked=False)))
+        .values_list('pk', '_total', '_avail')
+    )
+    count_map = {pk: (total, avail) for pk, total, avail in counts}
+    for s in page_obj:
+        total, avail = count_map.get(s.id, (0, 0))
+        s.total_seats = total
+        s.available_seats = avail
+        s.booked_seats = total - avail
+
     config, _ = PricingConfig.objects.get_or_create(pk=1)
     return render(request, 'admin/pricing/pricing_dashboard.html', {
         'shows': page_obj,
@@ -3731,7 +3771,7 @@ def pricing_dashboard(request):
         'price_map': price_map,
         'config': config,
         'slabs': GSTSlab.objects.all().order_by('display_order'),
-        'movies': Movie.objects.all(),
+        'movies': Movie.objects.filter(is_deleted=False),
     })
 
 
