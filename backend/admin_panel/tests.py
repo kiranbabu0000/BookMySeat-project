@@ -470,24 +470,6 @@ class MovieDeletionTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Movie.objects.filter(id=self.movie.id).exists())
 
-    def test_removal_list_allows_delete_after_tickets_cancelled(self):
-        booking = Booking.objects.create(
-            user=self.admin, seat=self.running_seat, movie=self.movie,
-            theater=self.running_show)
-        Reservation.objects.create(
-            token='leftover-res-token-2', user=self.admin, show=self.running_show,
-            status='booked', payment_status='completed',
-            expires_at=timezone.now() + timedelta(days=1))
-        response = self.client.get(reverse('admin_movie_removal'))
-        self.assertNotContains(
-            response,
-            f'action="/admin-movies/{self.movie.id}/delete/"')
-        booking.delete()
-        response = self.client.get(reverse('admin_movie_removal'))
-        self.assertContains(
-            response,
-            f'action="/admin-movies/{self.movie.id}/delete/"')
-
 
 class ShowTheaterSyncTests(TestCase):
     def setUp(self):

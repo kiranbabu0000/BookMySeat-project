@@ -5,7 +5,7 @@ from .decorators import clear_admin_session
 
 ADMIN_URL_PREFIXES = (
     '/admin-login/', '/admin-logout/', '/dashboard/',
-    '/admin-movies/', '/remove-movie/', '/genres/', '/languages/',
+    '/admin-movies/', '/genres/', '/languages/',
     '/cast/', '/theatres/', '/screens/', '/shows/', '/pricing/',
     '/trailers/', '/images/', '/seats/', '/bookings/', '/reservations/',
     '/payments/', '/users/', '/staff/', '/coupons/', '/notifications/', '/admin-notifications/',

@@ -16,7 +16,7 @@ urlpatterns = [
     path('admin-movies/<int:pk>/toggle-status/', views.movie_toggle_status, name='admin_movie_toggle_status'),
     path('admin-movies/<int:pk>/toggle-homepage/', views.movie_toggle_homepage, name='admin_movie_toggle_homepage'),
     path('admin-movies/<int:pk>/restore/', views.movie_restore, name='admin_movie_restore'),
-    path('remove-movie/', views.movie_removal_list, name='admin_movie_removal'),
+
 
     path('genres/', views.GenreListView.as_view(), name='admin_genre_list'),
     path('genres/add/', views.GenreCreateView.as_view(), name='admin_genre_add'),

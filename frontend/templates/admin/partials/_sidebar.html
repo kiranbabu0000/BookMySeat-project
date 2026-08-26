@@ -27,11 +27,8 @@
       </button>
       <div class="sidebar-group__links">
         <div class="sidebar-group__links-inner">
-          <a href="{% url 'admin_movie_list' %}" class="sidebar-link {% if 'movie' in request.resolver_match.url_name and 'removal' not in request.resolver_match.url_name %}active{% endif %}">
+          <a href="{% url 'admin_movie_list' %}" class="sidebar-link {% if 'movie' in request.resolver_match.url_name %}active{% endif %}">
             <i class="bi bi-film"></i><span>Movies</span>
-          </a>
-          <a href="{% url 'admin_movie_removal' %}" class="sidebar-link {% if 'removal' in request.resolver_match.url_name %}active{% endif %}">
-            <i class="bi bi-trash"></i><span>Remove Movie</span>
           </a>
           <a href="{% url 'admin_genre_list' %}" class="sidebar-link {% if 'genre' in request.resolver_match.url_name %}active{% endif %}">
             <i class="bi bi-tags"></i><span>Genres</span>
